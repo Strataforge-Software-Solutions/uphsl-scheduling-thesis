@@ -1,0 +1,12 @@
+Django>=5.0,<6.0
+djangorestframework>=3.15
+djangorestframework-simplejwt>=5.3
+django-cors-headers>=4.3
+psycopg2-binary>=2.9
+python-dotenv>=1.0
+reportlab>=4.0
+openpyxl>=3.1  # required by analytics/management/commands/import_historical_schedule.py
+# If using local MySQL instead of Supabase, comment out psycopg2-binary above and uncomment:
+# mysqlclient>=2.2
+pypdf>=4.0          # resume upload: text extraction from PDF
+python-docx>=1.1    # resume upload: text extraction from Word files

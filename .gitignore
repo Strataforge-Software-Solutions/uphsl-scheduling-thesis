@@ -1,0 +1,23 @@
+# secrets and local settings
+.env
+*.env
+**/.env
+*firebase*adminsdk*.json
+serviceAccount*.json
+*.pem
+
+# python / django
+__pycache__/
+*.pyc
+db.sqlite3
+venv/
+.venv/
+
+# node / react
+node_modules/
+build/
+
+# editor and OS
+.vscode/
+.DS_Store
+Thumbs.db
