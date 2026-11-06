@@ -12,7 +12,7 @@ const MODE = {
   shared: { bg: "#dcfce7", fg: "#166534", label: "Shared section" },
   separate: { bg: "#e0e7ff", fg: "#3730a3", label: "Separate sections" },
   mixed: { bg: "#fef3c7", fg: "#92400e", label: "Shared + separate" },
-  "not scheduled": { bg: "#f1f5f9", fg: "#64748b", label: "Not scheduled" },
+  "not scheduled": { bg: "#f3f4f6", fg: "#6b7280", label: "Not scheduled" },
 };
 
 function defaultAcademicYear() {
@@ -21,12 +21,12 @@ function defaultAcademicYear() {
   return `${y}-${y + 1}`;
 }
 
-const card = { background: "white", border: "1px solid #e2e8f0", borderRadius: 10, padding: "14px 16px", marginBottom: 16 };
-const th = { textAlign: "left", padding: "8px 10px", background: "#f1f5f9", borderBottom: "1px solid #e2e8f0", fontSize: 12.5, color: "#334155", verticalAlign: "bottom" };
-const td = { padding: "10px 12px", borderBottom: "1px solid #eef2f7", fontSize: 12.5, verticalAlign: "top" };
+const card = { background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "14px 16px", marginBottom: 16 };
+const th = { textAlign: "left", padding: "8px 10px", background: "#f3f4f6", borderBottom: "1px solid #e5e7eb", fontSize: 13, color: "#374151", verticalAlign: "bottom" };
+const td = { padding: "10px 12px", borderBottom: "1px solid #eef2f7", fontSize: 13, verticalAlign: "top" };
 
 function Tag({ bg, fg, children }) {
-  return <span style={{ background: bg, color: fg, borderRadius: 999, padding: "1px 9px", fontSize: 11.5, fontWeight: 600, whiteSpace: "nowrap" }}>{children}</span>;
+  return <span style={{ background: bg, color: fg, borderRadius: 4, padding: "1px 9px", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap" }}>{children}</span>;
 }
 
 /* One section of one subject in one department: who (program + section + students), how it is shared, and when / where. */
@@ -35,26 +35,26 @@ function Cell({ c }) {
   const m = MODE[c.mode] || MODE.separate;
   const others = c.shared_with || [];
   return (
-    <div style={{ border: `1px solid ${bad ? "#fca5a5" : "#dbe3ec"}`, borderLeft: `4px solid ${bad ? "#dc2626" : c.mode === "shared" ? "#22c55e" : "#94a3b8"}`,
-      background: bad ? "#fef2f2" : "#fff", borderRadius: 8, padding: "9px 11px", marginBottom: 8, lineHeight: 1.45 }}>
+    <div style={{ border: `1px solid ${bad ? "#fca5a5" : "#e5e7eb"}`, borderLeft: `4px solid ${bad ? "#dc2626" : c.mode === "shared" ? "#22c55e" : "#6b7280"}`,
+      background: bad ? "#fef2f2" : "#fff", borderRadius: 6, padding: "9px 11px", marginBottom: 8, lineHeight: 1.45 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
-        <span style={{ fontWeight: 700, color: "#1f2937", overflowWrap: "anywhere" }}>{c.program.replace(/^BS |^BA /, "")} {c.section}</span>
-        <span style={{ color: "#64748b", fontSize: 11.5, whiteSpace: "nowrap" }}>{c.students} student{c.students === 1 ? "" : "s"}</span>
+        <span style={{ fontWeight: 600, color: "#111827", overflowWrap: "anywhere" }}>{c.program.replace(/^BS |^BA /, "")} {c.section}</span>
+        <span style={{ color: "#6b7280", fontSize: 12, whiteSpace: "nowrap" }}>{c.students} student{c.students === 1 ? "" : "s"}</span>
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 5, margin: "6px 0" }}>
         <Tag bg={m.bg} fg={m.fg}>{c.mode === "shared" ? "Shared section" : c.mode === "separate" ? "Separate section" : "Not scheduled"}</Tag>
         {c.scheduled && (bad ? <Tag bg="#fee2e2" fg="#991b1b">Conflict</Tag> : <Tag bg="#ecfdf5" fg="#166534">No conflict</Tag>)}
       </div>
       {c.mode === "shared" && others.length > 0 && (
-        <div style={{ fontSize: 11.5, color: "#475569", marginBottom: 5, overflowWrap: "anywhere" }} title={others.join(", ")}>
-          <span style={{ color: "#64748b" }}>With: </span>{others.join(", ")}
+        <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 5, overflowWrap: "anywhere" }} title={others.join(", ")}>
+          <span style={{ color: "#6b7280" }}>With: </span>{others.join(", ")}
         </div>)}
-      {bad && <div style={{ fontSize: 11.5, color: "#991b1b", marginBottom: 5, overflowWrap: "anywhere" }}>{c.conflicts.join(", ")}</div>}
+      {bad && <div style={{ fontSize: 12, color: "#991b1b", marginBottom: 5, overflowWrap: "anywhere" }}>{c.conflicts.join(", ")}</div>}
       {c.blocks.map((b, i) => (
-        <div key={i} style={{ borderTop: i ? "1px dashed #e2e8f0" : "none", paddingTop: i ? 5 : 0, marginTop: i ? 5 : 0 }}>
+        <div key={i} style={{ borderTop: i ? "1px dashed #e5e7eb" : "none", paddingTop: i ? 5 : 0, marginTop: i ? 5 : 0 }}>
           <div style={{ color: "#003366", fontWeight: 600 }}>{b.day} {b.time}</div>
-          <div style={{ color: "#334155", overflowWrap: "anywhere" }}>Room {b.room}</div>
-          <div style={{ color: "#64748b", overflowWrap: "anywhere" }}>{b.teacher}</div>
+          <div style={{ color: "#374151", overflowWrap: "anywhere" }}>Room {b.room}</div>
+          <div style={{ color: "#6b7280", overflowWrap: "anywhere" }}>{b.teacher}</div>
         </div>
       ))}
     </div>
@@ -63,12 +63,12 @@ function Cell({ c }) {
 
 export function Comparison({ data }) {
   if (!data) return null;
-  if (!data.groups.length) return <p style={{ fontSize: 13, color: "#64748b" }}>No minor subjects found for this semester and year level.</p>;
+  if (!data.groups.length) return <p style={{ fontSize: 13, color: "#6b7280" }}>No minor subjects found for this semester and year level.</p>;
   const cols = data.departments.length ? data.departments : DEPTS;
   const SUBJ_W = 230, DEPT_W = 250;
-  const head = { ...th, position: "sticky", top: 0, zIndex: 2, padding: "11px 12px", background: "#e8eef6", color: "#003366", borderBottom: "2px solid #cbd5e1" };
+  const head = { ...th, position: "sticky", top: 0, zIndex: 2, padding: "11px 12px", background: "#e8eef6", color: "#003366", borderBottom: "2px solid #d1d5db" };
   return (
-    <div style={{ overflow: "auto", maxHeight: "75vh", border: "1px solid #e2e8f0", borderRadius: 10 }}>
+    <div style={{ overflow: "auto", maxHeight: "75vh", border: "1px solid #e5e7eb", borderRadius: 6 }}>
       <table style={{ borderCollapse: "separate", borderSpacing: 0, width: "100%", minWidth: SUBJ_W + cols.length * DEPT_W, tableLayout: "fixed" }}>
         <colgroup><col style={{ width: SUBJ_W }} />{cols.map((d) => <col key={d} style={{ width: DEPT_W }} />)}</colgroup>
         <thead>
@@ -80,14 +80,14 @@ export function Comparison({ data }) {
         <tbody>
           {data.groups.map((g, i) => {
             const m = MODE[g.mode] || MODE.separate;
-            const bg = i % 2 ? "#f8fafc" : "#ffffff";
-            const cell = { ...td, padding: "12px", background: bg, borderBottom: "1px solid #dbe3ec", verticalAlign: "top" };
+            const bg = i % 2 ? "#f9fafb" : "#ffffff";
+            const cell = { ...td, padding: "12px", background: bg, borderBottom: "1px solid #e5e7eb", verticalAlign: "top" };
             return (
               <tr key={i}>
-                <td style={{ ...cell, position: "sticky", left: 0, zIndex: 1, borderRight: "1px solid #dbe3ec" }}>
-                  <div style={{ fontWeight: 700, color: "#0f172a", overflowWrap: "anywhere" }}>{g.code}</div>
-                  <div style={{ color: "#1f2937", margin: "2px 0 4px", overflowWrap: "anywhere" }}>{g.title}</div>
-                  <div style={{ color: "#64748b", fontSize: 11.5, marginBottom: 6 }}>{g.year_level} · {g.units} unit{g.units === 1 ? "" : "s"}</div>
+                <td style={{ ...cell, position: "sticky", left: 0, zIndex: 1, borderRight: "1px solid #e5e7eb" }}>
+                  <div style={{ fontWeight: 600, color: "#111827", overflowWrap: "anywhere" }}>{g.code}</div>
+                  <div style={{ color: "#111827", margin: "2px 0 4px", overflowWrap: "anywhere" }}>{g.title}</div>
+                  <div style={{ color: "#6b7280", fontSize: 12, marginBottom: 6 }}>{g.year_level} · {g.units} unit{g.units === 1 ? "" : "s"}</div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
                     <Tag bg={m.bg} fg={m.fg}>{m.label}</Tag>{g.conflict && <Tag bg="#fee2e2" fg="#991b1b">Has conflict</Tag>}
                   </div>
@@ -97,7 +97,7 @@ export function Comparison({ data }) {
                   return (
                     <td key={d} style={cell}>
                       {cells.length ? cells.map((c) => <Cell key={c.section_id} c={c} />)
-                        : <div style={{ color: "#94a3b8", fontSize: 12, textAlign: "center", padding: "10px 0" }}>Not in this curriculum</div>}
+                        : <div style={{ color: "#6b7280", fontSize: 12, textAlign: "center", padding: "10px 0" }}>Not in this curriculum</div>}
                     </td>
                   );
                 })}
@@ -116,16 +116,16 @@ export function ConflictTable({ conflicts }) {
   if (!conflicts || !conflicts.length) return null;
   const heads = ["Conflict", "Subject", "Department", "Year level", "Semester", "Section", "Day", "Time", "Room"];
   const w = [150, 260, 130, 90, 90, 90, 90, 130, 90];
-  const cell = { ...td, padding: "10px 12px", overflowWrap: "anywhere", borderBottom: "1px solid #e2e8f0" };
+  const cell = { ...td, padding: "10px 12px", overflowWrap: "anywhere", borderBottom: "1px solid #e5e7eb" };
   return (
-    <div style={{ overflowX: "auto", border: "1px solid #e2e8f0", borderRadius: 10 }}>
+    <div style={{ overflowX: "auto", border: "1px solid #e5e7eb", borderRadius: 6 }}>
       <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1000, tableLayout: "fixed" }}>
         <colgroup>{w.map((x, i) => <col key={i} style={{ width: x }} />)}</colgroup>
         <thead><tr>{heads.map((h) => <th key={h} style={{ ...th, padding: "10px 12px" }}>{h}</th>)}</tr></thead>
         <tbody>
           {conflicts.flatMap((c, i) => [c.a, c.b].map((x, j) => (
-            <tr key={`${i}-${j}`} style={{ background: i % 2 ? "#f8fafc" : "white" }}>
-              {j === 0 && <td style={{ ...cell, borderRight: "1px solid #e2e8f0" }} rowSpan={2}><Tag bg="#fee2e2" fg="#991b1b">{c.kind_label}</Tag><div style={{ color: "#64748b", marginTop: 4 }}>{CAT[c.category] || ""}</div></td>}
+            <tr key={`${i}-${j}`} style={{ background: i % 2 ? "#f9fafb" : "white" }}>
+              {j === 0 && <td style={{ ...cell, borderRight: "1px solid #e5e7eb" }} rowSpan={2}><Tag bg="#fee2e2" fg="#991b1b">{c.kind_label}</Tag><div style={{ color: "#6b7280", marginTop: 4 }}>{CAT[c.category] || ""}</div></td>}
               <td style={cell}><strong>{x.code}</strong> {x.title}</td>
               <td style={cell}>{x.department}</td>
               <td style={cell}>{x.year_level}</td>
@@ -182,9 +182,9 @@ export default function MinorSchedulesPanel() {
     setBusy(false);
   };
 
-  const sel = { padding: "8px 10px", borderRadius: 6, border: "1px solid #cdd6e0" };
+  const sel = { padding: "8px 10px", borderRadius: 6, border: "1px solid #d1d5db" };
   const stat = (label, value, color) => (
-    <div style={{ minWidth: 130 }}><div style={{ fontSize: 22, fontWeight: 700, color: color || "#0f172a" }}>{value}</div><div style={{ fontSize: 12, color: "#64748b" }}>{label}</div></div>
+    <div style={{ minWidth: 130 }}><div style={{ fontSize: 18, fontWeight: 600, color: color || "#111827", fontVariantNumeric: "tabular-nums" }}>{value}</div><div style={{ fontSize: 12, color: "#6b7280" }}>{label}</div></div>
   );
   const scoped = (live?.conflicts || []).filter((c) => (yearLevel === "All" || [c.a.year_level, c.b.year_level].includes(yearLevel)));
   const ok = result && !result.blocked && result.validated;
@@ -192,29 +192,29 @@ export default function MinorSchedulesPanel() {
   return (
     <div>
       <div style={card}>
-        <p style={{ fontSize: 13, color: "#475569", marginTop: 0, maxWidth: 820 }}>
+        <p style={{ fontSize: 13, color: "#4b5563", marginTop: 0, maxWidth: 820 }}>
           Generates the Gen Ed (minor) subjects of <strong>CCS, RadTech, Nursing, BAComm, Allied Health, IHM and BA</strong> in one action. Equivalent subjects
           (same code, units and title) share one section when their combined students fit the room and everyone is free; otherwise each department
           gets its own section. The result is re-checked against every schedule (including major subjects) and is only kept when it has no teacher, room or student conflict.
         </p>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <label style={{ fontSize: 12.5, color: "#475569" }}>Academic year<br />
+          <label style={{ fontSize: 13, color: "#4b5563" }}>Academic year<br />
             <input value={schoolYear} onChange={(e) => setSchoolYear(e.target.value)} placeholder="2026-2027" style={{ ...sel, width: 120 }} aria-label="Academic year" />
           </label>
-          <label style={{ fontSize: 12.5, color: "#475569" }}>Semester<br />
+          <label style={{ fontSize: 13, color: "#4b5563" }}>Semester<br />
             <select value={semester} onChange={(e) => setSemester(e.target.value)} style={sel} aria-label="Semester">{SEMS.map((s) => <option key={s}>{s}</option>)}</select>
           </label>
-          <label style={{ fontSize: 12.5, color: "#475569" }}>Year level<br />
+          <label style={{ fontSize: 13, color: "#4b5563" }}>Year level<br />
             <select value={yearLevel} onChange={(e) => setYearLevel(e.target.value)} style={sel} aria-label="Year level">
               <option value="All">All year levels</option>{YEARS.map((y) => <option key={y}>{y}</option>)}
             </select>
           </label>
           <button onClick={generate} disabled={busy || !schoolYear.trim()} style={{ alignSelf: "flex-end" }}>{busy ? "Generating…" : "Generate All Minor Schedules"}</button>
         </div>
-        <p style={{ fontSize: 12, color: "#64748b", marginBottom: 0 }}>Running it again replaces the earlier draft minor classes of this semester and year level (no duplicates). Approved or published classes are never changed.</p>
+        <p style={{ fontSize: 12, color: "#6b7280", marginBottom: 0 }}>Running it again replaces the earlier draft minor classes of this semester and year level (no duplicates). Approved or published classes are never changed.</p>
       </div>
 
-      {error && <p style={{ color: "#a4231a", fontSize: 13 }}>{error}</p>}
+      {error && <p style={{ color: "#b91c1c", fontSize: 13 }}>{error}</p>}
 
       {result && result.blocked && (
         <div style={{ ...card, borderColor: "#fecaca", background: "#fef2f2" }}>
@@ -226,7 +226,7 @@ export default function MinorSchedulesPanel() {
 
       {result && !result.blocked && (
         <div style={{ ...card, borderColor: ok ? "#a7f3d0" : "#fde68a", background: ok ? "#f0fdf4" : "#fffbeb" }}>
-          <div style={{ fontWeight: 700, color: ok ? "#166534" : "#92400e", marginBottom: 10 }}>{ok ? "✔ " : "⚠ "}{result.message}</div>
+          <div style={{ fontWeight: 600, color: ok ? "#166534" : "#92400e", marginBottom: 10 }}>{result.message}</div>
           <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 12 }}>
             {stat("Conflicts detected before generating", result.conflicts_before)}
             {stat("Conflicts remaining after validation", result.conflicts_after, result.conflicts_after ? "#b91c1c" : "#166534")}
@@ -235,7 +235,7 @@ export default function MinorSchedulesPanel() {
             {stat("Classes that could not be placed", result.unplaced, result.unplaced ? "#b91c1c" : undefined)}
           </div>
           {result.capacity_warnings?.length > 0 && (
-            <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", color: "#9a3412", borderRadius: 8, padding: "8px 12px", fontSize: 12.5, marginBottom: 12 }}>
+            <div style={{ background: "#fff7ed", border: "1px solid #fed7aa", color: "#9a3412", borderRadius: 6, padding: "8px 12px", fontSize: 13, marginBottom: 12 }}>
               <strong>{result.capacity_warnings.length} class(es) have more students than seats</strong> (no allowed room is big enough). They were placed without a conflict; split the section or add a bigger room:
               <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
                 {result.capacity_warnings.slice(0, 8).map((w, i) => <li key={i}>{w.subject} · {w.section}: {w.students} students in {w.room} ({w.capacity} seats)</li>)}
@@ -248,7 +248,7 @@ export default function MinorSchedulesPanel() {
               <thead><tr>{["Department", "Program", "Year level", "Created", "Joined shared classes", "Status"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
               <tbody>{result.runs.map((r, i) => (
                 <tr key={i}><td style={td}>{r.department}</td><td style={td}>{r.program}</td><td style={td}>{r.year_level}</td><td style={td}>{r.created}</td><td style={td}>{r.merged}</td>
-                  <td style={td}>{r.status === "skipped" ? <span style={{ color: "#64748b" }}>Skipped: {r.note}</span> : r.unplaced.length ? <span style={{ color: "#b91c1c" }}>{r.unplaced.length} not placed</span> : "Generated"}</td></tr>
+                  <td style={td}>{r.status === "skipped" ? <span style={{ color: "#6b7280" }}>Skipped: {r.note}</span> : r.unplaced.length ? <span style={{ color: "#b91c1c" }}>{r.unplaced.length} not placed</span> : "Generated"}</td></tr>
               ))}</tbody>
             </table>
           </div>
@@ -263,7 +263,7 @@ export default function MinorSchedulesPanel() {
 
       <div style={card}>
         <h3 style={{ margin: "0 0 4px", fontSize: 16 }}>Minor schedule comparison</h3>
-        <p style={{ fontSize: 12.5, color: "#64748b", marginTop: 0 }}>Each subject is shown for every department that takes it, with its day, time, room and teacher, and whether the students share one section or have separate ones.</p>
+        <p style={{ fontSize: 13, color: "#6b7280", marginTop: 0 }}>Each subject is shown for every department that takes it, with its day, time, room and teacher, and whether the students share one section or have separate ones.</p>
         <Comparison data={cmp} />
       </div>
 
@@ -277,7 +277,7 @@ export default function MinorSchedulesPanel() {
             {" "}Checked against major and minor subjects.
           </p>
         )}
-        {scoped.length ? <ConflictTable conflicts={scoped} /> : live && <p style={{ fontSize: 13, color: "#166534" }}>✔ No teacher, room or student conflicts in this scope.</p>}
+        {scoped.length ? <ConflictTable conflicts={scoped} /> : live && <p style={{ fontSize: 13, color: "#166534" }}>No teacher, room or student conflicts in this scope.</p>}
       </div>
     </div>
   );

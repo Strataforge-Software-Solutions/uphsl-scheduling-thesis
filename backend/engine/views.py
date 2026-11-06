@@ -18,7 +18,7 @@ from .serializers import (
 )
 from .scheduler import generate_schedule_two_phase, find_substitute
 from .conflicts import find_conflicts
-from .permissions import ReadOnlyOrRegistrarDean, CanEditOwnScheduleKind, can_edit_schedule_kind
+from .permissions import ReadOnlyOrRegistrarDean, CanEditOwnScheduleKind, CanEditSections, can_edit_schedule_kind
 from curriculum.permissions import CanEditCurriculum
 
 
@@ -68,9 +68,26 @@ def _enforce_workload(request, teacher, subject, section, new_slots, exclude_sch
 
 
 class SectionViewSet(viewsets.ModelViewSet):
+    """Read: anyone logged in. Create / edit / delete: the Registrar, or a Dean for the sections of their own college(s) only.
+    (Was "anyone logged in" for every method: e.g. a part-time teacher could delete a section, and with it its classes and class list.)"""
     queryset = Section.objects.select_related("program").all()
     serializer_class = SectionSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [CanEditSections]
+
+    def _check_program(self, serializer):
+        from rest_framework.exceptions import PermissionDenied
+        prog = serializer.validated_data.get("program")
+        user = self.request.user
+        if prog is not None and user.role != "registrar" and prog.department not in user.departments:
+            raise PermissionDenied("You can only add or move sections of your own college's programs.")
+
+    def perform_create(self, serializer):
+        self._check_program(serializer)
+        serializer.save()
+
+    def perform_update(self, serializer):
+        self._check_program(serializer)
+        serializer.save()
 
 
 class StudentViewSet(viewsets.ModelViewSet):
@@ -289,8 +306,8 @@ class ScheduleViewSet(viewsets.ModelViewSet):
                 .values_list("section__name", flat=True).distinct()
             raise ValidationError({"detail": (
                 f"This is a shared class (also attended by section(s) {', '.join(sorted(set(others)))}). "
-                "Editing it would break the sharing. Remove it, then Generate again with "
-                "merging off if this section needs its own time.")})
+                "Change it from the Edit dialog: a new teacher, room or day/time is applied to every section of the shared class "
+                "together, so the sharing is kept.")})
         merged = {
             "teacher": serializer.validated_data.get("teacher", instance.teacher),
             "room": serializer.validated_data.get("room", instance.room),
@@ -308,11 +325,38 @@ class ScheduleViewSet(viewsets.ModelViewSet):
             if _why:
                 from rest_framework.exceptions import ValidationError as _VE
                 raise _VE({"detail": _why})
+        _ov_meta = instance.qualification_override             # kept unless the teacher changes
+        _new_override = False
         if merged["teacher"].id != instance.teacher_id:
             # one shared rule (engine.teacher_scope): a Dean's major goes only to qualified faculty of the Dean's own department(s);
             # a Gen Ed subject to any qualified teacher. Re-checked here on every Save, whatever the dialog showed.
             from .teacher_scope import teacher_allowed
             _why = teacher_allowed(self.request.user, merged["teacher"], instance.subject, merged["section"])
+            _ov_meta = None
+            if _why and str(self.request.data.get("override_qualification", "")).lower() in ("1", "true", "yes"):
+                # a manual Assign anyway (not connected): only the qualification check is skipped. Department, a reason, free at this
+                # exact time inside the person's availability, within the weekly limit and "no qualified faculty free" are re-checked now.
+                from rest_framework.exceptions import ValidationError as _VE
+                from . import faculty_groups as _fg
+                if merged["timeslot"].id != instance.timeslot_id:
+                    raise _VE({"detail": "Change the day and time first, then assign a faculty member who is not connected to the subject."})
+                if str(self.request.data.get("override_workload", "")).lower() in ("1", "true", "yes"):
+                    raise _VE({"detail": "The weekly limit cannot be overridden when assigning a faculty member who is not connected."})
+                cls = list(Schedule.objects.filter(section=instance.section, subject=instance.subject, term=instance.term)
+                           .select_related("timeslot"))
+                slots = list({r.timeslot_id: r.timeslot for r in cls}.values())
+                need = sum((_s.end_time.hour * 60 + _s.end_time.minute - _s.start_time.hour * 60 - _s.start_time.minute) / 60 for _s in slots)
+                groups = _fg.build(self.request.user, instance.subject, instance.section, term=instance.term,
+                                   school_year=instance.school_year or None, exact_slots=slots, exclude_ids=[r.id for r in cls],
+                                   need_hours=need)
+                try:
+                    reason = _fg.check_override(self.request.user, instance.subject, instance.section, merged["teacher"],
+                                                self.request.data.get("override_reason"), groups)
+                except _fg.OverrideError as e:
+                    raise _VE({"detail": e.message})
+                _ov_meta = _fg.override_meta(self.request.user, reason)
+                _new_override = True
+                _why = ""
             if _why:
                 from rest_framework.exceptions import ValidationError as _VE
                 raise _VE({"detail": _why})
@@ -339,11 +383,14 @@ class ScheduleViewSet(viewsets.ModelViewSet):
         if merged["teacher"].id != instance.teacher_id or merged["timeslot"].id != instance.timeslot_id:
             over = _enforce_workload(self.request, merged["teacher"], instance.subject, merged["section"],
                                      [merged["timeslot"]], exclude_schedule_ids=[instance.pk])
-        instance = self._save_or_conflict(serializer, is_manual_override=True)
+        instance = self._save_or_conflict(serializer, is_manual_override=True, qualification_override=_ov_meta)
         Log.objects.create(
             action="UPDATE", schedule_id=instance.id, user=self.request.user,
             details=f"Updated schedule entry {instance}",
         )
+        if _new_override:
+            from . import faculty_groups as _fg
+            _fg.log_overrides(self.request.user, [instance], "the Edit dialog", action="UPDATE")
         if over:
             Log.objects.create(
                 action="UPDATE", schedule_id=instance.id, user=self.request.user,
@@ -447,6 +494,38 @@ class ScheduleViewSet(viewsets.ModelViewSet):
         return self._action_call(lambda sa, u, d: sa.remove_preview(u, [int(i) for i in d.get("ids") or []]))
 
     @action(detail=False, methods=["post"])
+    def remove_override(self, request):
+        """POST {ids}: undo an Assign anyway (not connected) from the Edit dialog. The class's DRAFT rows are removed, so the class is
+        not placed again (unassigned); nothing else changes. Only the Dean of that department."""
+        from rest_framework.exceptions import ValidationError as _VE
+        from . import faculty_groups as _fg
+        try:
+            ids = [int(x) for x in (request.data.get("ids") or [])]
+        except (TypeError, ValueError):
+            raise _VE({"detail": "ids must be numbers."})
+        rows = list(Schedule.objects.filter(pk__in=ids).select_related("subject", "section__program", "teacher__user"))
+        if not rows or len(rows) != len(set(ids)):
+            raise _VE({"detail": "That class was changed or removed. Reload the schedule."})
+        r0 = rows[0]
+        if any((r.section_id, r.subject_id) != (r0.section_id, r0.subject_id) for r in rows):
+            raise _VE({"detail": "These periods belong to different classes."})
+        if not _fg.override_possible(request.user, r0.subject, r0.section):
+            raise PermissionDenied("Only the Dean of this department can remove an Assign anyway.")
+        cls = list(Schedule.objects.filter(section=r0.section, subject=r0.subject, term=r0.term))
+        if not any(r.qualification_override for r in cls):
+            raise _VE({"detail": "This class was not assigned anyway; nothing to remove."})
+        if any(r.status != "draft" for r in cls):
+            raise _VE({"detail": "This class is approved or published. Move it back to Draft first."})
+        teacher = r0.teacher.user.get_full_name().strip() or r0.teacher.user.username
+        with transaction.atomic():
+            for r in cls:
+                Log.objects.create(action="DELETE", schedule_id=r.id, user=request.user,
+                                   details=f"ASSIGN ANYWAY REMOVED: {teacher} no longer teaches {r.subject.code} "
+                                           f"({r.section.program.name} {r.section.name}); the class is not placed.")
+            Schedule.objects.filter(pk__in=[r.id for r in cls]).delete()
+        return Response({"removed": len(cls), "detail": f"{r0.subject.code} ({r0.section.name}) is not placed now. Generate or place it again."})
+
+    @action(detail=False, methods=["post"])
     def remove_bulk(self, request):
         """{ids, confirm_shared?} -> removes the selected DRAFT periods (all or nothing) and returns an undo token."""
         return self._action_call(lambda sa, u, d: sa.remove(u, [int(i) for i in d.get("ids") or []],
@@ -501,9 +580,10 @@ def _build_availability_rules(teachers, timeslots, school_year=None, semester=No
 
     The actual source of truth is faculty.Availability (what a faculty member
     submitted as free), not Constraint (which this system never ends up
-    populating from the UI). So: a teacher's blocked slots = every TimeSlot
-    EXCEPT the ones that fall inside one of their submitted, active Availability
-    windows for the given school_year/semester. A teacher who has submitted NO
+    populating from the UI). A teacher's blocked slots = the TimeSlots that overlap
+    a window they marked "unavailable" for the given school_year/semester; their
+    "preferred" / "available" windows only set the ORDER (engine.availability), they
+    do not close the rest of the day. A teacher who has submitted NO
     availability rows is treated as unrestricted (no blocks) -- otherwise every
     full-time faculty member, who never submits Availability today, would be
     wrongly blocked from every slot.
@@ -524,30 +604,20 @@ def _build_availability_rules(teachers, timeslots, school_year=None, semester=No
             rules[teacher.id] = set()  # no submission on file -> unrestricted
             continue
 
-        # "preferred"/"available" rows define the windows a teacher CAN be
-        # scheduled in; "unavailable" rows explicitly rule a window OUT, on
-        # top of that -- distinct from simply not submitting anything for
-        # that slot. A teacher who has only ever submitted "unavailable"
-        # rows (no positive windows at all) is otherwise unrestricted,
-        # minus those explicit blocks.
-        free_windows = [w for w in windows if w.preference != "unavailable"]
+        # A teacher's "preferred" / "available" windows are PRIORITIES, not limits (engine.availability ranks them first): the
+        # other times of the day stay open. Only times they marked "unavailable" are blocked for automatic scheduling.
+        # (Before, every time outside the submitted windows was blocked.) A Dean may still place a class anywhere by hand as
+        # long as nothing clashes (engine.reschedule: "Choose a new day and time" lists those times, marked).
         block_windows = [w for w in windows if w.preference == "unavailable"]
-
         blocked = set()
         for slot in timeslots:
-            fits_some_window = (not free_windows) or any(
-                w.day[:3].lower() == slot.day[:3].lower()
-                and w.start_time <= slot.start_time
-                and w.end_time >= slot.end_time
-                for w in free_windows
-            )
             overlaps_blocked_window = any(
                 w.day[:3].lower() == slot.day[:3].lower()
                 and w.start_time < slot.end_time
                 and w.end_time > slot.start_time
                 for w in block_windows
             )
-            if not fits_some_window or overlaps_blocked_window:
+            if overlaps_blocked_window:
                 blocked.add(slot.id)
         rules[teacher.id] = blocked
     return rules
@@ -613,6 +683,9 @@ def _preview_choices(request, subjects_by_section, rooms):
             return err, {}, {}
         choices[sid] = rid
     for key, w in (request.data.get("time_windows") or {}).items():
+        if isinstance(w, dict) and w.get("day"):
+            if str(w["day"])[:3].title() not in {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}:
+                return "The chosen day is not valid.", {}, {}
         if not isinstance(w, dict) or not (w.get("start") or w.get("end")):
             continue
         try:
@@ -692,8 +765,11 @@ def generate_schedule_view(request):
     # it mirrors the same try/except already used in exams/views.py's
     # generate_exam_schedule_view, and logs the full traceback server-side
     # (visible in the `runserver` console) so the real cause is never lost.
+    from audit import recorder as _audit
     try:
-      with transaction.atomic():
+      # audit log: the drafts this run replaces and the class periods it creates go into ONE "generate" entry
+      with transaction.atomic(), _audit.batch("generate", "schedule", f"program {program_id}",
+                                              summary=f"Generate {year_level} {semester} (program {program_id})"):
         from . import locks as _locks
         if not _locks.try_lock("classes"):
             return Response({"detail": _locks.BUSY}, status=status.HTTP_409_CONFLICT)
@@ -761,8 +837,11 @@ def generate_schedule_view(request):
         # them exactly where they are (they count as booked for everything else) instead of replacing them. Send keep_edited=false
         # to re-place them too.
         kept_classes = []
-        if not only_missing and str(request.data.get("keep_edited", True)).lower() not in ("false", "0", "no"):
-            kept_keys = set(scope_rows.filter(is_manual_override=True).values_list("section_id", "subject_id"))
+        _keep_edited = str(request.data.get("keep_edited", True)).lower() not in ("false", "0", "no")
+        if not only_missing:
+            # an Assign-anyway class (qualification_override) is ALWAYS kept, like a fixed assignment; other hand edits unless keep_edited=false
+            kept_keys = set((scope_rows.filter(is_manual_override=True) if _keep_edited else scope_rows.filter(qualification_override__isnull=False))
+                            .values_list("section_id", "subject_id"))
             if kept_keys:
                 from django.db.models import Q as _Q
                 keep_q = _Q(pk__in=[])
@@ -776,8 +855,9 @@ def generate_schedule_view(request):
         # Professor chosen per subject in the preview: re-checked here (role, college, qualification, availability, Lec/Lab pair)
         # BEFORE any draft is replaced, so a refused choice changes nothing.
         from . import professor_choice as _pc
-        _t_err, _teacher_choices = _pc.validate(request.user, subjects_by_section, request.data.get("teacher_choices"),
-                                                school_year, semester)
+        _t_err, _teacher_choices, _qual_overrides = _pc.validate(
+            request.user, subjects_by_section, request.data.get("teacher_choices"), school_year, semester,
+            windows=request.data.get("time_windows") or {}, replaced=list(scope_rows.values_list("pk", flat=True)))
         if _t_err:
             transaction.set_rollback(True)
             return Response({"detail": _t_err}, status=status.HTTP_400_BAD_REQUEST)
@@ -793,7 +873,7 @@ def generate_schedule_view(request):
             from .merging import join_minor_classes
             merge_report = join_minor_classes(subjects_by_section, school_year, rules=_share_rules)
 
-        teachers = list(FacultyProfile.objects.select_related("user").prefetch_related("specializations").all())
+        teachers = list(FacultyProfile.objects.select_related("user").prefetch_related("specializations").filter(user__is_active=True))   # a deactivated teacher is never given a class
         rooms = list(Room.objects.all())
         timeslots = list(TimeSlot.objects.all())
 
@@ -820,6 +900,16 @@ def generate_schedule_view(request):
         # Strict policy: the weekly-hour limit is a HARD rule for the engine (it simply won't give a
         # teacher more than their limit). Otherwise the result is checked afterwards and warned about.
         teacher_caps = {t.id: _wl.limit_for(t, _lim) for t in teachers} if _lim["policy"] == "strict" else None
+        _ov_map = {}
+        if _qual_overrides:
+            from . import faculty_groups as _fg
+            _by_id = {t.id: t for t in teachers}
+            for _sid in _qual_overrides:
+                _tid = _teacher_choices[_sid]
+                _ov_map[_sid] = {"teacher": _tid, "blocked": _fg.strict_blocked_slots(_tid, timeslots, school_year, semester)}
+                if _tid in _by_id:
+                    teacher_caps = dict(teacher_caps or {})
+                    teacher_caps.setdefault(_tid, _wl.limit_for(_by_id[_tid], _lim))
 
         t1 = time.time()
         # The Dean's preferred / alternative / fixed rooms for the subjects being generated.
@@ -851,7 +941,11 @@ def generate_schedule_view(request):
         _btok = _room_rules.use_share_busy(_busy)
         _tok = _room_rules.use_assignments(room_assign)
         _ttok = _room_rules.use_time_windows(_windows)
+        # the day the Dean assigned from the Faculty time window (optional): that subject is placed on that day only
+        _dtok = _room_rules.use_day_choices({int(k): str(w["day"])[:3].title() for k, w in (request.data.get("time_windows") or {}).items()
+                                             if isinstance(w, dict) and w.get("day") and str(k).isdigit()})
         _ptok = _room_rules.use_teacher_choices(_teacher_choices)
+        _otok = _room_rules.use_qualification_overrides(_ov_map)      # the Dean's manual Assign anyway pins (empty almost always)
         _atok = _avail.use(_av_pref, _av_text)
         from . import lunch_gap as _lunch
         _lgon = _lunch.enabled_in_settings()                 # "Reserve lunch gap (optional)": soft, OFF by default
@@ -867,7 +961,9 @@ def generate_schedule_view(request):
         finally:
             _room_rules.release_assignments(_tok)
             _room_rules.release_time_windows(_ttok)
+            _room_rules.release_day_choices(_dtok)
             _room_rules.release_teacher_choices(_ptok)
+            _room_rules.release_qualification_overrides(_otok)
             _avail.release(_atok)
             _lunch.release(_ltok)
             _room_rules.release_share_busy(_btok)
@@ -894,10 +990,16 @@ def generate_schedule_view(request):
             Schedule(
                 subject=a.subject, teacher=a.teacher, room=a.room, section=a.section, timeslot=a.timeslot,
                 school_year=school_year, status="draft", term=a.section.semester,
+                # an Assign-anyway class is kept by later Generate runs like a class edited by hand
+                **({"is_manual_override": True, "qualification_override": _qual_overrides[a.subject.id]}
+                   if a.subject.id in _qual_overrides and a.teacher.id == _teacher_choices.get(a.subject.id) else {}),
             )
             for a in assignments
         ]
         created_objs = Schedule.objects.bulk_create(schedule_objs)
+        if _qual_overrides:
+            from . import faculty_groups as _fg
+            _fg.log_overrides(request.user, [o for o in created_objs if o.qualification_override], "Generate")
         created = [obj.id for obj in created_objs if obj.id is not None]
         created += [i for m in merge_report for i in m["schedule_ids"]]
         shared_report = _sc.extend_to_members(share_plans, created_objs, school_year) if share_plans else []
@@ -1021,7 +1123,34 @@ def professor_options_view(request):
         return Response({"detail": "You can only choose professors for programs in your own college."}, status=403)
     if not q.get("year_level") or not q.get("semester"):
         return Response({"detail": "year_level and semester are required."}, status=400)
-    return Response(_pc.options(program, q.get("year_level"), q.get("semester")))
+    return Response(_pc.options(program, q.get("year_level"), q.get("semester"), user=u))
+
+
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def professor_groups_view(request):
+    """GET ?program_id=&year_level=&semester=&subject_id=[&day=&start=&end=] -- READ-ONLY: the three Professor groups of one subject row
+    of the Generate dialog after the Dean set its Day / Start / End (engine.faculty_groups)."""
+    from curriculum.models import Program, Subject
+    from . import professor_choice as _pc
+    u, q = request.user, request.query_params
+    if not (getattr(u, "role", "") == "faculty" and getattr(u, "faculty_type", "") == "dean"):
+        return Response({"detail": "Only a Dean chooses professors for program subjects."}, status=403)
+    try:
+        program = Program.objects.get(pk=int(q.get("program_id")))
+        subject = Subject.objects.get(pk=int(q.get("subject_id")), program=program)
+    except (TypeError, ValueError, Program.DoesNotExist, Subject.DoesNotExist):
+        return Response({"detail": "Choose a program and subject."}, status=400)
+    if program.department not in (u.departments or []):
+        return Response({"detail": "You can only choose professors for programs in your own college."}, status=403)
+    semester, year_level = q.get("semester"), q.get("year_level")
+    sections = list(Section.objects.filter(program=program, year_level=year_level, semester=semester).select_related("program"))
+    if not sections:
+        return Response({"detail": "This year level has no section."}, status=400)
+    replaced = list(Schedule.objects.filter(section__in=sections, subject__classification="major", status="draft",
+                                            is_manual_override=False).values_list("pk", flat=True))
+    win, day = _pc._window({"start": q.get("start") or "", "end": q.get("end") or "", "day": q.get("day") or ""})
+    return Response(_pc.subject_groups(u, subject, sections, semester, replaced, window=win, day=day))
 
 
 @api_view(["GET"])
@@ -1183,7 +1312,12 @@ def minor_generate_all_view(request):
     if request.user.role != "registrar":
         return Response({"detail": "Only the Registrar generates the Gen Ed (minor) schedules."}, status=403)
     d = request.data
-    payload, code = generate_all(request.user, d.get("school_year"), d.get("semester"), d.get("year_level"))
+    from audit import recorder as _audit
+    with _audit.batch("generate", "schedule", "Gen Ed (all colleges)",
+                      summary=f"Generate Gen Ed {d.get('year_level') or ''} {d.get('semester') or ''}".strip()) as _ab:
+        payload, code = generate_all(request.user, d.get("school_year"), d.get("semester"), d.get("year_level"))
+        if code >= 300:
+            _ab["items"].clear()               # refused / rolled back: nothing changed, nothing to log
     return Response(payload, status=code)
 
 
@@ -1247,7 +1381,7 @@ def suggest_substitute_view(request):
     if absence.semester:
         affected = affected.filter(section__semester=absence.semester)
 
-    teachers = list(FacultyProfile.objects.select_related("user").prefetch_related("specializations").all())
+    teachers = list(FacultyProfile.objects.select_related("user").prefetch_related("specializations").filter(user__is_active=True))   # never suggest a deactivated teacher
     timeslots = list(TimeSlot.objects.all())
     availability_rules = _build_availability_rules(teachers, timeslots, absence.school_year, absence.semester)
 
@@ -1381,8 +1515,9 @@ def export_schedule_pdf(request):
     from curriculum.models import Program
 
     _u = request.user
-    if not (_u.role == "faculty" and _u.faculty_type == "dean"):
-        return Response({"detail": "Only a Dean can preview or print the class schedule."},
+    # Deans print their own college(s); the Registrar prints any college / program, following the Schedules tab's filters
+    if not ((_u.role == "faculty" and _u.faculty_type == "dean") or _u.role == "registrar"):
+        return Response({"detail": "Only a Dean or the Registrar can preview or print the class schedule."},
                         status=status.HTTP_403_FORBIDDEN)
 
     program_id = request.query_params.get("program_id")
@@ -1659,6 +1794,10 @@ def _reschedule_call(request, fn):
                 kw["window"] = (a, b)
         if d.get("limit"):
             kw["limit"] = max(1, min(int(d["limit"]), 300))
+        if d.get("teacher_id"):
+            kw["teacher_id"] = int(d["teacher_id"])
+            kw["override_qualification"] = str(d.get("override_qualification", "")).lower() in ("1", "true", "yes")
+            kw["override_reason"] = str(d.get("override_reason") or "")[:300]
     except (TypeError, ValueError):
         return Response({"detail": "Invalid request."}, status=400)
     u = request.user
@@ -1682,6 +1821,13 @@ def slot_options(request):
 def slot_options_apply(request):
     """body: same as slot-options + key (one option's key). Re-validates on the server, then changes only this class."""
     return _reschedule_call(request, lambda rs, u, kw, d: rs.apply(u, key=d.get("key"), **{k: v for k, v in kw.items() if k != "limit"}))
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def unplaced_faculty_groups(request):
+    """READ-ONLY. body {section_id, subject_id}: the three Professor groups for a class that was not placed ("See other available faculty")."""
+    return _reschedule_call(request, lambda rs, u, kw, d: rs.unplaced_groups(u, d.get("section_id"), d.get("subject_id")))
 
 
 def _shared_call(request, fn):
@@ -1751,3 +1897,55 @@ def teacher_options_view(request):
     if err:
         return Response({"detail": err}, status=code)
     return Response(data)
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def shared_class_edit_view(request):
+    """body {ids: [rows of the shared class], teacher?, room?, override_workload?} -> changes the teacher / room of EVERY section of the
+    shared class together (engine.shared_edit). Nothing changes when any rule fails."""
+    from . import shared_edit
+    try:
+        return Response(shared_edit.edit(request.user, request.data.get("ids") or [], request.data.get("teacher"), request.data.get("room"),
+                                         str(request.data.get("override_workload", "")).lower() in ("1", "true", "yes")))
+    except shared_edit.SharedEditError as e:
+        return Response({"detail": e.message, **e.extra}, status=e.status)
+
+
+def _gened_req_call(fn):
+    from . import gened_requests as gr
+    try:
+        return Response(fn(gr))
+    except gr.RequestError as e:
+        return Response({"detail": e.message, **e.extra}, status=e.status)
+
+
+@api_view(["GET", "POST"])
+@permission_classes([permissions.IsAuthenticated])
+def gened_requests_view(request):
+    """GET: the Gen Ed move requests (Registrar: all; Dean: their college's). POST {ids, key, reason}: a Dean asks to move a Gen Ed class."""
+    if request.method == "GET":
+        return _gened_req_call(lambda gr: gr.listing(request.user, request.query_params.get("status") or ""))
+    d = request.data
+    return _gened_req_call(lambda gr: gr.create(request.user, d.get("ids") or [], d.get("key") or "", d.get("reason") or ""))
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def gened_request_options_view(request):
+    """READ-ONLY. body {ids} -> the times the Dean may ask this Gen Ed class to move to (the Registrar's clash-free list)."""
+    return _gened_req_call(lambda gr: gr.options(request.user, request.data.get("ids") or []))
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def gened_request_decide_view(request, req_id, action):
+    """POST approve / reject (Registrar, body {note}) or cancel (the Dean who asked)."""
+    note = request.data.get("note") or ""
+    if action == "approve":
+        return _gened_req_call(lambda gr: gr.approve(request.user, req_id, note))
+    if action == "reject":
+        return _gened_req_call(lambda gr: gr.reject(request.user, req_id, note))
+    if action == "cancel":
+        return _gened_req_call(lambda gr: gr.cancel(request.user, req_id))
+    return Response({"detail": "Unknown action."}, status=status.HTTP_400_BAD_REQUEST)

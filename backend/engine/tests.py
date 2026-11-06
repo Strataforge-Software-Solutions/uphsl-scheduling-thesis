@@ -13,7 +13,7 @@ from accounts.models import User
 from curriculum.models import AcademicField, Program, Subject
 from engine.conflict_report import scan
 from engine.conflict_resolve import resolve_all
-from engine.models import ConflictLog, Schedule, Section, TimeSlot
+from engine.models import ConflictLog, GenEdMoveRequest, Schedule, Section, TimeSlot
 from faculty.models import FacultyProfile
 from rooms.models import Room
 
@@ -592,7 +592,9 @@ class OverloadResolveTests(Base):
         self.t = self.teachers
         for p in (self.t[0], self.t[1], self.t[3]):
             p.specializations.add(self.field)               # qualified
-        # t[2] is NOT qualified; t[3] is qualified but teaching on Mon 7-8 already
+        # t[2] is NOT qualified (an unrelated degree: the system's rule accepts a same-discipline degree, so it must not be a computing
+        # one); t[3] is qualified but teaching on Mon 7-8 already
+        FacultyProfile.objects.filter(pk__in=[x.pk for x in (self.t[2], self.t[4], self.t[5])]).update(degree="BS Tourism Management")
         self.rows = [self.row(subj=0, h=7), self.row(subj=1, h=8), self.row(subj=2, h=9)]   # t[0]: 3 h > 2 h limit
         self.row(sec=self.sec[1], teacher=self.t[3], room=self.rooms[1], subj=3, h=9)
         self.client.force_authenticate(self.dean)
@@ -650,6 +652,7 @@ class OverloadResolveTests(Base):
     def test_no_qualified_teacher_gives_a_clear_reason(self):
         for p in (self.t[1], self.t[3]):
             p.specializations.clear()
+        FacultyProfile.objects.filter(pk__in=[self.t[1].pk, self.t[3].pk]).update(degree="BS Tourism Management")
         item = next(i for i in self.plan()["items"] if i["faculty_id"] == self.t[0].id)
         rec = [c for c in item["classes"] if c["recommended"]][0]
         self.assertEqual(rec["suggestions"], [])
@@ -958,8 +961,16 @@ class SmartResolveTests(Base):
             r = self.opts(a)
         finally:
             ev._build_availability_rules = real
-        self.assertNotIn(("Tue", "09:00"), {(o["day"], o["start"]) for o in r.data["options"]})
-        self.assertIn(("Tue", "10:00"), {(o["day"], o["start"]) for o in r.data["options"]})
+        # availability is a preference now: a Dean placing a class by hand still sees the time the teacher marked unavailable,
+        # but after the others and clearly labelled
+        opts = r.data["options"]
+        tue9 = next((o for o in opts if (o["day"], o["start"]) == ("Tue", "09:00")), None)
+        self.assertIsNotNone(tue9)
+        self.assertEqual(tue9["availability"], "unavailable")
+        self.assertIn("UNAVAILABLE", tue9["label"])
+        self.assertIn(("Tue", "10:00"), {(o["day"], o["start"]) for o in opts})
+        tiers = [o["availability"] for o in opts]
+        self.assertEqual(tiers, sorted(tiers, key=["preferred", "available", "outside", "unavailable"].index))
 
     def test_apply_moves_only_this_class_and_keeps_room(self):
         a = self.row(subj=0, h=7)
@@ -1767,7 +1778,11 @@ class ProfessorChoiceTests(Base):
         Schedule.objects.filter(pk=kept.pk).update(is_manual_override=True)
         d = self.opts().data
         self.assertEqual(d["teachers"][t0.id]["current_hours"], 2.0)
-        self.assertEqual(d["teachers"][t1.id]["current_hours"], 1.0)
+        # current_hours = the Workload page number (both of t1's classes); projected / after Generate = without the replaced draft
+        self.assertEqual(d["teachers"][t1.id]["current_hours"], 2.0)
+        self.assertEqual(d["teachers"][t1.id]["projected_hours"], 1.0)
+        self.assertEqual(d["teachers"][t1.id]["after_generate_hours"], 1.0)
+        self.assertIsNone(d["teachers"][t0.id]["after_generate_hours"])
         self.assertEqual(d["teachers"][t0.id]["max_hours"], 24)
         self.assertEqual(next(x for x in d["subjects"] if x["code"] == "TST101")["sections"], 1)   # A is locked for TST101
 
@@ -2099,22 +2114,16 @@ class FacultyAvailabilityGenerationTests(Base):
     def rows(self):
         return list(Schedule.objects.filter(section=self.sec2).select_related("timeslot"))
 
-    def test_classes_stay_inside_the_teachers_windows_and_the_rest_are_skipped_with_the_reason(self):
+    def test_the_teachers_window_comes_first_and_the_rest_of_the_day_is_still_used(self):
         self.window("Tuesday", 8, 14)                                           # 6 hours: room for two 3-hour lectures
         r = self.gen2()
         self.assertEqual(r.status_code, 201, r.data)
+        self.assertFalse(r.data["conflicts"])                                    # nothing skipped: the window is a priority, not a limit
         rows = self.rows()
-        self.assertTrue(rows)
-        for x in rows:
-            self.assertEqual(x.timeslot.day, "Tue"); self.assertGreaterEqual(x.timeslot.start_time, dtime(8))
-            self.assertLessEqual(x.timeslot.end_time, dtime(14))
-        self.assertEqual(len({x.subject_id for x in rows}), 2)                  # two placed as drafts ...
+        self.assertEqual(len({x.subject_id for x in rows}), 3)
+        inside = {x.subject_id for x in rows if x.timeslot.day == "Tue" and x.timeslot.start_time >= dtime(8) and x.timeslot.end_time <= dtime(14)}
+        self.assertEqual(len(inside), 2)                                         # the window is filled first
         self.assertTrue(all(x.status == "draft" for x in rows))
-        reasons = [c["reason"] for c in r.data["conflicts"]]
-        self.assertEqual(len(reasons), 1)                                        # ... one skipped, with a specific reason
-        self.assertIn("available only Tue 8:00 AM-2:00 PM", reasons[0])
-        self.assertIn("3-hour block", reasons[0])
-        self.assertNotIn("suggest", reasons[0].lower())                          # the reason only: no suggested times
         self.assertEqual(scan()["total"], 0)
 
     def test_an_unavailable_window_blocks(self):
@@ -2179,12 +2188,15 @@ class FacultyAvailabilityGenerationTests(Base):
         self.assertEqual(scan()["total"], 0)
 
     def test_not_generated_list_gives_the_reason(self):
-        self.window("Tuesday", 8, 14)
+        for d in ("Monday", "Wednesday", "Thursday", "Friday"):                   # only Tue 8:00 AM-2:00 PM is open: marked unavailable
+            self.window(d, 7, 20, pref="unavailable")
+        self.window("Tuesday", 7, 8, pref="unavailable")
+        self.window("Tuesday", 14, 20, pref="unavailable")
         self.gen2()
         self.client.force_authenticate(self.dean)
         d = self.client.get("/api/engine/unplaced/", {"semester": "1st Sem", "program_id": self.prog2.id, "year_level": "1st Year"}).data
         self.assertEqual(d["total"], 1)
-        self.assertIn("available only Tue", d["items"][0]["reason"])
+        self.assertIn("not available", d["items"][0]["reason"])
         Section.objects.create(name="V2", program=self.prog2, year_level="2nd Year", semester="1st Sem", student_count=10)
         Subject.objects.create(code="AV9", title="Later", program=self.prog2, lec_units=2, lab_units=0, year_level="2nd Year",
                                semester="1st Sem", classification="major")
@@ -2347,6 +2359,9 @@ class CandidateBlockerReportTests(Base):
         other = Subject.objects.get(code="TST100")
         assigned = [sc.Assignment(other, self.sec[0], self.teachers[1], self.rooms[i], fri[h]) for i in (0, 1) for h in (8, 9)]
         assigned.append(sc.Assignment(other, self.sec3, self.teachers[1], self.rooms[3], tue8))      # the section's own class
+        from faculty.models import Availability
+        Availability.objects.create(faculty=self.t, day="Monday", start_time=dtime(7), end_time=dtime(10), preference="unavailable",
+                                    school_year=SY, semester="1st Sem")
         rules = _build_availability_rules([self.t], ts, SY, "1st Sem")
         by, rep = self._report(assigned, availability_rules=rules)
         self.assertEqual(len(rep), 5 * 1)                                       # 8:00-10:00 is the only 2-hour start in 8-10, each day
@@ -2356,11 +2371,10 @@ class CandidateBlockerReportTests(Base):
         self.assertIn("N-102 has TST100 (T1A)", by[("Fri", 480)][0][1])
         self.assertEqual(cat("Tue")[0], "section busy")                         # the section's own class is named first
         self.assertIn("Z4 already has TST100", by[("Tue", 480)][0][1])
-        self.assertEqual(cat("Mon"), ["teacher availability"])                  # Mon 8-10 is outside his Mon 10-1: only then is it his time
+        self.assertEqual(cat("Mon"), ["teacher availability"])                  # Mon 7-10 marked UNAVAILABLE: only then is it his time
+        self.assertEqual(cat("Wed"), [])                                        # outside his windows is no longer a blocker
         from engine import blockers
-        msg = blockers.summary(rep, 2, (480, 600), what="Lecture", chosen_name="Teach Er1")
-        self.assertIn("Fri 8:00 AM-10:00 AM: N-101 has TST100 (T1A); N-102 has TST100 (T1A)", msg)
-        self.assertIn("Mon, Tue, Wed, Thu 8:00 AM-10:00 AM: Teach Er1 is not available then", msg)   # every blocker is listed, Tue too
+        self.assertEqual(blockers.summary(rep, 2, (480, 600), what="Lecture", chosen_name="Teach Er1"), "")   # a free period exists
 
     def test_report_names_the_professors_own_class(self):
         from engine import scheduler as sc
@@ -2372,16 +2386,13 @@ class CandidateBlockerReportTests(Base):
         from engine import blockers
         self.assertEqual(blockers.summary(_, 2, (480, 600)), "")
 
-    def test_the_exact_cs4131_case_names_the_missing_slot_and_only_then_his_time(self):
+    def test_the_exact_cs4131_case_is_now_placed_outside_his_windows(self):
         TimeSlot.objects.create(day="Thu", start_time=dtime(12), end_time=dtime(13))   # the one extra noon slot (live data has it)
         r = self.gen3("10:30", "13:00")
         self.assertEqual(r.status_code, 201, r.data)
-        self.assertFalse(Schedule.objects.filter(section=self.sec3).exists())
-        reason = r.data["conflicts"][0]["reason"]
-        self.assertIn("Mon, Tue, Wed, Fri 11:00 AM-1:00 PM: there is no hourly class time slot at 12:00 PM-1:00 PM", reason)
-        self.assertNotIn("lunch", reason)                                        # Mon/Fri, his days: the missing slot, not his time
-        self.assertIn("Thu 11:00 AM-1:00 PM: Teach Er1 is not available then", reason)
-        self.assertNotIn("Mon 10:30 AM-12:30 PM: Teach Er1", reason)
+        self.assertFalse(r.data["conflicts"], r.data["conflicts"])               # Thu 11-1 is outside his preferred time: allowed
+        rows = Schedule.objects.filter(section=self.sec3).select_related("timeslot")
+        self.assertEqual({(x.timeslot.day, x.timeslot.start_time) for x in rows}, {("Thu", dtime(11)), ("Thu", dtime(12))})
 
 
 class DepartmentTeacherScopeTests(Base):
@@ -2816,3 +2827,950 @@ class NoFixedLunchTests(Base):
         self.assertTrue(r.data["conflicts"])
         self.assertNotIn("lunch", " ".join(c["reason"] for c in r.data["conflicts"]).lower())
         self.assertEqual(scan()["total"], 0)
+
+
+class ProgramDisciplineFamilyTests(APITestCase):
+    """Majors of Nursing, Radiologic Technology, Business, Hospitality / Tourism and Communication programs match their own college's
+    faculty by discipline (MAJOR_FAMILIES), like Computing and Allied Health already did. Same college still required; Gen Ed unaffected."""
+
+    def mk(self, sid, dept, specs):
+        u = User(username=f"PD-{sid}", school_id=sid, first_name="P", last_name=sid, role="faculty", faculty_type="full_time", department=dept)
+        u.set_password("pw")
+        u.save()
+        p = FacultyProfile.objects.create(user=u)
+        p.specializations.set([AcademicField.objects.get_or_create(name=n)[0] for n in specs])
+        return p
+
+    def major(self, prog, dept, code, title, kind="major"):
+        pr = Program.objects.get_or_create(name=prog, defaults={"department": dept})[0]
+        sec = Section.objects.get_or_create(name="X1", program=pr, year_level="1st Year", semester="1st Sem", defaults={"student_count": 20})[0]
+        sub = Subject.objects.create(code=code, title=title, program=pr, lec_units=3, lab_units=0, year_level="1st Year", semester="1st Sem",
+                                     classification=kind)
+        return sub, sec
+
+    def ok(self, t, sub, sec):
+        from engine.qualification import is_qualified
+        return is_qualified(t, sub, sec, {f.id for f in t.specializations.all()})
+
+    def test_each_program_discipline_matches_its_own_faculty(self):
+        cases = [
+            ("BS Radiologic Technology", "College of Radiologic Technology", "RAD1101", "Introduction to Radiologic Technology and Health Care",
+             ["BS Radiologic Technology", "Radiographic Positioning"]),
+            ("BS Nursing", "College of Nursing", "NCM101", "Health Assessment", ["Nursing", "Medical-Surgical Nursing"]),
+            ("BSBA Major in Marketing Management", "College of Business Administration", "MKT101", "Professional Salesmanship", ["Accounting"]),
+            ("BS Tourism Management", "College of International Hospitality Management", "TM101", "Macro Perspective of Tourism",
+             ["Tourism Management"]),
+            ("BA Communication", "College of Arts and Science", "BAC101", "Introduction to Communication Theory", ["Journalism"]),
+        ]
+        for i, (prog, dept, code, title, specs) in enumerate(cases):
+            sub, sec = self.major(prog, dept, code, title)
+            own = self.mk(f"O{i}", dept, specs)
+            other = self.mk(f"X{i}", "College of Computer Studies", specs)              # same specialization, another college
+            unrelated = self.mk(f"U{i}", dept, ["Foreign Language"] if i != 3 else ["Statistics"])
+            self.assertTrue(self.ok(own, sub, sec), code)
+            self.assertFalse(self.ok(other, sub, sec), code)                            # a major stays inside its college
+            self.assertFalse(self.ok(unrelated, sub, sec), code)                        # same college, unrelated discipline: no
+
+    def test_gen_ed_is_unaffected(self):
+        ge, sec = self.major("BS Nursing", "College of Nursing", "GEC106", "Purposive Communication", kind="minor")
+        comm_nurse = self.mk("N9", "College of Nursing", ["Organizational Communication"])
+        self.assertFalse(self.ok(comm_nurse, ge, sec))                                  # Gen Ed: the CAS rule, not a major family
+
+    def test_computer_studies_is_unchanged(self):
+        sub, sec = self.major("BS Computer Science", "College of Computer Studies", "CS9", "Data Structures")
+        mba = self.mk("C9", "College of Computer Studies", ["Business Management"])
+        self.assertFalse(self.ok(mba, sub, sec))                                        # business is not computing
+
+
+class MergeDeanAccountsTests(Base):
+    """merge_dean_accounts: preview changes nothing; --apply moves classes, availability, notifications and specializations to the kept
+    dean, renames it and deletes the duplicate; a time clash refuses everything."""
+
+    def setUp(self):
+        from faculty.models import Availability
+        from notifications.models import Notification
+        self.old = User(username="DeanDup", school_id="NURSX", first_name="Darwin D.", last_name="Aznar", role="faculty",
+                        faculty_type="dean", department=DEPT)
+        self.old.set_password("pw")
+        self.old.save()
+        self.oldp = FacultyProfile.objects.create(user=self.old, degree="MAN")
+        self.oldp.specializations.add(AcademicField.objects.create(name="Nursing Research X"))
+        self.keep = self.dean                                                     # "Dean T", same department
+        self.keep.school_id = "D9006"
+        self.keep.save()
+        self.row = Schedule.objects.create(subject=Subject.objects.get(code="TST100"), section=self.sec[0], teacher=self.oldp,
+                                           room=self.rooms[0], timeslot=TimeSlot.objects.get(day="Mon", start_time=dtime(7)), term="1st Sem")
+        Availability.objects.create(faculty=self.oldp, day="Monday", start_time=dtime(7), end_time=dtime(12), preference="available")
+        Notification.objects.create(recipient=self.old, message="hello")
+
+    def run_cmd(self, *extra):
+        from io import StringIO
+        from django.core.management import call_command
+        out = StringIO()
+        call_command("merge_dean_accounts", "--from", "NURSX", "--into", "D9006", "--first", "Darwin D.", "--last", "Aznar", *extra, stdout=out)
+        return out.getvalue()
+
+    def test_preview_then_apply(self):
+        from faculty.models import Availability
+        from notifications.models import Notification
+        text = self.run_cmd()
+        self.assertIn("Preview only", text)
+        self.assertTrue(User.objects.filter(school_id="NURSX").exists())
+        self.run_cmd("--apply")
+        self.assertFalse(User.objects.filter(school_id="NURSX").exists())
+        keep = User.objects.get(school_id="D9006")
+        self.assertEqual(keep.get_full_name(), "Darwin D. Aznar")
+        self.assertEqual(keep.username, "DeanT")                                    # login unchanged
+        self.assertTrue(keep.check_password("pw"))
+        kp = FacultyProfile.objects.get(user=keep)
+        self.assertEqual(Schedule.objects.get(pk=self.row.pk).teacher_id, kp.id)    # the class moved, not deleted
+        self.assertEqual(Availability.objects.filter(faculty=kp).count(), 1)
+        self.assertEqual(Notification.objects.filter(recipient=keep, message="hello").count(), 1)
+        self.assertIn("Nursing Research X", [f.name for f in kp.specializations.all()])
+        self.assertEqual(kp.degree, "MAN")
+
+    def test_a_time_clash_changes_nothing(self):
+        from django.core.management.base import CommandError
+        kp = FacultyProfile.objects.get(user=self.keep)
+        Schedule.objects.create(subject=Subject.objects.get(code="TST101"), section=self.sec[1], teacher=kp, room=self.rooms[1],
+                                timeslot=TimeSlot.objects.get(day="Mon", start_time=dtime(7)), term="1st Sem")
+        with self.assertRaises(CommandError):
+            self.run_cmd("--apply")
+        self.assertTrue(User.objects.filter(school_id="NURSX").exists())
+        self.assertEqual(Schedule.objects.get(pk=self.row.pk).teacher_id, self.oldp.id)
+
+
+class RegistrarPrintTests(Base):
+    """The Registrar can Print / Preview the class schedule of any college, following the Schedules tab's filters; other roles than
+    Dean / Registrar still cannot; a table with conflicts is still refused unless printed as NOT FINAL."""
+
+    def setUp(self):
+        self.row = Schedule.objects.create(subject=Subject.objects.get(code="TST100"), section=self.sec[0], teacher=self.teachers[0],
+                                           room=self.rooms[0], timeslot=TimeSlot.objects.get(day="Mon", start_time=dtime(7)), term="1st Sem")
+
+    def pdf(self, user, **params):
+        self.client.force_authenticate(user)
+        return self.client.get("/api/engine/export-pdf/", params)
+
+    def test_registrar_prints_with_the_filters(self):
+        r = self.pdf(self.registrar, department=DEPT, program_id=self.prog.id, year_level="1st Year", semester="1st Sem",
+                     status="draft", classification="major")
+        self.assertEqual(r.status_code, 200, getattr(r, "data", None))
+        self.assertEqual(r["Content-Type"], "application/pdf")
+        self.assertTrue(r.content.startswith(b"%PDF"))
+        self.assertEqual(self.pdf(self.registrar).status_code, 200)                     # all colleges
+        self.assertEqual(self.pdf(self.registrar, department="College of Nursing").status_code, 404)   # nothing matches: said so
+        self.assertEqual(self.pdf(self.registrar, classification="minor").status_code, 404)
+
+    def test_other_roles_still_cannot_print(self):
+        self.assertEqual(self.pdf(self.teachers[1].user).status_code, 403)
+        self.assertEqual(self.pdf(self.dean).status_code, 200)                           # the Dean: unchanged
+
+    def test_conflicts_are_still_refused_for_the_registrar(self):
+        Schedule.objects.create(subject=Subject.objects.get(code="TST101"), section=self.sec[1], teacher=self.teachers[0], room=self.rooms[1],
+                                timeslot=TimeSlot.objects.create(day="Mon", start_time=dtime(7, 30), end_time=dtime(8, 30)), term="1st Sem")
+        self.assertEqual(self.pdf(self.registrar).status_code, 409)
+        self.assertEqual(self.pdf(self.registrar, allow_conflicts=1).status_code, 200)
+
+
+class FindReplacementTests(Base):
+    """'Find replacement' (a teacher is leaving): the suggestions use the system's one qualification rule (as generation does), and
+    Assign saves the change (it used to crash with NameError: find_conflicts)."""
+
+    def setUp(self):
+        self.sub = Subject.objects.create(code="CS4129X", title="Social Issues and Professional Practice", program=self.prog, lec_units=3,
+                                          lab_units=0, year_level="1st Year", semester="1st Sem", classification="major")
+        FacultyProfile.objects.filter(pk=self.teachers[1].pk).update(degree="BSIT")
+        self.rows = [Schedule.objects.create(subject=self.sub, section=self.sec[0], teacher=self.teachers[0], room=self.rooms[0], term="1st Sem",
+                                             timeslot=TimeSlot.objects.get(day="Wed", start_time=dtime(h))) for h in (7, 8, 9)]
+        self.client.force_authenticate(self.dean)
+
+    def test_a_bsit_teacher_is_suggested_like_generation_would_accept(self):
+        from engine.qualification import is_qualified
+        t = FacultyProfile.objects.get(pk=self.teachers[1].pk)
+        self.assertTrue(is_qualified(t, self.sub, self.sec[0], set()))                    # the generator's rule says yes
+        r = self.client.get("/api/engine/replacements/teacher/", {"faculty_id": self.teachers[0].id})
+        self.assertEqual(r.status_code, 200, r.data)
+        cls = next(c for c in r.data["classes"] if c["code"] == "CS4129X")
+        self.assertIn(t.id, [s["faculty_id"] for s in cls["suggestions"]])               # so the replacement list says yes too
+        self.assertEqual(cls["reason_none"], "")
+
+    def test_assign_saves_instead_of_crashing(self):
+        r = self.client.post("/api/engine/replacements/assign/", {"schedule_ids": [x.id for x in self.rows], "teacher": self.teachers[1].id},
+                             format="json")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data["updated"], 3)
+        self.assertEqual(set(Schedule.objects.filter(pk__in=[x.id for x in self.rows]).values_list("teacher_id", flat=True)),
+                         {self.teachers[1].id})
+        busy = Schedule.objects.create(subject=Subject.objects.get(code="TST101"), section=self.sec[1], teacher=self.teachers[2],
+                                       room=self.rooms[1], timeslot=TimeSlot.objects.get(day="Wed", start_time=dtime(8)), term="1st Sem")
+        r = self.client.post("/api/engine/replacements/assign/", {"schedule_ids": [x.id for x in self.rows], "teacher": self.teachers[2].id},
+                             format="json")
+        self.assertEqual(r.status_code, 400, r.data)                                       # a clash is still refused
+        self.assertIn("not free", r.data["detail"])
+        self.assertTrue(busy.pk)
+
+
+class SectionPermissionAndActiveTeacherTests(Base):
+    """Bug fixes: (1) only the Registrar, or a Dean for their own college, may create / edit / delete sections; (3) a deactivated
+    teacher is never given a class by Generate (or suggested as a substitute)."""
+
+    def other_user(self, ftype="part_time", dept=DEPT, role="faculty"):
+        u = User(username=f"SP-{ftype}-{role}", school_id=f"SP{ftype[:2]}{role[:2]}", role=role, faculty_type=ftype if role == "faculty" else None,
+                 department=dept)
+        u.set_password("pw")
+        u.save()
+        return u
+
+    def test_only_registrar_and_own_dean_may_change_sections(self):
+        sec = self.sec[1]
+        for who in (self.other_user("part_time"), self.other_user("full_time")):
+            self.client.force_authenticate(who)
+            self.assertEqual(self.client.get("/api/engine/sections/").status_code, 200)          # reading is unchanged
+            self.assertEqual(self.client.patch(f"/api/engine/sections/{sec.id}/", {"student_count": 1}, format="json").status_code, 403)
+            self.assertEqual(self.client.delete(f"/api/engine/sections/{sec.id}/").status_code, 403)
+            self.assertEqual(self.client.post("/api/engine/sections/", {"name": "ZZ", "program": self.prog.id, "year_level": "1st Year",
+                                                                         "semester": "1st Sem", "student_count": 5}, format="json").status_code, 403)
+        self.assertTrue(Section.objects.filter(pk=sec.id).exists())
+        other_dean = self.other_user("dean", dept="College of Nursing")
+        self.client.force_authenticate(other_dean)
+        self.assertEqual(self.client.patch(f"/api/engine/sections/{sec.id}/", {"student_count": 1}, format="json").status_code, 403)
+        self.assertEqual(self.client.post("/api/engine/sections/", {"name": "ZZ", "program": self.prog.id, "year_level": "1st Year",
+                                                                     "semester": "1st Sem", "student_count": 5}, format="json").status_code, 403)
+        self.client.force_authenticate(self.dean)                                                   # own college: allowed
+        self.assertEqual(self.client.patch(f"/api/engine/sections/{sec.id}/", {"student_count": 33}, format="json").status_code, 200)
+        self.client.force_authenticate(self.registrar)
+        self.assertEqual(self.client.patch(f"/api/engine/sections/{sec.id}/", {"student_count": 34}, format="json").status_code, 200)
+        self.assertEqual(Section.objects.get(pk=sec.id).student_count, 34)
+
+    def test_a_deactivated_teacher_gets_no_class(self):
+        gone = self.teachers[0]
+        gone.user.is_active = False
+        gone.user.save()
+        r = self.gen()
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertTrue(Schedule.objects.exists())
+        self.assertFalse(Schedule.objects.filter(teacher=gone).exists())
+
+
+class SharedClassGroupEditTests(Base):
+    """A shared (merged) Gen Ed class is edited as ONE class: teacher / room / day-time change every attending section together and the
+    sharing stays; any failed rule changes nothing; ordinary classes keep their old behaviour."""
+
+    def setUp(self):
+        self.p2 = Program.objects.create(name="BA Comm Share", department="College of Arts and Science")
+        self.s1, self.s2 = self.sec[0], Section.objects.create(name="A2", program=self.p2, year_level="1st Year", semester="1st Sem",
+                                                                student_count=21)
+        Section.objects.filter(pk=self.s1.pk).update(student_count=30)
+        self.s1.refresh_from_db()
+        self.g1 = Subject.objects.create(code="GE909", title="Understanding the Self", program=self.prog, lec_units=3, lab_units=0,
+                                         year_level="1st Year", semester="1st Sem", classification="minor")
+        self.g2 = Subject.objects.create(code="GE909", title="Understanding the Self", program=self.p2, lec_units=3, lab_units=0,
+                                         year_level="1st Year", semester="1st Sem", classification="minor")
+        self.cas = [make_cas_teacher(700 + i) for i in range(3)]
+        self.big = Room.objects.create(name="BIG-1", capacity=80, room_type="lecture")
+        self.small = Room.objects.create(name="SMALL-1", capacity=40, room_type="lecture")
+        self.rows = []
+        for sec, sub in ((self.s1, self.g1), (self.s2, self.g2)):
+            for h in (7, 8, 9):
+                self.rows.append(Schedule.objects.create(subject=sub, section=sec, teacher=self.cas[0], room=self.big, merge_key="mk-ge909",
+                                                         timeslot=TimeSlot.objects.get(day="Mon", start_time=dtime(h)), term="1st Sem"))
+        self.mine = [r.id for r in self.rows if r.section_id == self.s1.id]
+        self.client.force_authenticate(self.registrar)
+
+    def group(self):
+        return list(Schedule.objects.filter(merge_key="mk-ge909"))
+
+    def snapshot(self):
+        return sorted(Schedule.objects.values_list("id", "teacher_id", "room_id", "timeslot_id", "section_id", "merge_key"))
+
+    def edit(self, **body):
+        return self.client.post("/api/engine/shared-classes/edit/", {"ids": self.mine, **body}, format="json")
+
+    def test_teacher_change_applies_to_every_section_and_keeps_the_sharing(self):
+        r = self.edit(teacher=self.cas[1].id)
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data["sections"], 2)
+        g = self.group()
+        self.assertEqual(len(g), 6)
+        self.assertEqual({x.teacher_id for x in g}, {self.cas[1].id})
+        self.assertTrue(all(x.is_manual_override for x in g))                     # Generate keeps the hand edit
+        self.assertEqual(scan()["total"], 0)
+
+    def test_room_must_seat_every_attending_student(self):
+        before = self.snapshot()
+        r = self.edit(room=self.small.id)                                           # 30 + 21 = 51 students > 40 seats
+        self.assertEqual(r.status_code, 400, r.data)
+        self.assertIn("51 students", r.data["detail"])
+        self.assertEqual(self.snapshot(), before)
+        bigger = Room.objects.create(name="BIG-2", capacity=60, room_type="lecture")
+        self.assertEqual(self.edit(room=bigger.id).status_code, 200)
+        self.assertEqual({x.room_id for x in self.group()}, {bigger.id})
+
+    def test_busy_or_unqualified_teacher_and_approved_rows_change_nothing(self):
+        Schedule.objects.create(subject=Subject.objects.get(code="TST100"), section=self.sec[1], teacher=self.cas[2], room=self.rooms[0],
+                                timeslot=TimeSlot.objects.get(day="Mon", start_time=dtime(8)), term="1st Sem", merge_key="other")
+        before = self.snapshot()
+        r = self.edit(teacher=self.cas[2].id)                                       # busy Mon 8:00
+        self.assertEqual(r.status_code, 400, r.data)
+        self.assertIn("not free", r.data["detail"])
+        r = self.edit(teacher=self.teachers[0].id)                                  # Computer Studies: not CAS-qualified for Gen Ed
+        self.assertEqual(r.status_code, 400, r.data)
+        self.assertEqual(self.snapshot(), before)
+        Schedule.objects.filter(pk=self.rows[-1].pk).update(status="approved")
+        r = self.edit(teacher=self.cas[1].id)
+        self.assertEqual(r.status_code, 409, r.data)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_a_dean_cannot_edit_a_shared_gen_ed_class(self):
+        self.client.force_authenticate(self.dean)
+        self.assertEqual(self.edit(teacher=self.cas[1].id).status_code, 403)
+
+    def test_teacher_list_is_for_every_section_of_the_shared_class(self):
+        r = self.client.get("/api/engine/teacher-options/", {"schedule_ids": ",".join(map(str, self.mine))})
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data["shared"]["students"], 51)
+        self.assertEqual(len(r.data["shared"]["sections"]), 2)
+        ids = {t["id"] for t in r.data["teachers"]}
+        self.assertTrue({t.id for t in self.cas} <= ids)
+        self.assertNotIn(self.teachers[0].id, ids)
+        cur = next(t for t in r.data["teachers"] if t["id"] == self.cas[0].id)
+        self.assertNotIn("already teaching", cur["why"])                            # the shared rows are its own class, not a clash
+
+    def test_day_and_time_move_the_whole_group(self):
+        # the other section (A2) is busy on Tuesday 7-10: no Tuesday morning option may be offered for the shared class
+        tue = [TimeSlot.objects.get(day="Tue", start_time=dtime(h)) for h in (7, 8, 9)]
+        other = Subject.objects.create(code="BAC1", title="Comm Theory", program=self.p2, lec_units=3, lab_units=0, year_level="1st Year",
+                                       semester="1st Sem", classification="major")
+        for sl in tue:
+            Schedule.objects.create(subject=other, section=self.s2, teacher=self.cas[2], room=self.rooms[2], timeslot=sl, term="1st Sem")
+        r = self.client.post("/api/engine/slot-options/", {"ids": self.mine, "limit": 300}, format="json")
+        self.assertEqual(r.status_code, 200, r.data)
+        labels = [o["label"] for o in r.data["options"]]
+        self.assertTrue(labels)
+        self.assertFalse(any(l.startswith("Tue 7:00 AM") or l.startswith("Tue 8:00 AM") for l in labels), labels)
+        pick = next(o for o in r.data["options"] if o["day"] == "Wed")
+        r = self.client.post("/api/engine/slot-options/apply/", {"ids": self.mine, "key": pick["key"]}, format="json")
+        self.assertEqual(r.status_code, 200, r.data)
+        g = self.group()
+        self.assertEqual(len(g), 6)                                                 # both sections moved, still one shared class
+        self.assertEqual({x.timeslot.day for x in g}, {"Wed"})
+        self.assertEqual({x.section_id for x in g}, {self.s1.id, self.s2.id})
+        self.assertEqual(len({(x.timeslot_id) for x in g}), 3)
+        self.assertEqual(scan()["total"], 0)
+
+    def test_ordinary_classes_still_edit_as_before(self):
+        row = Schedule.objects.create(subject=Subject.objects.get(code="TST100"), section=self.sec[1], teacher=self.teachers[0],
+                                      room=self.rooms[0], timeslot=TimeSlot.objects.get(day="Fri", start_time=dtime(7)), term="1st Sem")
+        self.client.force_authenticate(self.dean)
+        r = self.client.patch(f"/api/engine/schedules/{row.id}/", {"teacher": self.teachers[1].id}, format="json")
+        self.assertEqual(r.status_code, 200, r.data)
+        r = self.client.patch(f"/api/engine/schedules/{self.rows[0].id}/", {"teacher": self.cas[1].id}, format="json")
+        self.assertIn(r.status_code, (400, 403))                                    # a single shared row is still never split
+
+
+class AvailabilityAsPreferenceTests(Base):
+    """A teacher's preferred / available windows are priorities, not limits: Generate tries preferred, then available, then other open
+    times; only times marked unavailable stay closed for Generate. A Dean may move a class by hand anywhere nothing clashes."""
+
+    def setUp(self):
+        from faculty.models import Availability
+        self.Av = Availability
+        self.t = self.teachers[0]
+        FacultyProfile.objects.filter(pk__in=[x.pk for x in self.teachers[1:]]).update(degree="")    # only one qualified teacher
+        self.prog7 = Program.objects.create(name="BS CS Pref", department=DEPT)
+        self.sec7 = Section.objects.create(name="P1", program=self.prog7, year_level="1st Year", semester="1st Sem", student_count=20)
+        self.subs = [Subject.objects.create(code=f"PF{i}", title=f"Pref {i}", program=self.prog7, lec_units=3, lab_units=0,
+                                            year_level="1st Year", semester="1st Sem", classification="major") for i in range(3)]
+
+    def win(self, day, a, b, pref):
+        self.Av.objects.create(faculty=self.t, day=day, start_time=dtime(a), end_time=dtime(b), preference=pref, school_year=SY, semester="1st Sem")
+
+    def test_preferred_then_available_then_other_times(self):
+        self.win("Thursday", 13, 16, "preferred")
+        self.win("Wednesday", 8, 11, "available")
+        r = self.gen(program_id=self.prog7.id)
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertFalse(r.data["conflicts"])
+        starts = {(x.timeslot.day, x.timeslot.start_time) for x in Schedule.objects.filter(section=self.sec7).select_related("timeslot")}
+        self.assertIn(("Thu", dtime(13)), starts)                                 # preferred window used
+        self.assertIn(("Wed", dtime(8)), starts)                                  # then the available one
+        self.assertEqual(len({x.subject_id for x in Schedule.objects.filter(section=self.sec7)}), 3)   # the third: another open time
+
+    def test_dean_moves_a_class_outside_availability_but_never_into_a_clash(self):
+        self.win("Monday", 7, 10, "preferred")
+        row_ids = [Schedule.objects.create(subject=self.subs[0], section=self.sec7, teacher=self.t, room=self.rooms[0], term="1st Sem",
+                                           timeslot=TimeSlot.objects.get(day="Mon", start_time=dtime(h))).id for h in (7, 8, 9)]
+        Schedule.objects.create(subject=Subject.objects.get(code="TST100"), section=self.sec[0], teacher=self.t, room=self.rooms[1],
+                                term="1st Sem", timeslot=TimeSlot.objects.get(day="Fri", start_time=dtime(13)))
+        self.client.force_authenticate(self.dean)
+        opts = self.client.post("/api/engine/slot-options/", {"ids": row_ids, "limit": 300}, format="json").data["options"]
+        self.assertFalse(any(o["day"] == "Fri" and o["start"] in ("11:00", "12:00", "13:00") for o in opts))   # his Fri 1 PM class: no clash
+        out = next(o for o in opts if o["day"] == "Thu" and o["start"] == "14:00")
+        self.assertEqual(out["availability"], "outside")
+        self.assertIn("outside their availability", out["label"])
+        r = self.client.post("/api/engine/slot-options/apply/", {"ids": row_ids, "key": out["key"]}, format="json")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual({x.timeslot.day for x in Schedule.objects.filter(section=self.sec7)}, {"Thu"})
+        self.assertEqual(scan()["total"], 0)
+
+
+class AssignedDayTests(Base):
+    """The Dean assigns a subject to a professor's day and time from the Faculty time window: Generate places it on that day (the
+    time_windows entry carries "day"), or skips it naming the day; an invalid day is refused before anything changes."""
+
+    def setUp(self):
+        self.prog8 = Program.objects.create(name="BS CS Day", department=DEPT)
+        self.sec8 = Section.objects.create(name="D1", program=self.prog8, year_level="1st Year", semester="1st Sem", student_count=20)
+        self.sub = Subject.objects.create(code="DY1", title="Day Subject", program=self.prog8, lec_units=2, lab_units=0, year_level="1st Year",
+                                          semester="1st Sem", classification="major")
+
+    def go(self, w, **over):
+        return self.gen(program_id=self.prog8.id, teacher_choices={str(self.sub.id): self.teachers[2].id},
+                        time_windows={str(self.sub.id): w}, **over)
+
+    def test_placed_on_the_assigned_day_and_time(self):
+        r = self.go({"start": "14:00", "end": "16:00", "day": "Thu"})
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertFalse(r.data["conflicts"])
+        rows = Schedule.objects.filter(section=self.sec8).select_related("timeslot")
+        self.assertEqual({(x.timeslot.day, x.timeslot.start_time) for x in rows}, {("Thu", dtime(14)), ("Thu", dtime(15))})
+        self.assertEqual({x.teacher_id for x in rows}, {self.teachers[2].id})
+
+    def test_a_busy_assigned_day_is_skipped_with_the_day_named(self):
+        for h in (14, 15):
+            Schedule.objects.create(subject=Subject.objects.get(code="TST100"), section=self.sec[0], teacher=self.teachers[2], room=self.rooms[0],
+                                    timeslot=TimeSlot.objects.get(day="Thu", start_time=dtime(h)), term="1st Sem", status="approved")
+        r = self.go({"start": "14:00", "end": "16:00", "day": "Thu"})
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertFalse(Schedule.objects.filter(section=self.sec8).exists())       # nothing forced, no other day used
+        self.assertTrue(r.data["conflicts"])
+
+    def test_an_invalid_day_is_refused(self):
+        r = self.go({"start": "14:00", "end": "16:00", "day": "Funday"})
+        self.assertEqual(r.status_code, 400, r.data)
+        self.assertIn("day", r.data["detail"].lower())
+
+
+class GenEdMoveRequestTests(Base):
+    """A Dean asks the Registrar to move a Gen Ed class of their program (to free a time for a major). Approval moves ONLY that class,
+    re-checked at that moment: it never overrides another Dean's / Gen Ed class; approved classes must go back to Draft first."""
+
+    def setUp(self):
+        self.ge = Subject.objects.create(code="GE777", title="Understanding the Self", program=self.prog, lec_units=3, lab_units=0,
+                                         year_level="1st Year", semester="1st Sem", classification="minor")
+        self.cas = make_cas_teacher(800)
+        self.rows = [Schedule.objects.create(subject=self.ge, section=self.sec[0], teacher=self.cas, room=self.rooms[0], term="1st Sem",
+                                             timeslot=TimeSlot.objects.get(day="Mon", start_time=dtime(h))) for h in (7, 8, 9)]
+        self.ids = [r.id for r in self.rows]
+        # another college's Dean, with a major class of their own
+        self.nprog = Program.objects.create(name="BS Nursing Req", department="College of Nursing")
+        self.nsec = Section.objects.create(name="N1", program=self.nprog, year_level="1st Year", semester="1st Sem", student_count=20)
+        self.ndean = User(username="NDean", school_id="ND1", role="faculty", faculty_type="dean", department="College of Nursing")
+        self.ndean.set_password("pw")
+        self.ndean.save()
+
+    def opts(self, user=None):
+        self.client.force_authenticate(user or self.dean)
+        return self.client.post("/api/engine/gened-requests/options/", {"ids": self.ids}, format="json")
+
+    def ask(self, key, user=None):
+        self.client.force_authenticate(user or self.dean)
+        return self.client.post("/api/engine/gened-requests/", {"ids": self.ids, "key": key, "reason": "free Mon 7-10 for a major"},
+                                format="json")
+
+    def decide(self, req_id, action, user=None):
+        self.client.force_authenticate(user or self.registrar)
+        return self.client.post(f"/api/engine/gened-requests/{req_id}/{action}/", {"note": "ok"}, format="json")
+
+    def wed_option(self):
+        r = self.opts()
+        self.assertEqual(r.status_code, 200, r.data)
+        return next(o for o in r.data["options"] if o["day"] == "Wed" and o["start"] == "13:00")
+
+    def snapshot(self, exclude=()):
+        return sorted(Schedule.objects.exclude(pk__in=list(exclude)).values_list("id", "teacher_id", "room_id", "timeslot_id", "section_id"))
+
+    def test_request_then_approve_moves_only_that_gen_ed_class(self):
+        from notifications.models import Notification
+        opt = self.wed_option()
+        r = self.ask(opt["key"])
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data["status"], "pending")
+        self.assertEqual(r.data["target"], opt["label"])
+        self.assertEqual({x.timeslot.day for x in Schedule.objects.filter(subject=self.ge)}, {"Mon"})    # nothing moved yet
+        self.assertTrue(Notification.objects.filter(recipient=self.registrar, message__contains="GE777").exists())
+        others = self.snapshot(exclude=self.ids)
+        r = self.decide(r.data["id"], "approve")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data["status"], "approved")
+        moved = Schedule.objects.filter(subject=self.ge).select_related("timeslot")
+        self.assertEqual({(x.timeslot.day, x.timeslot.start_time) for x in moved}, {("Wed", dtime(13)), ("Wed", dtime(14)), ("Wed", dtime(15))})
+        self.assertEqual(self.snapshot(exclude=[x.id for x in moved]), others)       # every other class exactly as before
+        self.assertTrue(Notification.objects.filter(recipient=self.dean, message__contains="approved").exists())
+        self.assertEqual(scan()["total"], 0)
+
+    def test_approval_never_overrides_a_class_placed_after_the_request(self):
+        opt = self.wed_option()
+        req = self.ask(opt["key"]).data
+        # meanwhile another Dean puts a major class in the same room at Wed 1:00 PM
+        nsub = Subject.objects.create(code="NCM9", title="Care", program=self.nprog, lec_units=1, lab_units=0, year_level="1st Year",
+                                      semester="1st Sem", classification="major")
+        theirs = Schedule.objects.create(subject=nsub, section=self.nsec, teacher=self.teachers[4], room=self.rooms[0], term="1st Sem",
+                                         timeslot=TimeSlot.objects.get(day="Wed", start_time=dtime(14)), status="approved")
+        before = self.snapshot()
+        r = self.decide(req["id"], "approve")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data["status"], "failed")                                   # not applied ...
+        self.assertIn("Not applied", r.data["decision_note"])
+        self.assertEqual(self.snapshot(), before)                                     # ... and nothing changed
+        self.assertTrue(Schedule.objects.filter(pk=theirs.pk, timeslot__day="Wed", room=self.rooms[0]).exists())
+
+    def test_an_approved_gen_ed_class_must_go_back_to_draft_first(self):
+        Schedule.objects.filter(pk__in=self.ids).update(status="approved")
+        r = self.opts()
+        self.assertEqual(r.status_code, 200, r.data)                                   # asking is allowed
+        self.assertIn("back to Draft", r.data["note"])
+        opt = next(o for o in r.data["options"] if o["day"] == "Wed" and o["start"] == "13:00")
+        req = self.ask(opt["key"]).data
+        before = self.snapshot()
+        r = self.decide(req["id"], "approve")
+        self.assertEqual(r.status_code, 409, r.data)
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(GenEdMoveRequest.objects.get(pk=req["id"]).status, "pending")  # stays pending until moved back to Draft
+
+    def test_who_may_do_what(self):
+        self.assertEqual(self.opts(self.ndean).status_code, 403)                        # another college's Dean
+        self.assertEqual(self.opts(self.teachers[0].user).status_code, 403)             # a teacher
+        opt = self.wed_option()
+        self.assertEqual(self.ask(opt["key"], self.registrar).status_code, 403)         # the Registrar does not ask
+        req = self.ask(opt["key"]).data
+        self.assertEqual(self.ask(opt["key"]).status_code, 409)                         # one pending request per class
+        self.assertEqual(self.decide(req["id"], "approve", self.dean).status_code, 403)  # a Dean cannot approve
+        self.client.force_authenticate(self.ndean)
+        self.assertEqual(self.client.get("/api/engine/gened-requests/").data["items"], [])   # other colleges' requests are not shown
+        self.client.force_authenticate(self.dean)
+        self.assertEqual(self.client.post(f"/api/engine/gened-requests/{req['id']}/cancel/").status_code, 200)
+        self.assertEqual(GenEdMoveRequest.objects.get(pk=req["id"]).status, "cancelled")
+        r = self.decide(req["id"], "approve")
+        self.assertEqual(r.status_code, 409)
+
+    def test_reject_and_majors_are_not_requested(self):
+        opt = self.wed_option()
+        req = self.ask(opt["key"]).data
+        before = self.snapshot()
+        r = self.decide(req["id"], "reject")
+        self.assertEqual(r.data["status"], "rejected")
+        self.assertEqual(self.snapshot(), before)
+        major = Schedule.objects.create(subject=Subject.objects.get(code="TST100"), section=self.sec[1], teacher=self.teachers[0],
+                                        room=self.rooms[1], timeslot=TimeSlot.objects.get(day="Fri", start_time=dtime(7)), term="1st Sem")
+        self.client.force_authenticate(self.dean)
+        r = self.client.post("/api/engine/gened-requests/options/", {"ids": [major.id]}, format="json")
+        self.assertEqual(r.status_code, 400)
+
+
+class SchedulePdfLayoutTests(Base):
+    """Portrait A4 PDF: "All year levels" = one year level per page (1st, 2nd, 3rd, 4th; empty ones skipped, no blank page), the school
+    header and a heading on every page, ONE signatory block below the last table on the last page. One year level = one page."""
+    TITLES = ["Data Structures and Algorithms", "Information Management and Database Systems", "Software Engineering 1",
+              "Networks and Communications Laboratory", "Principles of Programming Languages", "Human Computer Interaction",
+              "Discrete Structures 2", "Automata Theory and Formal Languages", "Operating Systems with Laboratory",
+              "Parallel and Distributed Computing"]
+
+    def make(self, years, per_year, lec_lab=False):
+        """A program with one section per year level and `per_year` 2-hour classes each, from 10:00 AM (so the Day & Time text is
+        the long "Wed 10:00AM-12:00PM" kind); with lec_lab, every second subject is the Lab of the one before (the small note)."""
+        prog = Program.objects.create(name="BS Computer Science PDF", department=DEPT)
+        starts = [(d, h) for d in ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat") for h in (10, 13, 15)]     # 18 two-hour periods
+        for yi, yl in enumerate(years):
+            for i in range(per_year):
+                si = i // len(starts)                     # more than 18 classes: the year level has more sections (A1, A2, ...)
+                sec = Section.objects.get_or_create(name=f"Y{yi + 1}-{si + 1}", program=prog, year_level=yl, semester="1st Sem",
+                                                    defaults={"student_count": 30})[0]
+                teacher = FacultyProfile.objects.filter(user__school_id=f"TPDF{yi}{si}").first() or make_teacher(f"PDF{yi}{si}")
+                room = Room.objects.create(name=f"PDF-{yi}-{i}", capacity=50, room_type="lecture")
+                code = (f"P{yi}{i // 2:02d}" + ("L" if i % 2 else "")) if lec_lab else f"P{yi}{i:02d}"
+                sub = Subject.objects.create(code=code, title=f"{self.TITLES[i % len(self.TITLES)]} {i + 1}", program=prog,
+                                             lec_units=2, lab_units=0, year_level=yl, semester="1st Sem", classification="major")
+                d, h = starts[i % len(starts)]
+                for hh in (h, h + 1):
+                    ts = TimeSlot.objects.get_or_create(day=d, start_time=dtime(hh), end_time=dtime(hh + 1))[0]
+                    Schedule.objects.create(subject=sub, section=sec, teacher=teacher, room=room, timeslot=ts, term="1st Sem",
+                                            school_year="2026-2027")
+        return prog
+
+    def pdf(self, prog, year_level=""):
+        import io
+        import os
+        import re
+        from pypdf import PdfReader
+        from engine.pdf_export import build_schedule_pdf
+        rows = list(Schedule.objects.filter(section__program=prog, **({"section__year_level": year_level} if year_level else {}))
+                    .select_related("subject", "teacher__user", "room", "section__program", "timeslot"))
+        buf = build_schedule_pdf(rows, f"{prog.name} Schedules", departments=[DEPT], year_level=year_level or None, semester="1st Sem")
+        data = buf.getvalue()
+        out = os.environ.get("PDF_OUT")
+        if out:
+            open(os.path.join(out, f"{self._testMethodName}.pdf"), "wb").write(data)
+        reader = PdfReader(io.BytesIO(data))
+        pages = [p.extract_text() or "" for p in reader.pages]
+        sig = [i + 1 for i, t in enumerate(pages) if "Prepared by" in t]
+        heads = [re.findall(r"BS Computer Science PDF - (\d\w\w Year)", t) for t in pages]
+        w, h = reader.pages[0].mediabox.width, reader.pages[0].mediabox.height
+        fonts = [(x["year_level"], x["rows"], x["font"]) for x in buf.fit_info["pages"]]
+        last = pages[sig[0] - 1] if sig else ""
+        sig_below_table = bool(sig) and 0 <= last.rfind("Day & Time") < last.find("Prepared by")
+        info = {"pages": len(pages), "sig": sig, "heads": heads, "a4_portrait": (round(float(w)), round(float(h))) == (595, 842),
+                "every_page_has_header": all("U-FAST Academic Scheduling" in t for t in pages), "fonts": fonts,
+                "overflow": buf.fit_info["overflow"], "sig_below_table": sig_below_table, "text": pages}
+        print(f"\nPDF {self._testMethodName}: {info['pages']} page(s); headings per page {heads}; signatory on page(s) {sig} "
+              f"(below the table: {sig_below_table}); A4 portrait {info['a4_portrait']}; school header on every page "
+              f"{info['every_page_has_header']}; (year, rows, font pt) {fonts}; could not fit: {info['overflow']}")
+        return info
+
+    def test_1_all_four_year_levels_one_page_each(self):
+        info = self.pdf(self.make(["1st Year", "2nd Year", "3rd Year", "4th Year"], 14, lec_lab=True))
+        self.assertEqual(info["pages"], 4)
+        self.assertEqual(info["heads"], [["1st Year"], ["2nd Year"], ["3rd Year"], ["4th Year"]])   # one table per page, in order
+        self.assertEqual(info["sig"], [4])                                       # ONE signatory, only on page 4 ...
+        self.assertTrue(info["sig_below_table"])                                 # ... below the 4th Year table
+        self.assertTrue(info["a4_portrait"])
+        self.assertTrue(info["every_page_has_header"])
+        self.assertEqual(info["overflow"], [])
+
+    def test_2_only_first_and_third_year(self):
+        info = self.pdf(self.make(["1st Year", "3rd Year"], 10))
+        self.assertEqual(info["pages"], 2)                                       # no empty page for 2nd / 4th year
+        self.assertEqual(info["heads"], [["1st Year"], ["3rd Year"]])
+        self.assertEqual(info["sig"], [2])
+
+    def test_3_one_year_level_few_classes(self):
+        info = self.pdf(self.make(["1st Year"], 4), "1st Year")
+        self.assertEqual(info["pages"], 1)                                       # no extra blank page
+        self.assertEqual(info["sig"], [1])
+        self.assertIn("Academic Year", info["text"][0])
+
+    def test_4_one_year_level_many_rows_still_one_page(self):
+        for n in (14, 24):                                     # 24 rows, all with a Lec / Lab note: the most that fits at 8 pt
+            Program.objects.filter(name="BS Computer Science PDF").delete()
+            info = self.pdf(self.make(["1st Year"], n, lec_lab=True), "1st Year")
+            self.assertEqual(info["pages"], 1, n)
+            self.assertEqual(info["sig"], [1])
+            self.assertGreaterEqual(info["fonts"][0][2], 8)                       # text never under 8 pt
+
+    def test_5_day_and_time_stays_on_one_line(self):
+        import re
+        info = self.pdf(self.make(["1st Year"], 6), "1st Year")
+        self.assertTrue(re.search(r"(Mon|Tue|Wed|Thu|Fri) 10:00AM-12:00PM", info["text"][0]), info["text"][0][:400])
+
+    def test_6_too_many_rows_for_one_page_is_reported_and_signatory_not_alone(self):
+        info = self.pdf(self.make(["1st Year"], 60), "1st Year")
+        self.assertEqual(info["overflow"][0]["rows"], 60)                        # reported (year level + row count)
+        self.assertEqual(info["sig"], [info["pages"]])
+        self.assertIn("Day & Time", info["text"][info["pages"] - 1])             # rows (with their header) on the signatory page
+
+
+class AssignAnywayTests(Base):
+    """The three Professor groups (engine.faculty_groups) and the Dean's manual Assign anyway (qualification_override). The engine
+    never picks an unqualified teacher by itself; every other hard rule still applies to a pinned person."""
+
+    def setUp(self):
+        from engine.models import SchedulingConfig
+        SchedulingConfig.objects.update_or_create(pk=1, defaults={"max_weekly_hours_full_time": 24, "workload_policy": "override"})
+        self.unq = make_teacher(90)                                     # Computer Studies, NOT connected (nursing degree)
+        FacultyProfile.objects.filter(pk=self.unq.pk).update(degree="BS Nursing")
+        self.unq.refresh_from_db()
+
+    # ---- helpers
+    def _slot(self, day="Mon", h=7):
+        return TimeSlot.objects.get(day=day, start_time=dtime(h))
+
+    def _only(self, *keep):
+        """Deactivate every qualified teacher except `keep`."""
+        for t in self.teachers:
+            if t not in keep:
+                User.objects.filter(pk=t.user_id).update(is_active=False)
+
+    def _load(self, t, hours, day="Fri"):
+        for k in range(hours):
+            Schedule.objects.create(subject=Subject.objects.get(code="TST105"), section=self.sec[1], teacher=t, room=self.rooms[3],
+                                    term="1st Sem", timeslot=self._slot(day, 7 + k))
+
+    def _limit(self, n):
+        from engine.models import SchedulingConfig
+        SchedulingConfig.objects.filter(pk=1).update(max_weekly_hours_full_time=n)
+
+    def _groups(self, subj="TST100", slots=None, blocks=(180,), need=3.0, exclude=(), partner=None):
+        from engine import faculty_groups as fg
+        sub = Subject.objects.get(code=subj)
+        return fg.build(self.dean, sub, self.sec[0], term="1st Sem", exact_slots=slots, blocks=list(blocks), need_hours=need,
+                        exclude_ids=list(exclude), partner_teacher_id=partner)
+
+    @staticmethod
+    def _ids(g, key):
+        return [o["id"] for o in g[key]]
+
+    def _no_duplicates(self, g):
+        ids = self._ids(g, "suggested") + self._ids(g, "qualified") + self._ids(g, "other") + [f["id"] for f in g["full_line"]]
+        self.assertEqual(len(ids), len(set(ids)), g)
+
+    # ---- the groups
+    def test_three_qualified_free_are_ranked_and_other_group_is_hidden(self):
+        t0, t1, t2 = self.teachers[:3]
+        self._only(t0, t1, t2)
+        self._load(t0, 2)                                                   # t0 carries more load: ranked last
+        g = self._groups()
+        self.assertEqual(self._ids(g, "suggested")[-1], t0.id)
+        self.assertEqual(set(self._ids(g, "suggested")), {t0.id, t1.id, t2.id})
+        self.assertEqual(g["suggested"][0]["tag"], "Lowest load")
+        self.assertFalse(g["other_shown"]); self.assertEqual(g["other"], [])
+        self.assertNotIn(self.unq.id, self._ids(g, "qualified"))           # not connected: never in Qualified
+        self._no_duplicates(g)
+
+    def test_lecture_teacher_is_first_for_the_lab(self):
+        lec = Subject.objects.create(code="PAIR1", title="Programming Pair", program=self.prog, lec_units=2, lab_units=0,
+                                     year_level="1st Year", semester="1st Sem", classification="major")
+        lab = Subject.objects.create(code="PAIR1L", title="Programming Pair Lab", program=self.prog, lec_units=0, lab_units=1,
+                                     year_level="1st Year", semester="1st Sem", classification="major")
+        t_lec, t_other = self.teachers[3], self.teachers[4]
+        Schedule.objects.create(subject=lec, section=self.sec[0], teacher=t_lec, room=self.rooms[0], term="1st Sem", timeslot=self._slot("Mon", 7))
+        lab_row = Schedule.objects.create(subject=lab, section=self.sec[0], teacher=t_other, room=self.rooms[1], term="1st Sem",
+                                          timeslot=self._slot("Tue", 9))
+        self.client.force_authenticate(self.dean)
+        r = self.client.get("/api/engine/teacher-options/", {"schedule_ids": str(lab_row.id)})
+        self.assertEqual(r.status_code, 200, r.data)
+        first = r.data["groups"]["suggested"][0]
+        self.assertEqual((first["id"], first["tag"]), (t_lec.id, "Same teacher as lecture"))
+        self.assertEqual(r.data["partner_code"], "PAIR1")                   # the Edit dialog notes the Lec / Lab rule
+
+    def test_dean_cannot_assign_themself_anyway(self):
+        cls = self._edit_case()
+        me = FacultyProfile.objects.get(user=self.dean)
+        r = self._patch(cls, me, override_qualification=True, override_reason="I will take it")
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(Schedule.objects.get(pk=cls.pk).teacher_id, self.teachers[0].id)
+
+    def test_qualified_but_busy_unavailable_or_full_are_muted_with_the_reason(self):
+        from faculty.models import Availability
+        t0, t1, t2, t3, t4 = self.teachers[:5]
+        self._limit(2)
+        cls = self.row(teacher=t0, h=7)                                     # the class being edited: Mon 7-8 (1 h)
+        Schedule.objects.filter(pk=cls.pk).update(term="1st Sem")
+        Schedule.objects.create(subject=Subject.objects.get(code="TST105"), section=self.sec[1], teacher=t1, room=self.rooms[2],
+                                term="1st Sem", timeslot=self._slot("Mon", 7))                       # t1 busy then
+        Availability.objects.create(faculty=t2, day="Monday", start_time=dtime(7), end_time=dtime(9), preference="unavailable")
+        self._load(t3, 2)                                                                            # t3 at 2/2 hrs
+        Availability.objects.create(faculty=t4, day="Tuesday", start_time=dtime(7), end_time=dtime(12), preference="available")
+        g = self._groups(slots=[self._slot("Mon", 7)], need=1.0, exclude=[cls.id])
+        muted = {o["id"]: o for o in g["qualified"] if not o["selectable"]}
+        self.assertEqual(muted[t1.id]["tag"], "Busy at this time (TST105)")
+        self.assertEqual(muted[t2.id]["tag"], "Marked unavailable")
+        self.assertEqual(muted[t3.id]["tag"], "Full: 2/2 hrs")
+        free = {o["id"]: o for o in g["suggested"] + g["qualified"] if o["selectable"]}
+        self.assertEqual(free[t4.id]["tag"], "Outside preferred time")       # outside their window: still selectable
+        self.assertFalse(g["other_shown"])
+        self._no_duplicates(g)
+
+    def test_only_qualified_is_full_so_other_group_is_shown(self):
+        from faculty.models import Availability
+        t0 = self.teachers[0]
+        self._only(t0)
+        self._limit(2)
+        self._load(t0, 2)
+        out_of_window = make_teacher(91); FacultyProfile.objects.filter(pk=out_of_window.pk).update(degree="BS Nursing")
+        Availability.objects.create(faculty=out_of_window, day="Tuesday", start_time=dtime(7), end_time=dtime(8), preference="available")
+        full = make_teacher(92); FacultyProfile.objects.filter(pk=full.pk).update(degree="BS Nursing")
+        self._load(full, 2, day="Thu")
+        other_dept = make_teacher(93); User.objects.filter(pk=other_dept.user_id).update(department="Nursing")
+        FacultyProfile.objects.filter(pk=other_dept.pk).update(degree="BS Nursing")
+        g = self._groups(slots=[self._slot("Mon", 7)], need=1.0)
+        self.assertEqual(g["suggested"], [])
+        self.assertTrue(g["other_shown"])
+        self.assertEqual(g["approval_text"], "Not connected to this subject. Dean approval required.")
+        dean_profile = FacultyProfile.objects.get(user=self.dean).id
+        self.assertEqual(self._ids(g, "other"), [self.unq.id])               # free, own department, not connected
+        self.assertNotIn(dean_profile, self._ids(g, "other"))                 # never the Dean themself
+        self.assertNotIn(out_of_window.id, self._ids(g, "other"))            # outside their submitted window: not listed
+        self.assertEqual([f["id"] for f in g["full_line"]], [full.id])         # full: only the muted "Full:" line
+        self.assertIn("Full: ", g["full_text"])
+        self.assertNotIn(other_dept.id, self._ids(g, "other") + [f["id"] for f in g["full_line"]])   # never another department
+        self.assertEqual([o["tag"] for o in g["qualified"]], ["Full: 2/2 hrs"])
+        self._no_duplicates(g)
+
+    def test_load_numbers_equal_the_workload_page(self):
+        from engine.workload import workload_rows
+        t0 = self.teachers[0]
+        self._load(t0, 3)
+        g = self._groups()
+        shown = next(o for o in g["suggested"] + g["qualified"] if o["id"] == t0.id)
+        page = next(r for r in workload_rows([t0], term="1st Sem") if r["faculty_id"] == t0.id)
+        self.assertEqual(shown["current_hours"], page["current_hours"])
+        self.assertEqual(shown["current_hours"], 3.0)
+        self.assertEqual(shown["load_text"], "3/24 hrs")
+        self.client.force_authenticate(self.dean)                            # the Generate dialog list: the same number
+        r = self.client.get("/api/engine/generate/professor-options/", {"program_id": self.prog.id, "year_level": "1st Year", "semester": "1st Sem"})
+        self.assertEqual(r.data["teachers"][t0.id]["current_hours"], 3.0)
+
+    # ---- Edit dialog: Assign anyway, server re-checks
+    def _edit_case(self):
+        """TST100 for section A at Mon 7, taught by t0, while no other qualified teacher is active and t0 is at the limit."""
+        t0 = self.teachers[0]
+        self._only(t0)
+        cls = self.row(teacher=t0, h=7)
+        Schedule.objects.filter(pk=cls.pk).update(term="1st Sem")
+        self._limit(3)
+        self._load(t0, 3, day="Thu")                                          # t0 would be over the limit with another class
+        return cls
+
+    def _patch(self, cls, teacher, user=None, **extra):
+        self.client.force_authenticate(user or self.dean)
+        return self.client.patch(f"/api/engine/schedules/{cls.id}/", {"teacher": teacher.id, **extra}, format="json")
+
+    def test_unqualified_without_the_flag_is_rejected_as_before(self):
+        cls = self._edit_case()
+        r = self._patch(cls, self.unq)
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("not qualified", r.data["detail"])
+
+    def test_override_without_a_reason_is_rejected(self):
+        cls = self._edit_case()
+        r = self._patch(cls, self.unq, override_qualification=True, override_reason=" ")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("reason", r.data["detail"])
+
+    def test_other_department_faculty_is_rejected_through_the_api(self):
+        cls = self._edit_case()
+        other = make_teacher(94); User.objects.filter(pk=other.user_id).update(department="Nursing")
+        FacultyProfile.objects.filter(pk=other.pk).update(degree="BS Nursing")
+        r = self._patch(cls, other, override_qualification=True, override_reason="no qualified faculty free")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("Computer Studies", r.data["detail"])
+        self.assertEqual(Schedule.objects.get(pk=cls.pk).teacher_id, self.teachers[0].id)
+
+    def test_override_is_refused_while_a_qualified_teacher_is_free(self):
+        t0 = self.teachers[0]
+        cls = self.row(teacher=t0, h=7)
+        Schedule.objects.filter(pk=cls.pk).update(term="1st Sem")
+        r = self._patch(cls, self.unq, override_qualification=True, override_reason="prefer this person")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("Choose from Suggested", r.data["detail"])
+
+    def test_override_saves_the_flag_and_audit_and_survives_generate(self):
+        from engine.models import Log
+        cls = self._edit_case()
+        r = self._patch(cls, self.unq, override_qualification=True, override_reason="no qualified faculty free")
+        self.assertEqual(r.status_code, 200, r.data)
+        row = Schedule.objects.get(pk=cls.pk)
+        self.assertEqual(row.teacher_id, self.unq.id)
+        self.assertEqual(row.qualification_override["reason"], "no qualified faculty free")
+        self.assertEqual(row.qualification_override["by_id"], self.dean.id)
+        self.assertTrue(row.is_manual_override)
+        self.assertTrue(Log.objects.filter(schedule_id=row.id, details__startswith="ASSIGN ANYWAY").exists())
+        # the Edit dialog shows the badge
+        self.client.force_authenticate(self.dean)
+        opts = self.client.get("/api/engine/teacher-options/", {"schedule_ids": str(row.id)}).data
+        self.assertEqual(opts["override_badge"], "Assigned by Dean (not connected)")
+        # a later Generate (also with keep_edited=false) keeps it exactly as it is
+        for extra in ({}, {"keep_edited": False}):
+            g = self.gen(**extra)
+            self.assertIn(g.status_code, (200, 201), g.data)
+            again = Schedule.objects.get(pk=cls.pk)
+            self.assertEqual((again.teacher_id, again.timeslot_id, again.qualification_override["reason"]),
+                             (self.unq.id, row.timeslot_id, "no qualified faculty free"))
+        # changing back to a qualified teacher clears the flag; remove_override returns the class to not placed
+        self.assertEqual(self.client.post("/api/engine/schedules/remove_override/", {"ids": [row.id]}, format="json").status_code, 200)
+        self.assertFalse(Schedule.objects.filter(section=self.sec[0], subject__code="TST100").exists())
+
+    # ---- Generate dialog: the pinned person (engine hook)
+    def test_engine_never_assigns_an_unqualified_teacher_by_itself(self):
+        self._only()                                                          # no qualified teacher active
+        r = self.gen()
+        self.assertIn(r.status_code, (200, 201), r.data)
+        self.assertFalse(Schedule.objects.filter(teacher=self.unq).exists())
+
+    def test_generate_with_an_assign_anyway_pin(self):
+        self._only()
+        sub = Subject.objects.get(code="TST100")
+        pin = {str(sub.id): {"teacher": self.unq.id, "override_qualification": True, "reason": "no qualified faculty free"}}
+        r = self.gen(teacher_choices={str(sub.id): self.unq.id})                # without the flag: refused as before
+        self.assertEqual(r.status_code, 400)
+        r = self.gen(teacher_choices={str(sub.id): {"teacher": self.unq.id, "override_qualification": True, "reason": ""}})
+        self.assertEqual(r.status_code, 400)                                    # without a reason: refused
+        r = self.gen(teacher_choices=pin)
+        self.assertIn(r.status_code, (200, 201), r.data)
+        rows = Schedule.objects.filter(subject=sub)
+        self.assertTrue(rows.exists())
+        self.assertTrue(all(x.teacher_id == self.unq.id and x.qualification_override and x.is_manual_override for x in rows))
+        # only the pinned subject: the engine gave nothing else to the not-connected person
+        self.assertFalse(Schedule.objects.filter(teacher=self.unq).exclude(subject=sub).exists())
+
+    def test_generate_pin_respects_the_persons_availability_window(self):
+        from faculty.models import Availability
+        self._only()
+        Availability.objects.create(faculty=self.unq, day="Wednesday", start_time=dtime(8), end_time=dtime(20), preference="available")
+        sub = Subject.objects.get(code="TST100")
+        r = self.gen(teacher_choices={str(sub.id): {"teacher": self.unq.id, "override_qualification": True, "reason": "no one else"}})
+        self.assertIn(r.status_code, (200, 201), r.data)
+        for x in Schedule.objects.filter(subject=sub).select_related("timeslot"):
+            self.assertEqual(x.timeslot.day, "Wed")
+            self.assertTrue(dtime(8) <= x.timeslot.start_time and x.timeslot.end_time <= dtime(20))
+
+    # ---- "not placed" pop-up: the chosen person's free times, then apply
+    def test_not_placed_popup_places_with_an_assign_anyway_person(self):
+        self._only()
+        sub = Subject.objects.get(code="TST100")
+        self.client.force_authenticate(self.dean)
+        body = {"section_id": self.sec[0].id, "subject_id": sub.id, "teacher_id": self.unq.id}
+        self.assertEqual(self.client.post("/api/engine/slot-options/", body, format="json").status_code, 422)   # no flag
+        body.update(override_qualification=True, override_reason="no qualified faculty free")
+        r = self.client.post("/api/engine/slot-options/", body, format="json")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertTrue(r.data["options"])
+        key = r.data["options"][0]["key"]
+        r = self.client.post("/api/engine/slot-options/apply/", {**body, "key": key}, format="json")
+        self.assertEqual(r.status_code, 200, r.data)
+        rows = Schedule.objects.filter(subject=sub, section=self.sec[0])
+        self.assertTrue(rows.exists() and all(x.qualification_override for x in rows))
+
+    def test_not_placed_popup_lists_the_three_groups_read_only(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        self._only()
+        sub = Subject.objects.get(code="TST100")
+        self.client.force_authenticate(self.dean)
+        with CaptureQueriesContext(connection) as ctx:
+            r = self.client.post("/api/engine/unplaced/faculty-groups/", {"section_id": self.sec[0].id, "subject_id": sub.id}, format="json")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data["suggested"], [])
+        self.assertIn(self.unq.id, [o["id"] for o in r.data["other"]])
+        self.assertFalse([q for q in ctx.captured_queries if q["sql"].split()[0].upper() in ("INSERT", "UPDATE", "DELETE")])
+        self.client.force_authenticate(self.registrar)                         # a major subject: not the Registrar's
+        r = self.client.post("/api/engine/unplaced/faculty-groups/", {"section_id": self.sec[0].id, "subject_id": sub.id}, format="json")
+        self.assertEqual(r.status_code, 403)
+
+    def test_edit_that_changes_several_periods_at_once(self):
+        """The Edit dialog saves a multi-period class with one PATCH per period (in parallel): every period gets the person and the flag."""
+        t0 = self.teachers[0]
+        self._only(t0)
+        self._limit(5)
+        self._load(t0, 4, day="Thu")
+        rows = [self.row(teacher=t0, h=h) for h in (7, 8)]                   # TST100 for section A, Mon 7-9 (two periods)
+        Schedule.objects.filter(pk__in=[r.pk for r in rows]).update(term="1st Sem")
+        for r in rows:
+            res = self._patch(r, self.unq, override_qualification=True, override_reason="no qualified faculty free")
+            self.assertEqual(res.status_code, 200, res.data)
+        got = list(Schedule.objects.filter(pk__in=[r.pk for r in rows]))
+        self.assertTrue(all(x.teacher_id == self.unq.id and x.qualification_override for x in got))
+
+
+class TeacherNameIsShownNotTheIdTests(Base):
+    def test_schedule_and_exam_lists_show_the_name(self):
+        t = self.teachers[0]
+        self.row(teacher=t, h=7)
+        self.client.force_authenticate(self.dean)
+        rows = self.client.get("/api/engine/schedules/").data
+        rows = rows.get("results", rows) if isinstance(rows, dict) else rows
+        mine = [r for r in rows if r["teacher"] == t.id]
+        self.assertTrue(mine)
+        self.assertEqual(mine[0]["teacher_name"], "Teach Er1")
+        self.assertNotIn(t.user.username, mine[0]["teacher_name"])

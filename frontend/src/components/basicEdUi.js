@@ -1,12 +1,13 @@
 import React from "react";
 import API from "../services/api";
+import { formatTime } from "../utils/formatDateTime";
 
 /* Small shared bits for the SHS / JHS dashboards. */
 export const DAYS = [["Mon", "Monday"], ["Tue", "Tuesday"], ["Wed", "Wednesday"], ["Thu", "Thursday"], ["Fri", "Friday"]];
-export const inputStyle = { padding: "9px 12px", borderRadius: "8px", border: "1px solid #cdd6e0", fontSize: "13px", background: "white", boxSizing: "border-box" };
-export const cardStyle = { background: "white", border: "1px solid #e0e6ed", borderRadius: "12px", padding: "18px 20px", boxShadow: "0 1px 4px rgba(0,0,0,0.05)", marginBottom: "18px" };
-export const labelStyle = { display: "block", fontSize: "11.5px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.3px", marginBottom: "5px" };
-export const btn = { padding: "8px 14px", borderRadius: "8px", border: "1px solid #cdd6e0", background: "white", color: "#1f2937", cursor: "pointer", fontSize: "13px" };
+export const inputStyle = { padding: "9px 12px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: "13px", background: "white", boxSizing: "border-box" };
+export const cardStyle = { background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "18px 20px", boxShadow: "none", marginBottom: "18px" };
+export const labelStyle = { display: "block", fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "5px" };
+export const btn = { padding: "8px 14px", borderRadius: 6, border: "1px solid #d1d5db", background: "white", color: "#111827", cursor: "pointer", fontSize: "13px" };
 export const btnPrimary = { ...btn, background: "#003366", color: "white", border: "1px solid #003366" };
 
 /** Every call carries the school level (a principal's own level is enforced by the server anyway). */
@@ -29,9 +30,7 @@ export function errText(err, fallback = "Something went wrong.") {
 
 export function hhmm(t) { return (t || "").slice(0, 5); }
 export function ampm(t) {
-  if (!t) return "";
-  const [h, m] = t.split(":").map(Number);
-  return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
+  return formatTime(t);          // follows My settings (12- or 24-hour)
 }
 
 export function Field({ label, children, style }) {
@@ -41,7 +40,7 @@ export function Field({ label, children, style }) {
 export function Modal({ title, onClose, children, width = 560 }) {
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: "white", borderRadius: "14px", padding: "22px 24px", width: "100%", maxWidth: width, maxHeight: "90vh", overflowY: "auto" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "white", borderRadius: 6, padding: "22px 24px", width: "100%", maxWidth: width, maxHeight: "90vh", overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
           <h3 style={{ margin: 0, color: "#003366" }}>{title}</h3>
           <button onClick={onClose} style={{ ...btn, padding: "4px 10px" }}>Close</button>
@@ -54,7 +53,7 @@ export function Modal({ title, onClose, children, width = 560 }) {
 
 export function Notice({ tone = "info", children }) {
   const c = { info: ["#eff6ff", "#1e3a8a"], warn: ["#fffbeb", "#92400e"], error: ["#fef2f2", "#991b1b"], ok: ["#f0fdf4", "#166534"] }[tone];
-  return <div style={{ background: c[0], color: c[1], borderRadius: "8px", padding: "10px 14px", fontSize: "13px", marginBottom: "12px" }}>{children}</div>;
+  return <div style={{ background: c[0], color: c[1], borderRadius: 6, padding: "10px 14px", fontSize: "13px", marginBottom: "12px" }}>{children}</div>;
 }
 
 export const STATUS_LABEL = { draft: "Draft", submitted: "Awaiting principal", revision_requested: "Revision requested", approved: "Approved", published: "Published", superseded: "Superseded" };

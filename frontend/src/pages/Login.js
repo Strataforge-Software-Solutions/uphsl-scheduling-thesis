@@ -21,14 +21,13 @@ function Login({ onLoginSuccess }) {
         // wrong host/IP, backend not running, or blocked by CORS. This is very
         // different from a wrong password, so don't show the same message.
         setError(
-          "Could not reach the server at all. If you're on a different device than the one "
-          + "running the backend, or opened this via a network IP instead of localhost, that's "
-          + "likely why -- check the browser console (F12) for the exact error."
+          "Cannot reach the server. Check that the backend is running and that this page is opened from the "
+          + "same address as the server (details in the browser console, F12)."
         );
       } else if (err.response.status === 401 || err.response.status === 400) {
         setError("Invalid ID or password.");
       } else {
-        setError(`Login failed (server responded ${err.response.status}). Check backend logs.`);
+        setError(`Sign-in failed (server error ${err.response.status}). Check the server log.`);
       }
     }
   };
@@ -36,37 +35,42 @@ function Login({ onLoginSuccess }) {
   return (
     <div className="login-container">
       <div className="login-header">
-        <img src={logo} alt="UPHSL U-FAST logo" className="login-logo" />
+        <img src={logo} alt="UPHSL logo" className="login-logo" />
         <h2>U-FAST</h2>
+        <p className="login-subtitle">University - Faculty Academic Scheduling Tool</p>
       </div>
 
       <form className="login-form" onSubmit={handleLogin}>
-        <p style={{ fontSize: "11px", color: "#0055aa", fontWeight: 600, marginTop: "-6px", marginBottom: "14px", lineHeight: "1.4" }}>
-          University - Faculty Academic Scheduling Tool
-        </p>
-        <input
-          type="text"
-          placeholder="Login ID or School ID (e.g., UPHM-12345)"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          required
-        />
-        <PasswordInput
-          placeholder="Password"
-          autoComplete="current-password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
-        {error && <p style={{ color: "red" }}>{error}</p>}
-        <button type="submit">Login</button>
-        <p style={{ fontSize: "12px", marginTop: "12px", color: "#555" }}>
-          Forgot your password? Ask the IT Admin to reset it back to your school ID.
-        </p>
+        <h3>Sign in</h3>
+        <div className="login-field">
+          <label htmlFor="login-id">Login ID or School ID</label>
+          <input
+            id="login-id"
+            type="text"
+            placeholder="e.g. UPHM-12345"
+            autoComplete="username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            required
+          />
+        </div>
+        <div className="login-field">
+          <label htmlFor="login-password">Password</label>
+          <PasswordInput
+            id="login-password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+        </div>
+        {error && <p className="login-error" role="alert">{error}</p>}
+        <button type="submit">Sign in</button>
+        <p className="login-help">Forgot your password? Ask the IT Admin to reset it to your school ID.</p>
       </form>
 
       <footer className="login-footer">
-        © 2026 U-FAST — University - Faculty Academic Scheduling Tool
+        © 2026 UPHSL Manila · U-FAST
       </footer>
     </div>
   );

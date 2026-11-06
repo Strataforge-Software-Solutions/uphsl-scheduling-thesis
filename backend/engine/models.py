@@ -67,8 +67,58 @@ class TimeSlot(models.Model):
         return f"{self.day} {self.start_time}-{self.end_time}"
 
 
+def _schedule_text(r):
+    """'CS101 CS1 Mon 07:00-08:00 N-101 Juan Cruz' for the audit log (never raises)."""
+    try:
+        t = r.timeslot
+        who = r.teacher.user.get_full_name().strip() or r.teacher.user.username
+        return f"{r.subject.code} {r.section.name} {t.day} {t.start_time:%H:%M}-{t.end_time:%H:%M} {r.room.name} {who}"
+    except Exception:
+        return f"class period #{r.pk}"
+
+
+_REL = ("subject", "section", "timeslot", "room", "teacher__user")
+
+
+class ScheduleQuerySet(models.QuerySet):
+    """Bulk changes of class periods (Approve / Publish, Remove, Generate, Move ...) are recorded in the audit log as ONE entry each
+    (or added to the open Generate entry). The per-record signals are switched off meanwhile, so nothing is logged twice."""
+
+    def update(self, **kwargs):
+        from audit import recorder
+        rows = list(self.select_related(*_REL)) if not recorder.is_suppressed() else []
+        n = super().update(**kwargs)
+        if rows:
+            fields = sorted(kwargs)
+            new = {k: recorder.jsonable(getattr(v, "pk", v)) for k, v in kwargs.items()}
+            old_rows = [{"record": _schedule_text(r), **{k: recorder.jsonable(getattr(r, k + "_id", getattr(r, k, None))) for k in fields}}
+                        for r in rows]
+            recorder.record_rows("update", "schedule", [r.pk for r in rows], [x["record"] for x in old_rows],
+                                 old={"rows": old_rows[:recorder.MAX_ITEMS]}, new=new)
+        return n
+
+    def delete(self):
+        from audit import recorder
+        if recorder.is_suppressed():
+            return super().delete()
+        rows = list(self.select_related(*_REL))
+        with recorder.suppressed():
+            res = super().delete()
+        if rows:
+            recorder.record_rows("delete", "schedule", [r.pk for r in rows], [_schedule_text(r) for r in rows])
+        return res
+
+    def bulk_create(self, objs, *args, **kwargs):
+        from audit import recorder
+        made = super().bulk_create(objs, *args, **kwargs)
+        if made and not recorder.is_suppressed():
+            recorder.record_rows("create", "schedule", [m.pk for m in made], [_schedule_text(m) for m in made])
+        return made
+
+
 class Schedule(models.Model):
     """One CSP 'variable' assignment: subject taught by teacher, in room, at timeslot, for section."""
+    objects = ScheduleQuerySet.as_manager()
 
     # --- Approval workflow (from Dean Villanueva's interview: she drafts the class
     # program, the School Director approves it, only then is it encoded/live). We
@@ -103,6 +153,9 @@ class Schedule(models.Model):
     # is_manual_override: True if a Dean/Registrar edited this after the CSP
     # engine generated it -- a negative signal for whatever the engine picked.
     is_manual_override = models.BooleanField(default=False)
+    # "Assign anyway": a Dean placed a teacher who is NOT connected to the subject (no matching specialization / degree), by hand,
+    # with a reason. Null for every normal class. {"reason", "by_id", "by_name", "role", "at"}. The engine never sets this itself.
+    qualification_override = models.JSONField(null=True, blank=True)
     school_year = models.CharField(max_length=20, blank=True)  # e.g. "2026-2027"
     # Copy of section.semester. 1st Sem and 2nd Sem never meet at the same time, so a room or teacher
     # may be used at the same hour in both -- the double-booking rules below are per semester.
@@ -277,3 +330,28 @@ class SharedClassExclusive(models.Model):
 
     class Meta:
         unique_together = ("program", "code", "year_level", "semester")
+
+
+class GenEdMoveRequest(models.Model):
+    """A Dean asks the Registrar to move a Gen Ed (minor) class of their own program to another day / time, e.g. to free a time for a
+    major subject. The Dean picks the new time from the Registrar's own clash-free list (engine.reschedule.suggest). Nothing moves until
+    the Registrar approves; approval re-checks every schedule at that moment and moves ONLY that Gen Ed class (its whole shared group),
+    never another Dean's or Gen Ed class (engine.gened_requests)."""
+    STATUS_CHOICES = [("pending", "Pending"), ("approved", "Approved"), ("rejected", "Rejected"), ("cancelled", "Cancelled"),
+                      ("failed", "Could not be applied")]
+    schedule_ids = models.JSONField(default=list)            # the rows of the class when the request was made (one section)
+    subject = models.ForeignKey("curriculum.Subject", null=True, on_delete=models.SET_NULL, related_name="+")
+    section = models.ForeignKey(Section, null=True, on_delete=models.SET_NULL, related_name="+")
+    current_label = models.CharField(max_length=200, blank=True, default="")
+    option_key = models.CharField(max_length=200)            # the chosen time (teacher:room:slot ids) from the clash-free list
+    target_label = models.CharField(max_length=200, blank=True, default="")
+    reason = models.TextField(blank=True, default="")
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="pending")
+    requested_by = models.ForeignKey("accounts.User", null=True, on_delete=models.SET_NULL, related_name="gened_move_requests")
+    decided_by = models.ForeignKey("accounts.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    decision_note = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    decided_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]

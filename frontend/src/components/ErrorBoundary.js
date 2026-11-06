@@ -22,14 +22,14 @@ export default class ErrorBoundary extends React.Component {
     if (!error) return this.props.children;
     const text = `Something went wrong while showing ${this.props.what || "this part of the page"}. The rest of the page still works; `
       + "please reload, and report it if it happens again.";
-    const msg = <span style={{ color: "#a4231a", fontSize: 12.5 }}>⚠ {text} <span style={{ color: "#64748b" }}>({String(error.message || error)})</span></span>;
+    const msg = <span style={{ color: "#b91c1c", fontSize: 12.5 }}>{text} <span style={{ color: "#6b7280" }}>({String(error.message || error)})</span></span>;
     if (this.props.row) return <tr><td colSpan={this.props.colSpan || 1} style={{ background: "#fef2f2" }}>{msg}</td></tr>;
     return (
-      <div role="alert" style={{ border: "1px solid #fecaca", background: "#fef2f2", borderRadius: 8, padding: "10px 12px", margin: "8px 0" }}>
+      <div role="alert" style={{ border: "1px solid #fecaca", background: "#fef2f2", borderRadius: 6, padding: "10px 12px", margin: "8px 0" }}>
         {msg}
         <div style={{ marginTop: 8 }}>
           <button type="button" onClick={() => this.setState({ error: null })}
-            style={{ background: "#003366", color: "white", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 12.5, cursor: "pointer" }}>Try again</button>
+            style={{ background: "#003366", color: "white", border: "none", borderRadius: 4, padding: "6px 12px", fontSize: 13, cursor: "pointer" }}>Try again</button>
         </div>
       </div>
     );

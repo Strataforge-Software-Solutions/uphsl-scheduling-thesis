@@ -230,12 +230,16 @@ def suggest_replacements(subject, term, slots, exclude_teacher_ids=(), limit=5, 
         from .teacher_scope import in_department, teacher_allowed, allowed_departments
         profiles = [p for p in profiles if in_department(p, subject, section, user)]    # other departments: never considered
         for p in profiles:
-            # the department rule is ADDED to the matching used here before (never widened): both must agree
-            pts, reasons = _qualification_match(subject, p)
-            if teacher_allowed(user, p, subject, section) or pts == 0:
-                rejected.append({"faculty_id": p.id, "full_name": _name(p), "reason": f"not qualified for {subject.code}"})
+            # the ONE qualification rule of the system (engine.qualification via teacher_scope, as generation and Edit -> Save):
+            # the department's faculty with the subject's specialization or a degree in the same discipline. The word match below
+            # only RANKS them (it used to be required too, which wrongly refused e.g. a BSIT teacher for "Social Issues and
+            # Professional Practice" although generation accepts them)
+            if teacher_allowed(user, p, subject, section):
+                rejected.append({"faculty_id": p.id, "full_name": _name(p),
+                                 "reason": f"not qualified for {subject.code} (no matching specialization or same-discipline degree)"})
                 continue
-            scored[p.id] = (pts, reasons)
+            pts, reasons = _qualification_match(subject, p)
+            scored[p.id] = (max(pts, 1), reasons or ["Qualified (specialization / same-discipline degree)"])
     else:
         # Gen Ed: the College of Arts and Science rule (engine.qualification, the same as generation and Edit -> Save); the word
         # match below only ranks the qualified ones

@@ -2,6 +2,8 @@ import HowToUse from "./HowToUse";
 import { reportLoadError } from "../services/loadError";
 import { RegistrarHome } from "./HomeWrappers";
 import React, { useState, useEffect } from "react";
+import { onJump } from "../services/jump";
+import { useLandingTab } from "../services/preferences";
 import API, { getCurrentUser, logout } from "../services/api";
 import { formatSchedule } from "../utils/formatSchedule";
 import { LecLabTag, buildLecLabIndex } from "../utils/lecLab";
@@ -14,6 +16,8 @@ import { StatTile, HBarChart, RecentActivity } from "./Charts";
 import { kindLabel } from "../utils/labels";
 import ScheduleEditModal from "./ScheduleEditModal";
 import ScheduleProblemsModal from "./ScheduleProblemsModal";
+import PrintPreviewButton, { printYears } from "./PrintPreviewButton";
+import { GenEdRequestsPanel } from "./GenEdRequests";
 import { useScheduleActions, SelectionBar, RowActions, btnStyle } from "./ScheduleActions";
 import { GenEdCoverageCard, RoomHeatmapCard, DependenciesCard, CapacityCard, InsightFilters } from "./InsightCards";
 import ClashDialog from "./ClashDialog";
@@ -24,22 +28,23 @@ import ConflictChecker from "./ConflictChecker";
 import MinorSchedulesPanel from "./MinorSchedulesPanel";
 import WorkloadPanel from "./WorkloadPanel";
 import "./DashboardTheme.css";
+import { OverrideBadge } from "./AssignAnywayDialog";
 
 // Same sections in the Dean, Registrar and Admin workspaces: Plan / Academics / People / Insights.
 const NAV_ITEMS = [
-  { key: "home", label: "Home", icon: "🏠" },
+  { key: "home", label: "Home", icon: "" },
   { group: "Plan" },
-  { key: "generate", label: "Generate Schedule", icon: "✨" },
-  { key: "minors", label: "Minor Schedules", icon: "🧩" },
-  { key: "schedules", label: "Schedules", icon: "🗓" },
-  { key: "exams", label: "Exam Schedule", icon: "📝" },
-  { key: "conflicts", label: "Conflicts", icon: "⚠️" },
+  { key: "generate", label: "Generate Schedule", icon: "" },
+  { key: "minors", label: "Minor Schedules", icon: "" },
+  { key: "schedules", label: "Schedules", icon: "" },
+  { key: "exams", label: "Exam Schedule", icon: "" },
+  { key: "conflicts", label: "Conflicts", icon: "" },
   { group: "Academics" },
-  { key: "curriculum", label: "Curriculum", icon: "📖" },
+  { key: "curriculum", label: "Curriculum", icon: "" },
   { group: "People" },
-  { key: "coverage", label: "Faculty Coverage", icon: "🙋" },
+  { key: "coverage", label: "Faculty Coverage", icon: "" },
   { group: "Insights" },
-  { key: "analytics", label: "Analytics", icon: "📊" },
+  { key: "analytics", label: "Analytics", icon: "" },
 ];
 
 const TAB_HEADERS = {
@@ -57,7 +62,9 @@ const TAB_HEADERS = {
 const STANDARD_YEARS = ["1st Year", "2nd Year", "3rd Year", "4th Year", "5th Year"];
 
 function RegistrarDashboard() {
-  const [activeTab, setActiveTab] = useState("home");
+  const landing = useLandingTab(NAV_ITEMS, "home");
+  const [activeTab, setActiveTab] = useState(landing);
+  useEffect(() => onJump((t) => { if (t === "gened-requests") setActiveTab("schedules"); }), []);
   const [colleges, setColleges] = useState([]);
   const [programs, setPrograms] = useState([]);
   const [college, setCollege] = useState("");
@@ -291,6 +298,9 @@ function SchedulesTab() {
           day: form.day, override_workload: override,
           items: [{ ids: group.ids, start_time: cut(form.start_time), end_time: cut(form.end_time), room: form.room, teacher: form.teacher }],
         });
+      } else if ((group.merged_with || []).length > 0) {
+        // a SHARED class: one change for every attending section together (the server checks all of them, then saves all or nothing)
+        await API.post("/engine/shared-classes/edit/", { ids: group.ids, teacher: form.teacher, room: form.room, override_workload: override });
       } else {
         const extra = override ? { override_workload: true } : {};
         await Promise.all(group.ids.map((id) => API.patch(`/engine/schedules/${id}/`, { room: form.room, teacher: form.teacher, ...extra })));
@@ -333,7 +343,7 @@ function SchedulesTab() {
   if (error) return <p style={{ color: "red" }}>{error}</p>;
 
   const filterInputStyle = {
-    padding: "9px 12px", borderRadius: "8px", border: "1px solid #cdd6e0", fontSize: "13px", background: "white",
+    padding: "9px 12px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: "13px", background: "white",
   };
 
   return (
@@ -341,20 +351,26 @@ function SchedulesTab() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
         <div>
           <h3 style={{ marginBottom: "2px" }}>Class schedule</h3>
-          <p style={{ fontSize: "12.5px", color: "#64748b", margin: 0 }}>
+          <p style={{ fontSize: "13px", color: "#6b7280", margin: 0 }}>
             {filtered.length} entries shown
             {collegeFilter && ` · ${collegeFilter}`}{programFilter && ` · ${(programOptions.find(([id]) => String(id) === String(programFilter)) || [])[1] || ""}`}{yearLevel && ` · ${yearLevel}`}{semester && ` · ${semester}`}
             {draftCount > 0 && ` · ${draftCount} Draft`}{approvedCount > 0 && ` · ${approvedCount} Approved`}
           </p>
         </div>
-        <p style={{ fontSize: "12.5px", color: "#475569", margin: 0, maxWidth: 360, textAlign: "right" }}>
-          Tick the Gen Ed classes to approve, publish or remove (the top box selects every one shown by this filter).
-        </p>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+          {/* the PDF follows the filters below (college, program, year level, semester, status, Gen Ed / program subjects) */}
+          <PrintPreviewButton disabled={grouped.length === 0} onFixed={load} yearChoices={printYears(schedules)} defaultYear={yearLevel}
+            params={{ department: collegeFilter, program_id: programFilter, semester, status: statusFilter, classification: typeFilter }} />
+          <p style={{ fontSize: "13px", color: "#4b5563", margin: 0, maxWidth: 360, textAlign: "right" }}>
+            Tick the Gen Ed classes to approve, publish or remove (the top box selects every one shown by this filter).
+          </p>
+        </div>
       </div>
+      <GenEdRequestsPanel role="registrar" onChanged={load} />
 
       <div style={{
         display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "center",
-        background: "white", border: "1px solid #e0e6ed", borderRadius: "10px", padding: "12px 14px", marginBottom: "16px",
+        background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "12px 14px", marginBottom: "16px",
       }}>
         <input
           placeholder="Search subjects, teachers, sections"
@@ -389,7 +405,7 @@ function SchedulesTab() {
           <option value="minor">Gen Ed only</option>
           <option value="major">Program subjects only</option>
         </select>
-        <button onClick={resetFilters} style={{ ...filterInputStyle, color: "#1f2937" }}>Reset</button>
+        <button onClick={resetFilters} style={{ ...filterInputStyle, color: "#111827" }}>Reset</button>
       </div>
 
       <table className="sched-compact">
@@ -410,11 +426,11 @@ function SchedulesTab() {
               <td><Badge tone={g.subject_classification === "major" ? "success" : "neutral"}>{kindLabel(g.subject_classification, g.program_name)}</Badge></td>
               <td>
                 {g.section_name}
-                <div style={{ fontSize: "11px", color: "#64748b" }}>{g.program_name}</div>
+                <div style={{ fontSize: "12px", color: "#6b7280" }}>{g.program_name}</div>
                 {g.merged_with && g.merged_with.length > 0 && (
-                  <div style={{ fontSize: "11px", color: "#7a4b00", marginTop: "3px" }}
+                  <div style={{ fontSize: "12px", color: "#7a4b00", marginTop: "3px" }}
                        title="Shared class: these sections attend the same class (same teacher, room and time).">
-                    🤝 Shared with {g.merged_with.join(", ")} · {g.merged_students} students
+                    Shared with {g.merged_with.join(", ")} · {g.merged_students} students
                   </div>
                 )}
               </td>
@@ -422,11 +438,12 @@ function SchedulesTab() {
               <td>{g.teacher_name}</td>
               <td>{formatSchedule(g.timeslot_day, g.start, g.end)}</td>
               <td>
-                {g.is_manual_override ? <span title="Edited by hand: Generate keeps it where it is (locked)"><Badge tone="warning">🔒 Edited</Badge></span> : <Badge tone="success">Generated</Badge>}{" "}
+                {g.qualification_override && <><OverrideBadge reason={g.qualification_override.reason} />{" "}</>}
+                {g.is_manual_override ? <span title="Edited by hand: Generate keeps it where it is (locked)"><Badge tone="warning">Edited</Badge></span> : <Badge tone="success">Generated</Badge>}{" "}
                 <StatusPill status={g.status} />
               </td>
               <td>
-                {!isMine(g) ? <span style={{ fontSize: "12px", color: "#94a3b8" }} title="Program subjects are edited by the Dean">View only</span> : (
+                {!isMine(g) ? <span style={{ fontSize: "12px", color: "#6b7280" }} title="Program subjects are edited by the Dean">View only</span> : (
                 <RowActions group={g} actions={actions} onEdit={startEdit} selecting={selectedGroups.length > 0} />
                 )}
               </td>
@@ -443,8 +460,8 @@ function SchedulesTab() {
         onClear={() => setSelected([])} />
       {actions.dialogs}
       {editNote && (
-        <div role="status" style={{ position: "fixed", bottom: 18, left: 18, zIndex: 1200, background: "#ecfdf5", color: "#166534", border: "1px solid #a7f3d0", borderRadius: 10, padding: "10px 14px", fontSize: 13, maxWidth: 480 }}>
-          ✓ Saved: {editNote} <button onClick={() => setEditNote("")} style={btnStyle("#ffffff", "#166534", "1px solid #a7f3d0")}>OK</button>
+        <div role="status" style={{ position: "fixed", bottom: 18, left: 18, zIndex: 1200, background: "#ecfdf5", color: "#166534", border: "1px solid #a7f3d0", borderRadius: 6, padding: "10px 14px", fontSize: 13, maxWidth: 480 }}>
+          Saved: {editNote} <button onClick={() => setEditNote("")} style={btnStyle("#ffffff", "#166534", "1px solid #a7f3d0")}>OK</button>
         </div>
       )}
       {pickTime && (
@@ -658,7 +675,7 @@ function AnalyticsTab() {
       <WorkloadPanel canConfigure canSuggest />
       <h3 style={{ color: "#003366" }}>Analytics — Institution-Wide</h3>
       {data.semesters && data.semesters.length > 1 && (
-        <p style={{ fontSize: "13px", color: "#334155" }}>
+        <p style={{ fontSize: "13px", color: "#374151" }}>
           Semester:{" "}
           <select value={data.semester || ""} onChange={(e) => setSem(e.target.value)}>
             {data.semesters.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -666,7 +683,7 @@ function AnalyticsTab() {
           (1st and 2nd Sem use the same rooms and teachers, so each is shown on its own.)
         </p>
       )}
-      <p style={{ fontSize: "13px", color: "#64748b", marginTop: 0 }}>
+      <p style={{ fontSize: "13px", color: "#6b7280", marginTop: 0 }}>
         A workforce/HR-style view of how teaching load and room capacity are actually being used.
       </p>
 
@@ -678,7 +695,7 @@ function AnalyticsTab() {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px", marginBottom: "8px" }}>
-        <div style={{ background: "white", border: "1px solid #e0e6ed", borderRadius: "10px", padding: "18px 20px" }}>
+        <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "18px 20px" }}>
           <h4 style={{ marginTop: 0, color: "#003366" }}>Teacher Workload</h4>
           <HBarChart
             data={Object.entries(data.teacher_workload).map(([t, c]) => ({ label: t, value: c })).sort((a, b) => b.value - a.value)}
@@ -686,7 +703,7 @@ function AnalyticsTab() {
             emptyText="No schedule entries yet."
           />
         </div>
-        <div style={{ background: "white", border: "1px solid #e0e6ed", borderRadius: "10px", padding: "18px 20px" }}>
+        <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "18px 20px" }}>
           <h4 style={{ marginTop: 0, color: "#003366" }}>Room Utilization</h4>
           <HBarChart
             data={Object.entries(data.room_utilization).map(([r, c]) => ({ label: r, value: c })).sort((a, b) => b.value - a.value)}
@@ -698,14 +715,14 @@ function AnalyticsTab() {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px", marginTop: "20px" }}>
-        <div style={{ background: "white", border: "1px solid #e0e6ed", borderRadius: "10px", padding: "18px 20px" }}>
+        <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "18px 20px" }}>
           <h4 style={{ marginTop: 0, color: "#003366" }}>Class Hours by Day</h4>
           <HBarChart
             data={Object.entries(data.class_hours_by_day || {}).map(([d, n]) => ({ label: d, value: n }))}
             unit=" hrs" emptyText="No schedule entries yet."
           />
         </div>
-        <div style={{ background: "white", border: "1px solid #e0e6ed", borderRadius: "10px", padding: "18px 20px" }}>
+        <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "18px 20px" }}>
           <h4 style={{ marginTop: 0, color: "#003366" }}>Schedule Status</h4>
           <HBarChart
             data={Object.entries(data.schedule_status || {}).map(([k, n]) => ({ label: k.charAt(0).toUpperCase() + k.slice(1), value: n }))}
@@ -714,7 +731,7 @@ function AnalyticsTab() {
         </div>
       </div>
 
-      <div style={{ background: "white", border: "1px solid #e0e6ed", borderRadius: "10px", padding: "18px 20px", marginTop: "20px" }}>
+      <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "18px 20px", marginTop: "20px" }}>
         <h4 style={{ marginTop: 0, color: "#003366" }}>Recent Activity</h4>
         <RecentActivity items={data.recent_activity} />
       </div>
@@ -798,9 +815,9 @@ function CoverageTab() {
 
   return (
     <div>
-      <div style={{ marginBottom: "24px", padding: "14px", background: "#f8fafc", borderRadius: "8px" }}>
+      <div style={{ marginBottom: "24px", padding: "14px", background: "#f9fafb", borderRadius: 6 }}>
         <h4 style={{ marginTop: 0 }}>Scheduling policy</h4>
-        <p style={{ fontSize: "12.5px", color: "#64748b" }}>
+        <p style={{ fontSize: "13px", color: "#6b7280" }}>
           Class schedules never let a section's students be in two classes at once (the scheduler's rule; no allowance).
           This grace window applies to <strong>exam</strong> scheduling only: a small overlap between a student's exam and
           another class or exam is tolerated. Teacher and room conflicts are always hard.
@@ -841,7 +858,7 @@ function CoverageTab() {
               {suggestions.map((s) => (
                 <tr key={s.coverage_suggestion_id}>
                   <td>{s.subject} — {s.section}</td>
-                  <td>{s.subject_field ? <Badge tone="neutral">{s.subject_field}</Badge> : <span style={{ color: "#94a3b8" }}>—</span>}</td>
+                  <td>{s.subject_field ? <Badge tone="neutral">{s.subject_field}</Badge> : <span style={{ color: "#6b7280" }}>—</span>}</td>
                   <td>{s.timeslot}</td>
                   <td>{s.suggested_faculty_name || <em>No one available</em>}</td>
                   <td>
@@ -849,9 +866,9 @@ function CoverageTab() {
                       ? s.suggested_faculty_specializations.map((spec) => (
                           <Badge key={spec} tone={spec === s.subject_field ? "success" : "neutral"}>{spec}</Badge>
                         ))
-                      : s.suggested_faculty_id ? <span style={{ color: "#94a3b8", fontSize: "12px" }}>No specialization on file</span> : null}
+                      : s.suggested_faculty_id ? <span style={{ color: "#6b7280", fontSize: "12px" }}>No specialization on file</span> : null}
                   </td>
-                  <td style={{ fontSize: "12px", color: "#64748b" }}>{s.reason}</td>
+                  <td style={{ fontSize: "12px", color: "#6b7280" }}>{s.reason}</td>
                   <td>
                     {s.suggested_faculty_id && (
                       <button onClick={() => apply(s.coverage_suggestion_id)}>Apply</button>

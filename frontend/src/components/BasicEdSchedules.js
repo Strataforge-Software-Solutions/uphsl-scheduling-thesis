@@ -1,3 +1,4 @@
+import { OverrideBadge } from "./AssignAnywayDialog";
 import React, { useState, useEffect, useCallback } from "react";
 import API from "../services/api";
 import Badge from "./Badge";
@@ -5,6 +6,7 @@ import RoomSelect from "./RoomSelect";
 import { StatTile, HBarChart } from "./Charts";
 import { periodInfo } from "../utils/terms";
 import { be, errText, inputStyle, cardStyle, btn, btnPrimary, Field, Modal, Notice, DAYS, hhmm, ampm, STATUS_LABEL, STATUS_TONE } from "./basicEdUi";
+import { formatDateTime } from "../utils/formatDateTime";
 
 const toMin = (t) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
 const fromMin = (n) => `${String(Math.floor(n / 60)).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`;
@@ -81,7 +83,7 @@ export function GeneratePanel({ level, overview, periodLabel, onDone }) {
   return (
     <div style={cardStyle}>
       <b>Generate a schedule</b>
-      <p style={{ color: "#64748b", fontSize: "13px", margin: "4px 0 12px" }}>
+      <p style={{ color: "#6b7280", fontSize: "13px", margin: "4px 0 12px" }}>
         Builds a weekly timetable for every section using only {level} teachers, rooms and curriculum. The grade-level time window, teacher availability, room type and teaching-load limits are enforced; anything that can't be placed is listed with the reason.
         Generating again keeps the earlier version in the history.
       </p>
@@ -92,7 +94,7 @@ export function GeneratePanel({ level, overview, periodLabel, onDone }) {
           {Array.from({ length: nPeriods }, (_, i) => <option key={i} value={i + 1}>{periodLabel} {i + 1}</option>)}</select></Field>
         <button style={btnPrimary} disabled={busy} onClick={() => run(false)}>{busy ? "Generating…" : "Generate schedule"}</button>
       </div>
-      {busy && <p style={{ color: "#64748b", fontSize: "13px" }}>This can take up to a minute on a slow connection. Please don't click again.</p>}
+      {busy && <p style={{ color: "#6b7280", fontSize: "13px" }}>This can take up to a minute on a slow connection. Please don't click again.</p>}
       {err && <div style={{ marginTop: "12px" }}><Notice tone="error">{err}</Notice></div>}
       {blockers && (
         <div style={{ marginTop: "12px" }}>
@@ -116,10 +118,10 @@ export function GeneratePanel({ level, overview, periodLabel, onDone }) {
                 catch (e) { setFixed({ ...fixed, [r.run.id]: { resolved: [], unresolved: [{ message: errText(e), reason: "" }] } }); }
                 finally { setFixing(null); }
               }}>{fixing === r.run.id ? "Resolving…" : "Resolve"}</button>
-              <span style={{ fontSize: "12.5px", color: "#64748b", marginLeft: "10px" }}>Tries another teacher, room or period for each problem; nothing is kept unless every rule still holds.</span>
+              <span style={{ fontSize: "13px", color: "#6b7280", marginLeft: "10px" }}>Tries another teacher, room or period for each problem; nothing is kept unless every rule still holds.</span>
             </div>)}
           {fixed[r.run.id] && (
-            <div style={{ marginTop: "8px", fontSize: "12.5px" }}>
+            <div style={{ marginTop: "8px", fontSize: "13px" }}>
               <Notice tone={fixed[r.run.id].unresolved.length ? "warn" : "ok"}>{resolveText(fixed[r.run.id])}</Notice>
               {fixed[r.run.id].resolved.length > 0 && <ul style={{ margin: "4px 0", paddingLeft: "20px" }}>{fixed[r.run.id].resolved.map((t, i) => <li key={i}>{t}</li>)}</ul>}
               {fixed[r.run.id].unresolved.length > 0 && <ul style={{ margin: "4px 0", paddingLeft: "20px" }}>{fixed[r.run.id].unresolved.map((u, i) => <li key={i}>{u.message}<div style={{ color: "#7c2d12" }}>{u.reason}</div></li>)}</ul>}
@@ -154,7 +156,7 @@ export function SchedulesPanel({ level, overview, periodLabel, user }) {
         {error && <Notice tone="error">{error}</Notice>}
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
-            <thead><tr>{["Grade", periodLabel, "Version", "Status", "Periods", "Open issues", "Created", ""].map((h) => <th key={h} style={{ textAlign: "left", fontSize: "11.5px", textTransform: "uppercase", color: "#64748b", padding: "8px 10px", borderBottom: "1px solid #e2e8f0" }}>{h}</th>)}</tr></thead>
+            <thead><tr>{["Grade", periodLabel, "Version", "Status", "Periods", "Open issues", "Created", ""].map((h) => <th key={h} style={{ textAlign: "left", fontSize: "12px", color: "#6b7280", padding: "8px 10px", borderBottom: "1px solid #e5e7eb" }}>{h}</th>)}</tr></thead>
             <tbody>
               {runs.map((r) => (
                 <tr key={r.id}>
@@ -162,13 +164,13 @@ export function SchedulesPanel({ level, overview, periodLabel, user }) {
                   <td style={{ padding: "9px 10px" }}>v{r.version}</td><td style={{ padding: "9px 10px" }}><StatusBadge status={r.status} /></td>
                   <td style={{ padding: "9px 10px" }}>{r.entry_count}</td>
                   <td style={{ padding: "9px 10px" }}>{r.validation?.errors ? <Badge tone="warning">{r.validation.errors}</Badge> : <Badge tone="success">0</Badge>}</td>
-                  <td style={{ padding: "9px 10px" }}>{new Date(r.created_at).toLocaleString()}<div style={{ fontSize: "11px", color: "#64748b" }}>{r.created_by_name}</div></td>
+                  <td style={{ padding: "9px 10px" }}>{formatDateTime(r.created_at)}<div style={{ fontSize: "12px", color: "#6b7280" }}>{r.created_by_name}</div></td>
                   <td style={{ padding: "9px 10px" }}><button style={btn} onClick={() => setOpenId(r.id)}>Open</button></td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {!loading && runs.length === 0 && <p style={{ color: "#64748b", fontSize: "13px", padding: "10px" }}>No schedules yet. Generate one above.</p>}
+          {!loading && runs.length === 0 && <p style={{ color: "#6b7280", fontSize: "13px", padding: "10px" }}>No schedules yet. Generate one above.</p>}
         </div>
       </div>
     </div>
@@ -240,7 +242,7 @@ function RunDetail({ level, id, overview, periodLabel, onBack, user }) {
           <div>
             <button style={btn} onClick={onBack}>All schedules</button>{" "}
             <b style={{ fontSize: "16px" }}>Grade {run.grade_level} · {run.period_label} · v{run.version}</b>{" "}<StatusBadge status={run.status} />
-            <div style={{ fontSize: "12.5px", color: "#64748b", marginTop: "4px" }}>{win && `${ampm(win.start_time)} – ${ampm(win.end_time)} · ${overview.config.building}${overview.config.floor != null ? ", floor " + overview.config.floor : ""}`}</div>
+            <div style={{ fontSize: "13px", color: "#6b7280", marginTop: "4px" }}>{win && `${ampm(win.start_time)} – ${ampm(win.end_time)} · ${overview.config.building}${overview.config.floor != null ? ", floor " + overview.config.floor : ""}`}</div>
           </div>
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
             {editable && <button style={btn} disabled={busy} onClick={revalidate}>Re-validate</button>}
@@ -248,7 +250,7 @@ function RunDetail({ level, id, overview, periodLabel, onBack, user }) {
             {run.status === "submitted" && canDecide && <button style={btnPrimary} disabled={busy} onClick={() => act("approve")}>Approve</button>}
             {["submitted", "approved"].includes(run.status) && canDecide && <button style={btn} disabled={busy} onClick={() => act("request-revision")}>Request revision</button>}
             {run.status === "approved" && <button style={btnPrimary} disabled={busy} onClick={() => act("publish")}>Publish to teachers</button>}
-            <button style={btn} onClick={pdf}>🖨 Print / PDF</button>
+            <button style={btn} onClick={pdf}>Print / PDF</button>
           </div>
         </div>
         {msg && <div style={{ marginTop: "10px" }}><Notice tone={msg.tone}>{msg.text}</Notice></div>}
@@ -270,8 +272,8 @@ function RunDetail({ level, id, overview, periodLabel, onBack, user }) {
         <div style={cardStyle}>
           <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "12px", flexWrap: "wrap" }}>
             <select style={inputStyle} value={sectionId} onChange={(e) => setSectionId(e.target.value)}>{sections.map(([sid, name]) => <option key={sid} value={sid}>{name}</option>)}</select>
-            {editable ? <span style={{ fontSize: "12.5px", color: "#64748b" }}>Click a period to change its teacher, room or time. Every change is re-validated automatically.</span>
-              : <span style={{ fontSize: "12.5px", color: "#64748b" }}>Read-only ({STATUS_LABEL[run.status].toLowerCase()}). Request a revision to edit.</span>}
+            {editable ? <span style={{ fontSize: "13px", color: "#6b7280" }}>Click a period to change its teacher, room or time. Every change is re-validated automatically.</span>
+              : <span style={{ fontSize: "13px", color: "#6b7280" }}>Read-only ({STATUS_LABEL[run.status].toLowerCase()}). Request a revision to edit.</span>}
           </div>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "760px" }}>
@@ -279,20 +281,21 @@ function RunDetail({ level, id, overview, periodLabel, onBack, user }) {
               <tbody>
                 {rows.map((r) => r.kind !== "period" ? (
                   <tr key={`break-${r.s}`}>
-                    <td style={{ padding: "6px", fontSize: "11.5px", background: "#fde68a", textAlign: "center", border: "1px solid #e2e8f0" }}>{ampm(r.s)}<br />{ampm(r.e)}</td>
-                    <td colSpan={DAYS.length} style={{ padding: "6px", background: "#fef3c7", textAlign: "center", fontWeight: 700, letterSpacing: "4px", color: "#92400e", border: "1px solid #e2e8f0", fontSize: "12.5px" }}>
+                    <td style={{ padding: "6px", fontSize: "12px", background: "#fde68a", textAlign: "center", border: "1px solid #e5e7eb" }}>{ampm(r.s)}<br />{ampm(r.e)}</td>
+                    <td colSpan={DAYS.length} style={{ padding: "6px", background: "#fef3c7", textAlign: "center", fontWeight: 600, letterSpacing: "4px", color: "#92400e", border: "1px solid #e5e7eb", fontSize: "13px" }}>
                       {r.kind.toUpperCase()}</td>
                   </tr>
                 ) : (([s, e]) => (
                   <tr key={s}>
-                    <td style={{ padding: "6px", fontSize: "11.5px", background: "#f1f5f9", textAlign: "center", border: "1px solid #e2e8f0" }}>{ampm(s)}<br />{ampm(e)}</td>
+                    <td style={{ padding: "6px", fontSize: "12px", background: "#f3f4f6", textAlign: "center", border: "1px solid #e5e7eb" }}>{ampm(s)}<br />{ampm(e)}</td>
                     {DAYS.map(([d]) => {
                       const c = cell(d, s);
                       const bad = c && data.conflicts.some((x) => x.severity === "error" && String(x.section) === String(c.section) && x.subject_code === c.subject_code);
                       return (
-                        <td key={d} onClick={() => editable && c && setEditing(c)} style={{ border: "1px solid #e2e8f0", padding: "5px 6px", fontSize: "11.5px", verticalAlign: "top", cursor: editable && c ? "pointer" : "default", background: bad ? "#fee2e2" : c ? (c.learning_area ? "#f0f7ff" : "white") : "#fafafa", minWidth: "120px" }}>
-                          {c && (<><b>{c.subject_code}</b><div style={{ color: "#334155" }}>{c.subject_name.length > 34 ? c.subject_name.slice(0, 34) + "…" : c.subject_name}</div>
-                            <div style={{ color: "#64748b" }}>{c.teacher_name || "— no teacher —"}</div><div style={{ color: "#64748b" }}>{c.room_name || "— no room —"}</div></>)}
+                        <td key={d} onClick={() => editable && c && setEditing(c)} style={{ border: "1px solid #e5e7eb", padding: "5px 6px", fontSize: "12px", verticalAlign: "top", cursor: editable && c ? "pointer" : "default", background: bad ? "#fee2e2" : c ? (c.learning_area ? "#f0f7ff" : "white") : "#fafafa", minWidth: "120px" }}>
+                          {c && (<><b>{c.subject_code}</b><div style={{ color: "#374151" }}>{c.subject_name.length > 34 ? c.subject_name.slice(0, 34) + "…" : c.subject_name}</div>
+                            <div style={{ color: "#6b7280" }}>{c.teacher_name || "— no teacher —"}</div><div style={{ color: "#6b7280" }}>{c.room_name || "— no room —"}</div>
+                            {c.qualification_override && <div style={{ marginTop: 2 }}><OverrideBadge text="Assigned by Principal (not connected)" reason={c.qualification_override.reason} /></div>}</>)}
                         </td>
                       );
                     })}
@@ -311,17 +314,17 @@ function RunDetail({ level, id, overview, periodLabel, onBack, user }) {
               {editable && (
                 <div style={{ marginBottom: "10px" }}>
                   <button style={btnPrimary} disabled={busy} onClick={() => doResolve()}>{busy ? "Resolving…" : "Resolve all"}</button>
-                  <span style={{ fontSize: "12.5px", color: "#64748b", marginLeft: "10px" }}>Changes a teacher, room or period; a change is kept only if every rule still holds and nothing new breaks.</span>
+                  <span style={{ fontSize: "13px", color: "#6b7280", marginLeft: "10px" }}>Changes a teacher, room or period; a change is kept only if every rule still holds and nothing new breaks.</span>
                 </div>)}
               <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "13px", lineHeight: 1.9 }}>
-                {data.conflicts.map((c) => <li key={c.id}>{c.severity === "error" ? "⛔" : "⚠️"} {c.section_name && <b>{c.section_name}: </b>}{c.message}
+                {data.conflicts.map((c) => <li key={c.id}><strong style={{ fontWeight: 600 }}>{c.severity === "error" ? "Error:" : "Warning:"}</strong> {c.section_name && <b>{c.section_name}: </b>}{c.message}
                   {editable && c.severity === "error" && <>{" "}<button style={{ ...btn, padding: "2px 10px", fontSize: "12px" }} disabled={busy}
                     onClick={() => doResolve({ kind: c.kind, section: c.section || undefined, subject_code: c.subject_code || undefined })}>Resolve</button></>}</li>)}
               </ul>
             </>
           )}
           {fix && (fix.resolved.length > 0 || fix.unresolved.length > 0) && (
-            <div style={{ marginTop: "12px", fontSize: "12.5px" }}>
+            <div style={{ marginTop: "12px", fontSize: "13px" }}>
               {fix.resolved.length > 0 && <><b>Fixed</b><ul style={{ margin: "4px 0 8px", paddingLeft: "20px" }}>{fix.resolved.map((t, i) => <li key={i}>{t}</li>)}</ul></>}
               {fix.unresolved.length > 0 && <><b>Not fixed — what to do</b><ul style={{ margin: "4px 0", paddingLeft: "20px" }}>{fix.unresolved.map((u, i) => <li key={i}>{u.message}<div style={{ color: "#7c2d12" }}>{u.reason}</div></li>)}</ul></>}
             </div>)}
@@ -337,9 +340,9 @@ function RunDetail({ level, id, overview, periodLabel, onBack, user }) {
               <h4>Room utilization</h4>
               <HBarChart data={report.rooms.map((r) => ({ label: `${r.name} (${r.utilization_pct}%)`, value: r.hours }))} unit=" h" color="#0f766e" />
               <h4>Calendar (class days after holidays, examination blocks and suspensions)</h4>
-              {report.calendar.length === 0 ? <p style={{ color: "#64748b", fontSize: "13px" }}>Link this {periodLabel.toLowerCase()} to its terms in the Calendar tab.</p> : (
+              {report.calendar.length === 0 ? <p style={{ color: "#6b7280", fontSize: "13px" }}>Link this {periodLabel.toLowerCase()} to its terms in the Calendar tab.</p> : (
                 <table style={{ fontSize: "13px", borderCollapse: "collapse" }}><tbody>
-                  {report.calendar.map((c) => <tr key={c.term}><td style={{ padding: "4px 12px 4px 0" }}><b>{c.term}</b></td><td style={{ padding: "4px 12px" }}>{c.start} → {c.end}</td><td style={{ padding: "4px 12px" }}>{c.class_days} class days</td><td style={{ padding: "4px 12px", color: "#64748b" }}>{c.excluded_dates.length} date(s) with no regular classes</td></tr>)}
+                  {report.calendar.map((c) => <tr key={c.term}><td style={{ padding: "4px 12px 4px 0" }}><b>{c.term}</b></td><td style={{ padding: "4px 12px" }}>{c.start} → {c.end}</td><td style={{ padding: "4px 12px" }}>{c.class_days} class days</td><td style={{ padding: "4px 12px", color: "#6b7280" }}>{c.excluded_dates.length} date(s) with no regular classes</td></tr>)}
                 </tbody></table>
               )}
             </>
@@ -350,7 +353,7 @@ function RunDetail({ level, id, overview, periodLabel, onBack, user }) {
       {tab === "history" && (
         <div style={cardStyle}>
           <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "13px", lineHeight: 1.8 }}>
-            {data.events.map((e) => <li key={e.id}><b>{e.action.replace(/_/g, " ")}</b> — {e.actor_name || "system"} · {new Date(e.created_at).toLocaleString()}{e.comment ? ` — ${e.comment}` : ""}</li>)}
+            {data.events.map((e) => <li key={e.id}><b>{e.action.replace(/_/g, " ")}</b> — {e.actor_name || "system"} · {formatDateTime(e.created_at)}{e.comment ? ` — ${e.comment}` : ""}</li>)}
           </ul>
         </div>
       )}
@@ -380,7 +383,7 @@ function EntryEditModal({ level, entry, grid, faculty, rooms, onClose, onSaved }
   const eligibleRooms = rooms.filter((r) => r.is_active);
   return (
     <Modal title={`${entry.subject_code} — ${entry.section_name}`} onClose={onClose}>
-      <p style={{ marginTop: 0, fontSize: "13px", color: "#334155" }}>{entry.subject_name}</p>
+      <p style={{ marginTop: 0, fontSize: "13px", color: "#374151" }}>{entry.subject_name}</p>
       {err && <Notice tone="error">{err}</Notice>}
       {issues.length > 0 && <Notice tone="error"><b>Saved, but this change creates conflicts:</b><ul style={{ margin: "6px 0 0", paddingLeft: "18px" }}>{issues.map((i, k) => <li key={k}>{i.message}</li>)}</ul>
         <button style={{ ...btn, marginTop: "8px" }} onClick={onSaved}>Keep and review</button></Notice>}

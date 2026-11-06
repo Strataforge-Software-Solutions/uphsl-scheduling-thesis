@@ -9,6 +9,7 @@ import Badge from "./Badge";
 import { StatTile } from "./Charts";
 import { be, errText, inputStyle, cardStyle, btn, btnPrimary, Field, Notice, Modal, ampm, hhmm, STATUS_LABEL, STATUS_TONE } from "./basicEdUi";
 import { SectionsTab, RoomsTab, FacultyTab, CurriculumTab } from "./BasicEdData";
+import TeachingAssignmentsPanel from "./BasicEdAssignments";
 import { SchedulesPanel } from "./BasicEdSchedules";
 import BasicEdAnalytics from "./BasicEdAnalytics";
 import { BasicEdInsights } from "./InsightCards";
@@ -16,42 +17,45 @@ import { Accounts } from "./AdminDashboard";
 import API, { onSchedulesChanged } from "../services/api";
 import { periodHeading } from "../utils/terms";
 import "./DashboardTheme.css";
+import { useLandingTab } from "../services/preferences";
+import { formatDateTime } from "../utils/formatDateTime";
 
 const NAV = [
-  { key: "overview", label: "Home", icon: "🏠" },
-  { key: "schedules", label: "Schedules", icon: "🗓" },
-  { key: "analytics", label: "Analytics", icon: "📊" },
-  { key: "sections", label: "Sections", icon: "👥" },
-  { key: "curriculum", label: "Curriculum", icon: "📖" },
-  { key: "faculty", label: "Faculty", icon: "🧑‍🏫" },
-  { key: "calendar", label: "Calendar", icon: "📅" },
-  { key: "settings", label: "Settings", icon: "⚙️" },
+  { key: "overview", label: "Home", icon: "" },
+  { key: "schedules", label: "Schedules", icon: "" },
+  { key: "analytics", label: "Analytics", icon: "" },
+  { key: "sections", label: "Sections", icon: "" },
+  { key: "curriculum", label: "Curriculum", icon: "" },
+  { key: "faculty", label: "Faculty", icon: "" },
+  { key: "calendar", label: "Calendar", icon: "" },
+  { key: "settings", label: "Settings", icon: "" },
 ];
 
 /* IT admin workspace for one school level: accounts, data management and analytics. Scheduling itself (generate, review, approve) is the
    Principal's job, so there is no Schedules tab here. */
 const NAV_ADMIN = [
   { group: "Insights" },
-  { key: "overview", label: "Overview", icon: "🧭" },
-  { key: "activity", label: "Activity", icon: "🕘" },
+  { key: "overview", label: "Overview", icon: "" },
+  { key: "activity", label: "Activity", icon: "" },
   { group: "People" },
-  { key: "accounts", label: "Accounts", icon: "👥" },
-  { key: "faculty", label: "Faculty", icon: "🧑‍🏫" },
+  { key: "accounts", label: "Accounts", icon: "" },
+  { key: "faculty", label: "Faculty", icon: "" },
   { group: "Management" },
-  { key: "sections", label: "Sections", icon: "🧩" },
-  { key: "curriculum", label: "Curriculum", icon: "📖" },
-  { key: "rooms", label: "Rooms", icon: "🏫" },
-  { key: "calendar", label: "Calendar", icon: "📅" },
-  { key: "settings", label: "Settings", icon: "⚙️" },
+  { key: "sections", label: "Sections", icon: "" },
+  { key: "curriculum", label: "Curriculum", icon: "" },
+  { key: "rooms", label: "Rooms", icon: "" },
+  { key: "calendar", label: "Calendar", icon: "" },
+  { key: "settings", label: "Settings", icon: "" },
   { group: "Data" },
-  { key: "data", label: "Data Tools", icon: "🧹" },
+  { key: "data", label: "Data Tools", icon: "" },
 ];
 
 const LEVEL_NAME = { SHS: "Senior High School", JHS: "Junior High School" };
 
 function BasicEdDashboard({ level }) {
   const user = getCurrentUser();
-  const [tab, setTab] = useState("overview");
+  const landing = useLandingTab(user?.role === "admin" ? NAV_ADMIN : NAV, "overview");
+  const [tab, setTab] = useState(landing);
   const [overview, setOverview] = useState(null);
   const [error, setError] = useState("");
   const [slow, setSlow] = useState(false);
@@ -107,7 +111,7 @@ function BasicEdDashboard({ level }) {
         <PageHeader eyebrow={isAdmin ? `IT ADMIN WORKSPACE · ${level}` : `${LEVEL_NAME[level]} Workspace`} title={title} subtitle={subtitle} />
         <div className="app-page-body">
           {error && <Notice tone="error">{error} <button style={btn} onClick={reload}>Retry</button></Notice>}
-          {!overview && !error && <p style={{ color: "#64748b" }}>Loading…{slow && <> Still waiting for the server: slow connection or database, or the latest <code>python manage.py migrate</code> has not been run. <button style={btn} onClick={reload}>Retry</button></>}</p>}
+          {!overview && !error && <p style={{ color: "#6b7280" }}>Loading…{slow && <> Still waiting for the server: slow connection or database, or the latest <code>python manage.py migrate</code> has not been run. <button style={btn} onClick={reload}>Retry</button></>}</p>}
           {overview && isAdmin && tab === "overview" && <AdminOverview level={level} overview={overview} go={setTab} />}
           {overview && isAdmin && tab === "activity" && <AdminActivity overview={overview} />}
           {isAdmin && tab === "accounts" && <Accounts level={level} />}
@@ -123,7 +127,7 @@ function BasicEdDashboard({ level }) {
               <BasicEdInsights level={level} />
             </>
           )}
-          {overview && tab === "sections" && <SectionsTab level={level} windows={overview.windows} />}
+          {overview && tab === "sections" && <><SectionsTab level={level} windows={overview.windows} /><TeachingAssignmentsPanel level={level} /></>}
           {overview && tab === "curriculum" && <CurriculumTab level={level} windows={overview.windows} structure={overview.structure} periodLabel={periodLabel} />}
           {overview && tab === "faculty" && <FacultyTab level={level} />}
           {overview && tab === "rooms" && <RoomsTab level={level} config={overview.config} />}
@@ -132,7 +136,7 @@ function BasicEdDashboard({ level }) {
           {overview && !isAdmin && tab === "settings" && (
             <details style={{ ...cardStyle, marginTop: 18 }}>
               <summary style={{ cursor: "pointer", fontWeight: 600, color: "#003366" }}>Rooms — room records used when scheduling</summary>
-              <p style={{ fontSize: 12.5, color: "#64748b" }}>Add, edit or retire rooms here. Generated timetables and the room dropdown when editing a period use these records.</p>
+              <p style={{ fontSize: 13, color: "#6b7280" }}>Add, edit or retire rooms here. Generated timetables and the room dropdown when editing a period use these records.</p>
               <RoomsTab level={level} config={overview.config} />
             </details>)}
         </div>
@@ -141,7 +145,7 @@ function BasicEdDashboard({ level }) {
   );
 }
 
-const adminCard = { background: "white", borderRadius: "10px", padding: "18px 22px", marginBottom: "20px", border: "1px solid #e0e6ed", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" };
+const adminCard = { background: "white", borderRadius: 6, padding: "18px 22px", marginBottom: "20px", border: "1px solid #e5e7eb", boxShadow: "none" };
 
 function AdminOverview({ level, overview, go }) {
   const c = overview.counts;
@@ -159,13 +163,13 @@ function AdminOverview({ level, overview, go }) {
     runs.length ? ["ok", `${runs.length} timetable(s) generated; ${c.pending_review} waiting for the Principal's review.`] : ["warn", "No timetable generated yet. The Principal generates it in the Schedules tab of the principal workspace."],
     c.open_conflicts ? ["warn", `${c.open_conflicts} open conflict(s) in the current timetables. The Principal can press Resolve in the Conflicts tab.`] : ["ok", "No open conflicts."],
   ];
-  const col = { ok: "#1e7a45", warn: "#96690a", error: "#a4231a" }, ico = { ok: "✅", warn: "⚠️", error: "⛔" };
+  const col = { ok: "#166534", warn: "#92400e", error: "#b91c1c" }, ico = { ok: "OK:", warn: "Warning:", error: "Error:" };
   return (
     <div>
       <div style={adminCard}>
         <h3 style={{ marginTop: 0, color: "#003366" }}>Setup health</h3>
         <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-          {checks.map(([k, t], i) => <li key={i} style={{ padding: "5px 0", color: col[k], fontSize: "14px" }}>{ico[k]} {t}</li>)}
+          {checks.map(([k, t], i) => <li key={i} style={{ padding: "5px 0", color: col[k], fontSize: "14px" }}><strong style={{ fontWeight: 600 }}>{ico[k]}</strong> {t}</li>)}
         </ul>
       </div>
       <div style={adminCard}>
@@ -178,7 +182,7 @@ function AdminOverview({ level, overview, go }) {
         {runs.length > 0 && (
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
-              <thead><tr>{["Grade", "Period", "Version", "Status", "Periods placed", "Unplaced", "Open issues"].map((h) => <th key={h} style={{ textAlign: "left", fontSize: "11.5px", textTransform: "uppercase", color: "#64748b", padding: "8px 10px", borderBottom: "1px solid #e2e8f0" }}>{h}</th>)}</tr></thead>
+              <thead><tr>{["Grade", "Period", "Version", "Status", "Periods placed", "Unplaced", "Open issues"].map((h) => <th key={h} style={{ textAlign: "left", fontSize: "12px", color: "#6b7280", padding: "8px 10px", borderBottom: "1px solid #e5e7eb" }}>{h}</th>)}</tr></thead>
               <tbody>{runs.map((r) => (
                 <tr key={r.id}>
                   <td style={{ padding: "8px 10px" }}><b>Grade {r.grade_level}</b></td><td style={{ padding: "8px 10px" }}>{r.period_label}</td><td style={{ padding: "8px 10px" }}>v{r.version}</td>
@@ -188,7 +192,7 @@ function AdminOverview({ level, overview, go }) {
                 </tr>))}</tbody>
             </table>
           </div>)}
-        <p style={{ fontSize: "12.5px", color: "#64748b", marginBottom: 0 }}>Status: {Object.keys(byStatus).length ? Object.entries(byStatus).map(([k, v]) => `${STATUS_LABEL[k] || k}: ${v}`).join(" · ") : "nothing generated yet"}.
+        <p style={{ fontSize: "13px", color: "#6b7280", marginBottom: 0 }}>Status: {Object.keys(byStatus).length ? Object.entries(byStatus).map(([k, v]) => `${STATUS_LABEL[k] || k}: ${v}`).join(" · ") : "nothing generated yet"}.
           Generating, reviewing and approving timetables is done by the {level} Principal.</p>
       </div>
     </div>
@@ -203,9 +207,9 @@ function AdminActivity({ overview }) {
       {rows.length === 0 ? <p>Nothing has been recorded yet.</p> : (
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
-            <thead><tr>{["When", "Who", "Action", "Details"].map((h) => <th key={h} style={{ textAlign: "left", fontSize: "11.5px", textTransform: "uppercase", color: "#64748b", padding: "8px 10px", borderBottom: "1px solid #e2e8f0" }}>{h}</th>)}</tr></thead>
+            <thead><tr>{["When", "Who", "Action", "Details"].map((h) => <th key={h} style={{ textAlign: "left", fontSize: "12px", color: "#6b7280", padding: "8px 10px", borderBottom: "1px solid #e5e7eb" }}>{h}</th>)}</tr></thead>
             <tbody>{rows.map((e, i) => (
-              <tr key={i}><td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>{new Date(e.created_at).toLocaleString()}</td>
+              <tr key={i}><td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>{formatDateTime(e.created_at)}</td>
                 <td style={{ padding: "8px 10px" }}>{e.actor_name || e.actor || "—"}</td><td style={{ padding: "8px 10px" }}>{e.action}</td>
                 <td style={{ padding: "8px 10px", wordBreak: "break-word" }}>{e.comment || ""}</td></tr>))}</tbody>
           </table>
@@ -239,12 +243,12 @@ function AdminData({ level, overview }) {
         <button style={btn} disabled={busy} onClick={() => run(false)}>Preview what would be deleted</button>
       </div>
       {preview && (
-        <div style={{ padding: "12px", background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: "8px" }}>
+        <div style={{ padding: "12px", background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 6 }}>
           <p style={{ margin: "0 0 8px" }}><b>{preview.runs}</b> timetable(s) with <b>{preview.entries}</b> period(s) would be deleted{preview.kept_approved ? ` (${preview.kept_approved} approved/published timetable(s) are kept)` : ""}.</p>
-          {preview.runs > 0 && <button style={{ ...btn, background: "#a4231a", color: "white" }} disabled={busy} onClick={() => window.confirm(`Delete ${preview.runs} timetable(s)? This cannot be undone.`) && run(true)}>Yes, delete them</button>}
+          {preview.runs > 0 && <button style={{ ...btn, background: "#b91c1c", color: "white" }} disabled={busy} onClick={() => window.confirm(`Delete ${preview.runs} timetable(s)? This cannot be undone.`) && run(true)}>Yes, delete them</button>}
         </div>)}
       {msg && <div style={{ marginTop: "10px" }}><Notice tone={msg.tone}>{msg.text}</Notice></div>}
-      <p style={{ fontSize: "12.5px", color: "#64748b", marginTop: "14px" }}>Curriculum, sections, rooms and teachers are never touched. Use this after changing recess/lunch or the period length, so every grade is generated again on the same periods.</p>
+      <p style={{ fontSize: "13px", color: "#6b7280", marginTop: "14px" }}>Curriculum, sections, rooms and teachers are never touched. Use this after changing recess/lunch or the period length, so every grade is generated again on the same periods.</p>
     </div>
   );
 }
@@ -263,25 +267,25 @@ function Overview({ level, overview, go, hideStats = false }) {
       {level === "SHS" && overview.periods.some((p) => p.kind === "semester" && p.is_placeholder) && <Notice tone="warn"><b>The Grade 12 term ↔ semester mapping is a placeholder.</b> DepEd's calendar order doesn't say how the 3 terms relate to the 2 semesters. Confirm it in <button style={btn} onClick={() => go("calendar")}>Calendar</button>.</Notice>}
       <div style={cardStyle}>
         <b>Principal review</b>
-        {pending.length === 0 ? <p style={{ color: "#64748b", fontSize: "13px" }}>Nothing is waiting for approval.</p> : pending.map((r) => (
-          <div key={r.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #f1f5f9" }}>
+        {pending.length === 0 ? <p style={{ color: "#6b7280", fontSize: "13px" }}>Nothing is waiting for approval.</p> : pending.map((r) => (
+          <div key={r.id} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #f3f4f6" }}>
             <span>Grade {r.grade_level} · {r.period_label} · v{r.version} — {r.entry_count} periods</span>
             <button style={btnPrimary} onClick={() => go("schedules")}>Review</button>
           </div>))}
       </div>
       <div style={cardStyle}>
         <b>Current schedules</b>
-        {overview.runs.length === 0 ? <p style={{ color: "#64748b", fontSize: "13px" }}>No schedule generated yet. Open <button style={btn} onClick={() => go("schedules")}>Schedules</button> to generate one.</p> : (
+        {overview.runs.length === 0 ? <p style={{ color: "#6b7280", fontSize: "13px" }}>No schedule generated yet. Open <button style={btn} onClick={() => go("schedules")}>Schedules</button> to generate one.</p> : (
           <table style={{ width: "100%", fontSize: "13px", borderCollapse: "collapse", marginTop: "8px" }}><tbody>
             {overview.runs.map((r) => (<tr key={r.id}><td style={{ padding: "7px 0" }}><b>Grade {r.grade_level}</b> · {r.period_label} · v{r.version}</td>
-              <td><Badge tone={STATUS_TONE[r.status]}>{STATUS_LABEL[r.status]}</Badge></td><td>{r.entry_count} periods</td><td>{r.validation?.errors ? `⛔ ${r.validation.errors} conflict(s)` : "✓ no conflicts"}</td></tr>))}
+              <td><Badge tone={STATUS_TONE[r.status]}>{STATUS_LABEL[r.status]}</Badge></td><td>{r.entry_count} periods</td><td>{r.validation?.errors ? `${r.validation.errors} conflict(s)` : "No conflicts"}</td></tr>))}
           </tbody></table>)}
       </div>
       <div style={cardStyle}>
         <b>Recent activity</b>
         <ul style={{ maxHeight: "220px", overflowY: "auto", margin: "8px 0 0", paddingLeft: "18px", fontSize: "13px", lineHeight: 1.7 }}>
-          {overview.recent.length === 0 && <li style={{ color: "#64748b" }}>No activity yet.</li>}
-          {overview.recent.map((e) => <li key={e.id}><b>{e.action.replace(/_/g, " ")}</b> — {e.actor_name || "system"} · {new Date(e.created_at).toLocaleString()}</li>)}
+          {overview.recent.length === 0 && <li style={{ color: "#6b7280" }}>No activity yet.</li>}
+          {overview.recent.map((e) => <li key={e.id}><b>{e.action.replace(/_/g, " ")}</b> — {e.actor_name || "system"} · {formatDateTime(e.created_at)}</li>)}
         </ul>
       </div>
     </div>
@@ -311,7 +315,7 @@ function CalendarTab({ level, overview, periodLabel, reload }) {
     <div>
       <div style={cardStyle}>
         <b>Terms (A.Y. {overview.academic_year})</b>
-        <p style={{ color: "#64748b", fontSize: "12.5px", margin: "4px 0 10px" }}>Source: {terms[0]?.source}</p>
+        <p style={{ color: "#6b7280", fontSize: "13px", margin: "4px 0 10px" }}>Source: {terms[0]?.source}</p>
         {terms.map((t) => (
           <div key={t.id} style={{ display: "flex", gap: "10px", alignItems: "center", padding: "6px 0", flexWrap: "wrap" }}>
             <b style={{ width: "70px" }}>{t.name}</b>
@@ -322,7 +326,7 @@ function CalendarTab({ level, overview, periodLabel, reload }) {
       </div>
       {grading.length > 0 && <div style={cardStyle}>
         <b>Grade 12 semesters and the terms they cover</b>
-        <p style={{ color: "#64748b", fontSize: "12.5px", margin: "4px 0 10px" }}>Grade 11 and Junior High use the 3 terms directly. Grade 12 keeps 2 semesters; set which terms fall inside each one.</p>
+        <p style={{ color: "#6b7280", fontSize: "13px", margin: "4px 0 10px" }}>Grade 11 and Junior High use the 3 terms directly. Grade 12 keeps 2 semesters; set which terms fall inside each one.</p>
         {grading.map((g) => (
           <div key={g.id} style={{ display: "flex", gap: "10px", alignItems: "center", padding: "6px 0", flexWrap: "wrap" }}>
             <b style={{ width: "100px" }}>{g.name}</b>
@@ -334,10 +338,10 @@ function CalendarTab({ level, overview, periodLabel, reload }) {
       <div style={cardStyle}>
         <div style={{ display: "flex", justifyContent: "space-between" }}><b>Holidays, examination periods and suspensions</b>
           <button style={btnPrimary} onClick={() => { setErr(""); setEdit({ kind: "suspension", name: "", start_date: "", end_date: "", blocks_classes: true }); }}>Add</button></div>
-        <p style={{ color: "#64748b", fontSize: "12.5px", margin: "4px 0" }}>No regular classes are counted on these dates.</p>
+        <p style={{ color: "#6b7280", fontSize: "13px", margin: "4px 0" }}>No regular classes are counted on these dates.</p>
         <div style={{ maxHeight: "340px", overflowY: "auto" }}>
           <table style={{ width: "100%", fontSize: "13px", borderCollapse: "collapse" }}><tbody>
-            {events.map((e) => (<tr key={e.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
+            {events.map((e) => (<tr key={e.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
               <td style={{ padding: "7px 8px 7px 0" }}>{e.start_date}{e.end_date !== e.start_date ? ` → ${e.end_date}` : ""}</td><td>{e.name}</td><td><Badge>{e.kind}</Badge></td>
               <td><button style={btn} onClick={async () => { if (window.confirm("Delete this entry?")) { await be.del(level, `calendar/events/${e.id}/`); loadEvents(); } }}>Remove</button></td></tr>))}
           </tbody></table>
@@ -385,7 +389,7 @@ function SettingsTab({ level, overview, reload }) {
     <div>
       <div style={cardStyle}>
         <b>{LEVEL_NAME[level]} configuration</b>
-        {cfg.notes && <p style={{ color: "#64748b", fontSize: "12.5px" }}>{cfg.notes}</p>}
+        {cfg.notes && <p style={{ color: "#6b7280", fontSize: "13px" }}>{cfg.notes}</p>}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "12px", marginTop: "10px" }}>
           <Field label="Building"><input style={{ ...inputStyle, width: "100%" }} value={cfg.building} onChange={(e) => setCfg({ ...cfg, building: e.target.value })} /></Field>
           {n("floor", "Floor (blank = whole building)")}{n("period_minutes", "Minutes per class period")}{n("break_minutes", "Break minutes (0 = none)")}{n("break_every", "Break after every N periods")}
@@ -395,20 +399,20 @@ function SettingsTab({ level, overview, reload }) {
       <div style={cardStyle}>
         <b>Daily time windows and curriculum framework per grade level</b>
         {wins.map((w, i) => (
-          <div key={w.id} style={{ display: "grid", gridTemplateColumns: "90px 130px 130px 1fr auto", gap: "10px", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #f1f5f9" }}>
+          <div key={w.id} style={{ display: "grid", gridTemplateColumns: "90px 130px 130px 1fr auto", gap: "10px", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #f3f4f6" }}>
             <b>Grade {w.grade_level}</b>
             <input style={inputStyle} type="time" value={hhmm(w.start_time)} onChange={(e) => setWins(wins.map((x, j) => j === i ? { ...x, start_time: e.target.value } : x))} />
             <input style={inputStyle} type="time" value={hhmm(w.end_time)} onChange={(e) => setWins(wins.map((x, j) => j === i ? { ...x, end_time: e.target.value } : x))} />
             <input style={inputStyle} placeholder="Curriculum framework" value={w.curriculum_framework} onChange={(e) => setWins(wins.map((x, j) => j === i ? { ...x, curriculum_framework: e.target.value } : x))} />
-            <label style={{ fontSize: "12.5px" }}><input type="checkbox" checked={w.framework_verified} onChange={(e) => setWins(wins.map((x, j) => j === i ? { ...x, framework_verified: e.target.checked } : x))} /> verified</label>
-            <div style={{ gridColumn: "1 / -1", display: "flex", gap: "14px", flexWrap: "wrap", alignItems: "center", fontSize: "12.5px", color: "#334155" }}>
+            <label style={{ fontSize: "13px" }}><input type="checkbox" checked={w.framework_verified} onChange={(e) => setWins(wins.map((x, j) => j === i ? { ...x, framework_verified: e.target.checked } : x))} /> verified</label>
+            <div style={{ gridColumn: "1 / -1", display: "flex", gap: "14px", flexWrap: "wrap", alignItems: "center", fontSize: "13px", color: "#374151" }}>
               {(level === "SHS" ? [["Break (30 min)", "break_start", "break_end"]] : [["Recess", "recess_start", "recess_end"], ["Lunch", "lunch_start", "lunch_end"]]).map(([label, a, b]) => (
                 <span key={label}><b>{label}</b>{" "}
                   <input style={inputStyle} type="time" value={hhmm(w[a] || "")} onChange={(e) => setWins(wins.map((x, j) => j === i ? { ...x, [a]: e.target.value || null } : x))} />{" – "}
                   <input style={inputStyle} type="time" value={hhmm(w[b] || "")} onChange={(e) => setWins(wins.map((x, j) => j === i ? { ...x, [b]: e.target.value || null } : x))} /></span>))}
             </div>
           </div>))}
-        <p style={{ color: "#64748b", fontSize: "12.5px" }}>{level === "SHS" ? "SHS has one 30-minute break (no separate recess or lunch)." : "Recess and lunch are both kept for JHS."} Breaks are never used for classes and show in the timetable and the printout. Classes are never placed outside a grade level's window. Current: {wins.map((w) => `Grade ${w.grade_level} ${ampm(hhmm(w.start_time))}–${ampm(hhmm(w.end_time))}`).join(" · ")}</p>
+        <p style={{ color: "#6b7280", fontSize: "13px" }}>{level === "SHS" ? "SHS has one 30-minute break (no separate recess or lunch)." : "Recess and lunch are both kept for JHS."} Breaks are never used for classes and show in the timetable and the printout. Classes are never placed outside a grade level's window. Current: {wins.map((w) => `Grade ${w.grade_level} ${ampm(hhmm(w.start_time))}–${ampm(hhmm(w.end_time))}`).join(" · ")}</p>
       </div>
       {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
       <button style={btnPrimary} disabled={busy} onClick={save}>{busy ? "Saving…" : "Save settings"}</button>

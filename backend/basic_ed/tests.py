@@ -377,3 +377,105 @@ class PrincipalAnalyticsTests(TestCase):
         d = self._get(self.shs, level="SHS").json()
         self.assertFalse(d["has_schedule"])
         self.assertEqual(d["summary"]["classes"], 0)
+
+from datetime import time as dtime
+
+from rest_framework.test import APIClient
+
+
+class PrincipalAssignAnywayTests(TestCase):
+    """SHS / JHS pins in three groups and the Principal's manual Assign anyway (basic_ed/teacher_groups.py)."""
+
+    def setUp(self):
+        from accounts.models import User
+        from basic_ed.engine import eligible
+        call_command("seed_basic_ed", stdout=StringIO())
+        m.Faculty.objects.update(is_active=False)                          # only the teachers made here
+        self.ay = m.AcademicYear.objects.get(label="2026-2027")
+        self.sec = m.Section.objects.filter(level="SHS", grade_level=11, academic_year=self.ay).first()
+        self.sub = next(s for s in m.CurriculumSubject.objects.filter(level="SHS", grade_level=11, academic_year=self.ay, is_active=True,
+                                                                      grading_period__in=[0, 1]).exclude(category="guidance")
+                        if s.strand_id in (None, self.sec.strand_id) and (s.specialization or s.learning_area))
+        self.need = (self.sub.specialization or self.sub.learning_area).split("|")[0].strip()
+        self.principal = User.objects.create(username="pshs", role="principal", school_level="SHS", school_id="PSX", first_name="Pia", last_name="Prin")
+        self.admin = User.objects.create(username="itx", role="admin", school_id="AX")
+
+        def fac(name, specs, hours=40, user=None):
+            u = user or User.objects.create(username=name, role="teacher", school_level="SHS", school_id=name, first_name=name, last_name="T")
+            return m.Faculty.objects.create(user=u, level="SHS", employee_id=name, specializations=specs, max_weekly_hours=hours)
+        self.q1 = fac("q1", self.need)
+        self.unq = fac("unq", "Nothing Related")
+        self.unq_full = fac("unqfull", "Nothing Related", hours=1)
+        self.unq_window = fac("unqwin", "Nothing Related")
+        m.Availability.objects.create(faculty=self.unq_window, day="Mon", start_time=dtime(7), end_time=dtime(7, 30), available=True)
+        self.own = fac("ownp", "Nothing Related", user=self.principal)        # the Principal also has a teacher profile
+        self.assertTrue(eligible(self.q1, self.sub) and not eligible(self.unq, self.sub))
+        self.c = APIClient()
+
+    def _groups(self, user=None):
+        from basic_ed import teacher_groups as tg
+        return tg.build(user or self.principal, self.sec, self.sub)
+
+    def _pin(self, user=None, faculty=None, **extra):
+        self.c.force_authenticate(user or self.principal)
+        body = {"level": "SHS", "faculty": (faculty or self.unq).id, "section": self.sec.id, "subject": self.sub.id, **extra}
+        return self.c.post("/api/basic-ed/assignments/?level=SHS", body, format="json")
+
+    def test_qualified_free_teacher_is_suggested_and_other_group_is_hidden(self):
+        g = self._groups()
+        self.assertEqual([o["id"] for o in g["suggested"]], [self.q1.id])
+        self.assertFalse(g["other_shown"])
+        self.assertEqual(g["other"], [])
+
+    def test_qualified_full_shows_other_group_without_the_principal_window_or_full_people(self):
+        m.Faculty.objects.filter(pk=self.q1.pk).update(max_weekly_hours=1)
+        g = self._groups()
+        self.assertEqual(g["suggested"], [])
+        self.assertFalse(g["qualified"][0]["selectable"])
+        self.assertTrue(g["qualified"][0]["tag"].startswith(("Full:", "Over the limit")))
+        self.assertTrue(g["other_shown"])
+        self.assertEqual(g["approval_text"], "Not connected to this subject. Principal approval required.")
+        ids = [o["id"] for o in g["other"]]
+        self.assertEqual(ids, [self.unq.id])
+        self.assertNotIn(self.own.id, ids)                                         # never the Principal themself
+        self.assertNotIn(self.unq_window.id, ids)                                  # not enough periods inside their availability
+        self.assertEqual([x["id"] for x in g["full_line"]], [self.unq_full.id])
+        all_ids = [o["id"] for o in g["suggested"] + g["qualified"] + g["other"]] + [x["id"] for x in g["full_line"]]
+        self.assertEqual(len(all_ids), len(set(all_ids)))
+        self.assertFalse(self._groups(self.admin)["other_shown"])                  # IT admin: view only, no Assign anyway
+
+    def test_pin_api_rejections_and_a_valid_assign_anyway(self):
+        m.Faculty.objects.filter(pk=self.q1.pk).update(max_weekly_hours=1)
+        self.assertEqual(self._pin().status_code, 400)                                       # not qualified, no flag
+        self.assertEqual(self._pin(override_qualification=True, override_reason="").status_code, 400)   # no reason
+        self.assertEqual(self._pin(user=self.admin, override_qualification=True, override_reason="no one free").status_code, 400)
+        self.assertEqual(self._pin(faculty=self.own, override_qualification=True, override_reason="I can").status_code, 400)
+        jhs = self.principal.__class__.objects.create(username="pjhs", role="principal", school_level="JHS", school_id="PJX")
+        self.assertEqual(self._pin(user=jhs, override_qualification=True, override_reason="no one free").status_code, 403)
+        r = self._pin(override_qualification=True, override_reason="no qualified teacher free")
+        self.assertEqual(r.status_code, 201, r.data)
+        pin = m.TeachingAssignment.objects.get(pk=r.data["id"])
+        self.assertEqual((pin.qualification_override["reason"], pin.qualification_override["role"]), ("no qualified teacher free", "Principal"))
+        self.c.force_authenticate(self.principal)
+        d = self.c.get("/api/basic-ed/assignments/options/", {"level": "SHS", "section": self.sec.id}).data
+        row = next(x for x in d["subjects"] if x["subject_id"] == self.sub.id)
+        self.assertEqual(row["pin"]["badge"], "Assigned by Principal (not connected)")
+
+    def test_refused_while_a_qualified_teacher_is_free(self):
+        r = self._pin(override_qualification=True, override_reason="prefer this one")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("Choose from Suggested", r.data["detail"])
+
+    def test_generate_copies_the_note_onto_the_periods_and_writes_the_audit(self):
+        from basic_ed.services import generate
+        m.Faculty.objects.filter(pk=self.q1.pk).update(max_weekly_hours=1)
+        self.assertEqual(self._pin(override_qualification=True, override_reason="no qualified teacher free").status_code, 201)
+        run, _unresolved = generate("SHS", self.ay, 1, 11, self.principal)
+        mine = list(run.entries.filter(section=self.sec, subject=self.sub))
+        self.assertTrue(mine)
+        self.assertTrue(all(e.teacher_id == self.unq.id and e.qualification_override["reason"] == "no qualified teacher free" for e in mine))
+        self.assertFalse(run.conflicts.filter(kind="not_qualified").exists())          # a warning, not an error
+        self.assertTrue(run.conflicts.filter(kind="assigned_anyway", severity="warning").exists())
+        self.assertTrue(run.events.filter(action="assigned_anyway").exists())
+        others = run.entries.exclude(section=self.sec, subject=self.sub).filter(teacher=self.unq)
+        self.assertFalse(others.filter(qualification_override__isnull=False).exists())

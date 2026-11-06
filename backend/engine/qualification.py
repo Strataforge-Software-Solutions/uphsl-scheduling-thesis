@@ -6,6 +6,7 @@ MAJOR subjects (owned by the Dean) go only to a teacher of the subject's college
      discipline as the subject (e.g. BSIT, MSIT, "Artificial Intelligence" for Computer Science and Information Technology subjects;
      "Physical Therapy" / "Occupational Therapy" / "Respiratory Therapy" for those programs' subjects; "Anatomy", "Pharmacology" ...
      for subjects with those words in the title: see PHRASE_FAMILIES).
+  (Nursing, Radiologic Technology, Business, Hospitality / Tourism and Communication programs: MAJOR_FAMILIES.)
   Nothing weaker counts: a shared word between the subject title and a degree, or simply being in the same college, is NOT enough.
   A major with no field recorded and no same-discipline teacher is reported ("tag the subject's field"), never given to just anyone.
 GEN ED (minor) subjects (owned by the Registrar) are taught by the College of Arts and Science (CAS):
@@ -46,6 +47,29 @@ PHRASE_FAMILIES = {
     "research": (r"\bresearch\b", r"\bevidence[- ]based practice\b"),
 }
 _PHRASES = {name: [re.compile(p) for p in pats] for name, pats in PHRASE_FAMILIES.items()}
+
+# Program disciplines for MAJOR subjects only (a major also requires the teacher to belong to the subject's college). Matched as phrases
+# in the teacher's degree / specialization / qualification and in the subject's field, title and program name -- e.g. a "BS Radiologic
+# Technology" or "Radiographic Positioning" specialist for the BS Radiologic Technology subjects. Not used for Gen Ed (whose own rule is
+# the College of Arts and Science one), so a "Communication" specialist of another college never gets Purposive Communication this way.
+MAJOR_FAMILIES = {
+    "nursing": (r"\bnurs(e|es|ing)\b", r"\bbsn\b"),
+    "radiologic": (r"radiolog", r"radiograph", r"radiation", r"\bimaging\b", r"ultrasonograph", r"sonograph", r"computed tomography",
+                   r"\bx-?ray", r"mammograph", r"\bmri\b", r"\bradtech\b"),
+    "business": (r"\bbusiness\b", r"\bbsba\b", r"marketing", r"human resource", r"accounting", r"\beconomics?\b", r"entrepreneur",
+                 r"\bfinanc", r"taxation", r"operations management", r"organizational behavio", r"labor law", r"strategic management",
+                 r"\bmba\b|master of business"),
+    "hospitality": (r"hospitality", r"tourism", r"culinary", r"food and beverage", r"\bbaking\b", r"pastry", r"front office", r"lodging",
+                    r"housekeeping", r"bar and beverage", r"events? management", r"tour guid", r"\btravel\b", r"\bhotel", r"\bcuisine\b"),
+    "communication": (r"communication", r"journalism", r"broadcast", r"\bmedia\b", r"public relations", r"advertising", r"\bfilm\b",
+                      r"\bbacomm\b"),
+}
+_MAJOR_RX = {name: [re.compile(p) for p in pats] for name, pats in MAJOR_FAMILIES.items()}
+
+
+def _major_fams(text):
+    low = (text or "").lower()
+    return {name for name, pats in _MAJOR_RX.items() if any(p.search(low) for p in pats)}
 
 CAS = "College of Arts and Science"
 # Gen Ed areas: (label, patterns that find the area in a SUBJECT's field / title, patterns that find it in a TEACHER's degree /
@@ -145,7 +169,7 @@ def _teacher_info(t, spec_ids):
         user = getattr(t, "user", None)
         deps = set(getattr(user, "departments", None) or ([user.department] if getattr(user, "department", None) else [])) if user else set()
         creds = [t.degree, t.qualifications] + specs
-        info = {"words": words, "fams": _fams(words) | _phrase_fams(text), "content": words - _STOP, "deps": deps,
+        info = {"words": words, "fams": _fams(words) | _phrase_fams(text), "mfams": _major_fams(text), "content": words - _STOP, "deps": deps,
                 "areas": _areas_of(creds, "related"), "explicit": _areas_of(specs, "explicit")}
         t._qinfo = info
     return info
@@ -159,6 +183,7 @@ def _subject_info(subject):
         prog = getattr(subject, "program", None)
         prog_name = getattr(prog, "name", "") if subject.classification != "minor" else ""
         info = {"fams": _fams(words | _words(prog_name)) | _phrase_fams(f"{field} {subject.title} {prog_name}"),
+                "mfams": _major_fams(f"{field} {subject.title} {prog_name}") if subject.classification != "minor" else set(),
                 "content": words - _STOP, "field": field}
         subject._qinfo = info
     return info
@@ -175,7 +200,8 @@ def is_qualified(teacher, subject, section, spec_ids):
     if subject.field_id is not None and subject.field_id in spec_ids:
         return True
     if major:
-        return bool(s["fams"] & t["fams"])   # specialization or same discipline only: no title-word match, no "same college" fallback
+        # specialization or same discipline only: no title-word match, no "same college" fallback
+        return bool(s["fams"] & t["fams"]) or bool(s["mfams"] & t["mfams"])
     # GEN ED: the College of Arts and Science, or an explicit specialization / the subject's own discipline elsewhere
     areas = subject_areas(subject)
     fams = s["fams"] | {GEN_ED_AREAS[a][3] for a in areas if GEN_ED_AREAS[a][3]}

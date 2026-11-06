@@ -12,7 +12,7 @@ class ExamScheduleSerializer(serializers.ModelSerializer):
     semester = serializers.CharField(source="section.semester", read_only=True)
     program_name = serializers.CharField(source="section.program.name", read_only=True)
     department = serializers.CharField(source="section.program.department", read_only=True)
-    proctor_name = serializers.CharField(source="proctor.user.username", read_only=True)
+    proctor_name = serializers.SerializerMethodField()          # a name, never the login / school ID
     proctor_full_name = serializers.SerializerMethodField()
     room_name = serializers.CharField(source="room.name", read_only=True)
     timeslot_day = serializers.CharField(source="timeslot.day", read_only=True)
@@ -28,6 +28,10 @@ class ExamScheduleSerializer(serializers.ModelSerializer):
         rows = (ExamSchedule.objects.filter(merge_key=obj.merge_key, exam_date=obj.exam_date, timeslot_id=obj.timeslot_id)
                 .exclude(pk=obj.pk).select_related("section__program"))
         return [f"{r.section.program.name} {r.section.name}" for r in rows]
+
+    def get_proctor_name(self, obj):
+        u = obj.proctor.user if obj.proctor_id else None
+        return (u.get_full_name().strip() or "Unnamed teacher") if u else ""
 
     def get_proctor_full_name(self, obj):
         u = obj.proctor.user

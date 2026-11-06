@@ -8,6 +8,9 @@ import AdminRooms from "./AdminRooms";
 import { AddStaffModal, BulkCreateAccounts } from "./AccountTools";
 import { AdminHealthCard, AccountHygieneCard, AuditTrailCard } from "./InsightCards";
 import HowToUse from "./HowToUse";
+import AuditLogs from "./AuditLogs";
+import { useLandingTab } from "../services/preferences";
+import { formatDateTime } from "../utils/formatDateTime";
 
 /* IT-admin workspace: setup health + counts, account tools, and clear-generated tools.
    Shown for role "admin" (or a Django superuser with no regular U-FAST role). */
@@ -15,14 +18,15 @@ import HowToUse from "./HowToUse";
 // Same section style as the Dean and Registrar workspaces.
 const NAV = [
   { group: "Insights" },
-  { key: "overview", label: "Overview", icon: "🧭" },
-  { key: "activity", label: "Activity", icon: "🕘" },
+  { key: "overview", label: "Overview", icon: "" },
+  { key: "activity", label: "Activity", icon: "" },
+  { key: "audit", label: "Audit logs", icon: "" },
   { group: "People" },
-  { key: "accounts", label: "Accounts", icon: "👥" },
+  { key: "accounts", label: "Accounts", icon: "" },
   { group: "Management" },
-  { key: "rooms", label: "Rooms", icon: "🏫" },
+  { key: "rooms", label: "Rooms", icon: "" },
   { group: "Data" },
-  { key: "data", label: "Data Tools", icon: "🧹" },
+  { key: "data", label: "Data Tools", icon: "" },
 ];
 
 const HEADERS = {
@@ -31,10 +35,11 @@ const HEADERS = {
   rooms: { title: "Rooms", subtitle: "Add, edit, view and manage the room records used by every scheduling dropdown." },
   data: { title: "Data Tools", subtitle: "Clear generated class or exam schedules so they can be generated again." },
   activity: { title: "Recent Activity", subtitle: "Latest changes recorded in the schedule log." },
+  audit: { title: "Audit Logs", subtitle: "Who changed what, when, the values before and after, and from which IP address. Read only." },
 };
 
-const card = { background: "white", borderRadius: "10px", padding: "20px 24px", marginBottom: "24px", border: "1px solid #e0e6ed", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" };
-const LEVEL = { error: { icon: "⛔", color: "#a4231a" }, warn: { icon: "⚠️", color: "#96690a" }, info: { icon: "ℹ️", color: "#475569" }, ok: { icon: "✅", color: "#1e7a45" } };
+const card = { background: "white", borderRadius: 6, padding: "20px 24px", marginBottom: "24px", border: "1px solid #e5e7eb", boxShadow: "none" };
+const LEVEL = { error: { icon: "Error:", color: "#b91c1c" }, warn: { icon: "Warning:", color: "#92400e" }, info: { icon: "Note:", color: "#4b5563" }, ok: { icon: "OK:", color: "#166534" } };
 
 function useLoad(fn, deps) {
   const [data, setData] = useState(null);
@@ -50,16 +55,16 @@ function useLoad(fn, deps) {
 
 function Stat({ label, value }) {
   return (
-    <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "12px 16px", minWidth: "120px" }}>
-      <div style={{ fontSize: "22px", fontWeight: 700, color: "#003366" }}>{value}</div>
-      <div style={{ fontSize: "12px", color: "#64748b" }}>{label}</div>
+    <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "8px 12px", minWidth: "120px" }}>
+      <div style={{ fontSize: "18px", fontWeight: 600, color: "#111827", fontVariantNumeric: "tabular-nums" }}>{value}</div>
+      <div style={{ fontSize: "12px", color: "#6b7280" }}>{label}</div>
     </div>
   );
 }
 
 function Overview() {
   const [data, error, reload] = useLoad(() => API.get("/accounts/admin/overview/").then((r) => r.data));
-  if (error) return <p style={{ color: "red" }}>{error} <button onClick={reload}>Try again</button></p>;
+  if (error) return <p style={{ color: "#b91c1c" }}>{error} <button onClick={reload}>Try again</button></p>;
   if (!data) return <p>Loading…</p>;
   const c = data.counts;
   return (
@@ -76,7 +81,7 @@ function Overview() {
         <h3 style={{ marginTop: 0, color: "#003366" }}>Setup health</h3>
         <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
           {data.checks.map((k, i) => (
-            <li key={i} style={{ padding: "6px 0", color: LEVEL[k.level].color, fontSize: "14px" }}>{LEVEL[k.level].icon} {k.text}</li>
+            <li key={i} style={{ padding: "6px 0", color: LEVEL[k.level].color, fontSize: "14px" }}><strong style={{ fontWeight: 600 }}>{LEVEL[k.level].icon}</strong> {k.text}</li>
           ))}
         </ul>
       </div>
@@ -96,7 +101,7 @@ function Overview() {
           <Stat label="Conflict log entries" value={data.conflict_log_entries} />
         </div>
       </div>
-      <p style={{ fontSize: "13px", color: "#64748b" }}>
+      <p style={{ fontSize: "13px", color: "#6b7280" }}>
         The full data editor is the Django admin at <b>{(process.env.REACT_APP_API_BASE_URL || "http://127.0.0.1:8000/api").replace(/\/api\/?$/, "")}/admin/</b>.
       </p>
     </div>
@@ -133,7 +138,7 @@ export function Accounts({ level } = {}) {
       username: r.username, extra_departments: answer.split(";").map((x) => x.trim()).filter(Boolean) }));
   };
 
-  if (error) return <p style={{ color: "red" }}>{error} <button onClick={reload}>Try again</button></p>;
+  if (error) return <p style={{ color: "#b91c1c" }}>{error} <button onClick={reload}>Try again</button></p>;
   if (!rows) return <p>Loading accounts…</p>;
   const q = search.trim().toLowerCase();
   // Every word typed must match somewhere in: School ID, name, username, email, role (raw + friendly),
@@ -146,12 +151,12 @@ export function Accounts({ level } = {}) {
   // SHS / JHS workspace: only that level's principal and teachers
   const inLevel = (r) => !level || ((r.role === "principal" || r.role === "teacher") && r.school_level === level);
   const shown = rows.filter((r) => inLevel(r) && (() => { const h = haystack(r); return words.every((w) => h.includes(w)); })());
-  const btn = { background: "white", border: "1px solid #cdd6e0", padding: "5px 10px", borderRadius: "7px", fontSize: "12.5px", fontWeight: 600, cursor: "pointer", color: "#003366", marginRight: "6px" };
+  const btn = { background: "white", border: "1px solid #d1d5db", padding: "5px 10px", borderRadius: 4, fontSize: "13px", fontWeight: 600, cursor: "pointer", color: "#003366", marginRight: "6px" };
 
   return (
     <div style={card}>
       {level ? (
-        <p style={{ fontSize: "12.5px", color: "#64748b", marginTop: 0 }}>Teacher accounts of this level are added in the <b>Faculty</b> tab; this list is for resetting passwords and enabling or disabling accounts.</p>
+        <p style={{ fontSize: "13px", color: "#6b7280", marginTop: 0 }}>Teacher accounts of this level are added in the <b>Faculty</b> tab; this list is for resetting passwords and enabling or disabling accounts.</p>
       ) : (
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end", marginBottom: "12px" }}>
           <button style={{ ...btn, background: "#003366", color: "white", marginRight: 0 }} onClick={() => setShowAdd(true)}>Add account</button>
@@ -166,19 +171,19 @@ export function Accounts({ level } = {}) {
                value={search} onChange={(e) => setSearch(e.target.value)} />
         {search && <button style={{ ...btn, marginRight: 0 }} onClick={() => setSearch("")}>Clear search</button>}
       </div>
-      <div style={{ fontSize: "12.5px", color: "#64748b", marginBottom: "8px" }}>
+      <div style={{ fontSize: "13px", color: "#6b7280", marginBottom: "8px" }}>
         {q ? `${shown.length} account${shown.length === 1 ? "" : "s"} match` : `${shown.length} account${shown.length === 1 ? "" : "s"}`}{level ? " — principal and teachers of this level" : ""}
       </div>
-      {toast && <p style={{ color: toast.ok ? "#1e7a45" : "#a4231a", fontSize: "13px" }}>{toast.text}</p>}
+      {toast && <p style={{ color: toast.ok ? "#1e7a45" : "#b91c1c", fontSize: "13px" }}>{toast.text}</p>}
       <div className="scroll-box">
         <table>
           <thead><tr><th>School ID</th><th>Person</th><th>Email</th><th>Role</th><th>Department(s)</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody>
-            {shown.length === 0 && <tr><td colSpan={7} style={{ color: "#64748b" }}>No account matches “{search}”. <button style={btn} onClick={() => setSearch("")}>Clear search</button></td></tr>}
+            {shown.length === 0 && <tr><td colSpan={7} style={{ color: "#6b7280" }}>No account matches “{search}”. <button style={btn} onClick={() => setSearch("")}>Clear search</button></td></tr>}
             {shown.map((r) => (
               <tr key={r.id} style={r.is_active ? undefined : { opacity: 0.55 }}>
                 <td>{r.school_id}</td>
-                <td style={{ fontWeight: 600 }}>{r.full_name}<div style={{ fontSize: "11.5px", color: "#94a3b8", fontWeight: 400 }}>{r.username}</div></td>
+                <td style={{ fontWeight: 600 }}>{r.full_name}<div style={{ fontSize: "12px", color: "#6b7280", fontWeight: 400 }}>{r.username}</div></td>
                 <td style={{ wordBreak: "break-word" }}>{r.email || "—"}</td>
                 <td><Badge tone="neutral">{roleLabel(r)}</Badge></td>
                 <td>{r.department || "—"}</td>
@@ -243,19 +248,19 @@ function DataTools() {
       </div>
       <button onClick={() => run(false)} disabled={busy}>Preview what would be deleted</button>
       {preview && (
-        <div style={{ marginTop: "14px", padding: "12px", background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: "8px" }}>
+        <div style={{ marginTop: "14px", padding: "12px", background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 6 }}>
           <p style={{ margin: "0 0 8px" }}><b>{preview.count}</b> row(s) would be deleted
             {preview.kept_approved ? ` (${preview.kept_approved} approved/published row(s) will be kept)` : ""}.</p>
           {preview.count > 0 && (
-            <button style={{ background: "#a4231a", color: "white" }} disabled={busy}
+            <button style={{ background: "#b91c1c", color: "white" }} disabled={busy}
               onClick={() => window.confirm(`Delete ${preview.count} row(s)? This cannot be undone.`) && run(true)}>
               Yes, delete them
             </button>
           )}
         </div>
       )}
-      {msg && <p style={{ color: msg.ok ? "#1e7a45" : "#a4231a" }}>{msg.text}</p>}
-      <p style={{ fontSize: "12.5px", color: "#64748b", marginTop: "14px" }}>
+      {msg && <p style={{ color: msg.ok ? "#1e7a45" : "#b91c1c" }}>{msg.text}</p>}
+      <p style={{ fontSize: "13px", color: "#6b7280", marginTop: "14px" }}>
         Without the "include approved" box only Draft rows are removed, so nothing already signed off is lost by accident.
       </p>
     </div>
@@ -264,13 +269,13 @@ function DataTools() {
 
 function Activity() {
   const [data, error, reload] = useLoad(() => API.get("/accounts/admin/overview/").then((r) => r.data));
-  if (error) return <p style={{ color: "red" }}>{error} <button onClick={reload}>Try again</button></p>;
+  if (error) return <p style={{ color: "#b91c1c" }}>{error} <button onClick={reload}>Try again</button></p>;
   if (!data) return <p>Loading…</p>;
   return (
     <div style={card}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: "6px", marginBottom: "10px" }}>
         <h3 style={{ margin: 0, color: "#003366" }}>Recent Activity</h3>
-        <span style={{ fontSize: "12.5px", color: "#64748b" }}>{data.recent_logs.length} most recent entries · newest first</span>
+        <span style={{ fontSize: "13px", color: "#6b7280" }}>{data.recent_logs.length} most recent entries · newest first</span>
       </div>
       {data.recent_logs.length === 0 ? <p>No schedule changes have been logged yet.</p> : (
         <div className="scroll-box" role="region" aria-label="Recent activity" tabIndex={0}>
@@ -278,7 +283,7 @@ function Activity() {
             <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Details</th></tr></thead>
             <tbody>
               {data.recent_logs.map((l, i) => (
-                <tr key={i}><td style={{ whiteSpace: "nowrap" }}>{new Date(l.when).toLocaleString()}</td><td>{l.who}</td><td>{l.action}</td><td style={{ wordBreak: "break-word" }}>{l.text}</td></tr>
+                <tr key={i}><td style={{ whiteSpace: "nowrap" }}>{formatDateTime(l.when)}</td><td>{l.who}</td><td>{l.action}</td><td style={{ wordBreak: "break-word" }}>{l.text}</td></tr>
               ))}
             </tbody>
           </table>
@@ -289,7 +294,8 @@ function Activity() {
 }
 
 function AdminDashboard() {
-  const [tab, setTab] = useState("overview");
+  const landing = useLandingTab(NAV, "overview");
+  const [tab, setTab] = useState(landing);
   const user = getCurrentUser();
   const h = HEADERS[tab];
   const handleLogout = () => { logout(); window.location.href = "/login"; };
@@ -306,6 +312,7 @@ function AdminDashboard() {
           {tab === "rooms" && <AdminRooms />}
           {tab === "data" && <DataTools />}
           {tab === "activity" && <><HowToUse role="admin" tab="activity" /><Activity /><AuditTrailCard /></>}
+          {tab === "audit" && <><HowToUse role="admin" tab="audit" /><AuditLogs /></>}
         </div>
       </div>
     </div>

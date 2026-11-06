@@ -1,5 +1,6 @@
 import React from "react";
 import API from "../services/api";
+import { formatDate } from "../utils/formatDateTime";
 
 /* Small, dependency-free chart primitives (plain divs/SVG, no chart library
    to install) for an HR-style analytics look: stat tiles up top, horizontal
@@ -7,20 +8,18 @@ import API from "../services/api";
    RegistrarDashboard (institution-wide) and FacultyDashboard (Dean's own
    department) so both Analytics tabs look consistent. */
 
+// a figure is colored only when the color means something (red = problem, amber = needs attention); otherwise plain text
+const STATUS_ACCENT = new Set(["#b91c1c", "#b91c1c", "#c0392b", "#dc2626", "#991b1b", "#b45309", "#92400e", "#96690a"]);
+
 export function StatTile({ label, value, accent = "#003366" }) {
   return (
     <div style={{
-      background: "white", border: "1px solid #e0e6ed", borderRadius: "10px",
-      padding: "16px 18px", minWidth: "150px", flex: "1 1 150px",
-      boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
+      background: "white", border: "1px solid #e5e7eb", borderRadius: 6,
+      padding: "8px 12px", minWidth: "140px", flex: "1 1 140px",
     }}>
-      <div style={{
-        fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase",
-        letterSpacing: "0.4px", marginBottom: "6px",
-      }}>
-        {label}
-      </div>
-      <div style={{ fontSize: "26px", fontWeight: 700, color: accent }}>{value}</div>
+      <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "2px" }}>{label}</div>
+      <div style={{ fontSize: "18px", fontWeight: 600, color: STATUS_ACCENT.has(String(accent).toLowerCase()) ? accent : "#111827",
+        fontVariantNumeric: "tabular-nums" }}>{value}</div>
     </div>
   );
 }
@@ -29,7 +28,7 @@ export function StatTile({ label, value, accent = "#003366" }) {
    bars run left-to-right instead of a vertical column chart. */
 export function HBarChart({ data, color = "#003366", unit = "", emptyText = "No data yet." }) {
   if (!data || data.length === 0) {
-    return <p style={{ color: "#64748b", fontSize: "13px" }}>{emptyText}</p>;
+    return <p style={{ color: "#6b7280", fontSize: "13px" }}>{emptyText}</p>;
   }
   const max = Math.max(...data.map((d) => d.value), 1);
   return (
@@ -39,21 +38,21 @@ export function HBarChart({ data, color = "#003366", unit = "", emptyText = "No 
           <div
             title={d.label}
             style={{
-              width: "130px", flexShrink: 0, fontSize: "12.5px", color: "#1f2937",
+              width: "130px", flexShrink: 0, fontSize: "13px", color: "#111827",
               textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
             }}
           >
             {d.label}
           </div>
-          <div style={{ flex: 1, background: "#eef2f7", borderRadius: "6px", height: "16px" }}>
+          <div style={{ flex: 1, background: "#f3f4f6", borderRadius: 2, height: "14px" }}>
             <div
               style={{
-                width: `${Math.max(3, (d.value / max) * 100)}%`, background: color,
-                height: "100%", borderRadius: "6px",
+                width: `${Math.max(2, (d.value / max) * 100)}%`, background: color,
+                height: "100%", borderRadius: 2,
               }}
             />
           </div>
-          <div style={{ width: "56px", flexShrink: 0, fontSize: "12.5px", color: "#374151", fontWeight: 600 }}>
+          <div style={{ minWidth: "56px", flexShrink: 0, fontSize: "13px", color: "#111827", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
             {d.value}{unit}
           </div>
         </div>
@@ -70,7 +69,7 @@ const HEATMAP_BUCKETS = ["Morning", "Afternoon", "Evening"];
 
 export function PatternHeatmap({ patterns, color = "3, 51, 102" /* rgb for #003366 */ }) {
   if (!patterns || patterns.length === 0) {
-    return <p style={{ color: "#64748b", fontSize: "13px" }}>No historical pattern data.</p>;
+    return <p style={{ color: "#6b7280", fontSize: "13px" }}>No historical pattern data.</p>;
   }
   const byKey = {};
   let max = 1;
@@ -87,16 +86,16 @@ export function PatternHeatmap({ patterns, color = "3, 51, 102" /* rgb for #0033
       <table style={{ borderCollapse: "collapse" }}>
         <thead>
           <tr>
-            <th style={{ padding: "6px 10px", fontSize: "11.5px", color: "#64748b" }}></th>
+            <th style={{ padding: "6px 10px", fontSize: "12px", color: "#6b7280" }}></th>
             {days.map((d) => (
-              <th key={d} style={{ padding: "6px 10px", fontSize: "11.5px", color: "#64748b", textAlign: "center" }}>{d}</th>
+              <th key={d} style={{ padding: "6px 10px", fontSize: "12px", color: "#6b7280", textAlign: "center" }}>{d}</th>
             ))}
           </tr>
         </thead>
         <tbody>
           {HEATMAP_BUCKETS.map((bucket) => (
             <tr key={bucket}>
-              <td style={{ padding: "6px 10px", fontSize: "12px", color: "#1f2937", fontWeight: 600 }}>{bucket}</td>
+              <td style={{ padding: "6px 10px", fontSize: "12px", color: "#111827", fontWeight: 600 }}>{bucket}</td>
               {days.map((d) => {
                 const cell = byKey[`${d}|${bucket}`];
                 const alpha = cell ? Math.max(0.12, cell.count / max) : 0;
@@ -105,11 +104,11 @@ export function PatternHeatmap({ patterns, color = "3, 51, 102" /* rgb for #0033
                     <div
                       title={cell ? `${cell.count} occurrence(s) (${cell.share_pct}%)` : "No data"}
                       style={{
-                        width: "52px", height: "36px", borderRadius: "6px",
+                        width: "52px", height: "36px", borderRadius: 3,
                         background: `rgba(${color}, ${alpha})`,
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "11.5px", fontWeight: 600,
-                        color: alpha > 0.5 ? "white" : "#1f2937",
+                        fontSize: "12px", fontWeight: 600,
+                        color: alpha > 0.5 ? "white" : "#111827",
                       }}
                     >
                       {cell ? cell.count : ""}
@@ -154,10 +153,10 @@ export function HistoricalHint({ day, startTime, endTime, roomName }) {
 
   return (
     <div style={{
-      marginTop: "8px", padding: "10px 12px", background: "#fdf3e0", border: "1px solid #f1d9a8",
-      borderRadius: "8px", fontSize: "12.5px", color: "#6b4e0e",
+      marginTop: "8px", padding: "8px 12px", background: "#f9fafb", border: "1px solid #e5e7eb",
+      borderRadius: 6, fontSize: "13px", color: "#374151",
     }}>
-      <strong>📜 Historical reference —</strong>{" "}
+      <strong style={{ fontWeight: 600 }}>Historical reference:</strong>{" "}
       {loading ? "checking 2021–2026 records…" : (
         !results || results.length === 0 ? (
           <span>No historical record for this day/time{roomName ? ` in ${roomName}` : ""}.</span>
@@ -180,7 +179,7 @@ export function HistoricalHint({ day, startTime, endTime, roomName }) {
 }
 
 
-const ACTIVITY_ICON = { generated: "✨", approved: "✅", exam: "📝", conflict: "⚠️" };
+const ACTIVITY_LABEL = { generated: "Generated", approved: "Approved", exam: "Exam", conflict: "Conflict" };
 
 function timeAgo(iso) {
   const secs = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
@@ -188,24 +187,24 @@ function timeAgo(iso) {
   if (secs < 3600) return `${Math.floor(secs / 60)} min ago`;
   if (secs < 86400) return `${Math.floor(secs / 3600)} hr ago`;
   if (secs < 7 * 86400) return `${Math.floor(secs / 86400)} day${secs >= 2 * 86400 ? "s" : ""} ago`;
-  return new Date(iso).toLocaleDateString();
+  return formatDate(iso);
 }
 
 /* Recent activity feed: newest first, from /analytics/ -> recent_activity. */
 export function RecentActivity({ items }) {
   if (!items || items.length === 0) {
-    return <p style={{ color: "#64748b", fontSize: "13px" }}>No activity yet. Generate a schedule and it will show up here.</p>;
+    return <p style={{ color: "#6b7280", fontSize: "13px" }}>No activity yet.</p>;
   }
   return (
     <ul className="chart-scroll" style={{ listStyle: "none", margin: 0, padding: "0 6px 0 0", maxHeight: "420px" }}>
       {items.map((it, i) => (
         <li key={i} style={{
           display: "flex", gap: "12px", alignItems: "flex-start", padding: "10px 0",
-          borderTop: i === 0 ? "none" : "1px solid #eef2f6",
+          borderTop: i === 0 ? "none" : "1px solid #f3f4f6",
         }}>
-          <span style={{ fontSize: "16px", lineHeight: "20px" }}>{ACTIVITY_ICON[it.type] || "•"}</span>
-          <span style={{ flex: 1, fontSize: "13.5px", color: "#1f2937" }}>{it.text}</span>
-          <span style={{ fontSize: "12px", color: "#94a3b8", whiteSpace: "nowrap" }}>{timeAgo(it.when)}</span>
+          <span style={{ fontSize: "12px", lineHeight: "20px", color: it.type === "conflict" ? "#b91c1c" : "#4b5563", fontWeight: 600, minWidth: 72 }}>{ACTIVITY_LABEL[it.type] || "Update"}</span>
+          <span style={{ flex: 1, fontSize: "14px", color: "#111827" }}>{it.text}</span>
+          <span style={{ fontSize: "12px", color: "#6b7280", whiteSpace: "nowrap" }}>{timeAgo(it.when)}</span>
         </li>
       ))}
     </ul>

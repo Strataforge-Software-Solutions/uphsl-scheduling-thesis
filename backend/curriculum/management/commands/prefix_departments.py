@@ -7,12 +7,16 @@ faculty, rooms and building preferences all keep matching (the system matches de
   python manage.py prefix_departments --skip "Allied Health" --skip "Nursing"   # leave some as they are
 
 Only departments used by programs, deans or college faculty are renamed; nothing is deleted.
-Names that already start with "College of" / "School of" are left alone. SHS/JHS accounts are untouched.
+Names that already start with "College of" / "School of" are left alone. School levels (SHS, JHS, Senior / Junior High School,
+Basic Education, Elementary) are NEVER renamed, whatever role the account has: they are a different school level, not a college.
 """
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
 PREFIXES = ("college of", "school of", "institute of")
+# school levels, not colleges: never prefixed (e.g. a faculty account whose department is "SHS" stays "SHS")
+SCHOOL_LEVELS = {"shs", "jhs", "senior high school", "junior high school", "senior high", "junior high", "basic education",
+                 "basic ed", "elementary", "grade school", "integrated school"}
 
 
 class Command(BaseCommand):
@@ -36,7 +40,8 @@ class Command(BaseCommand):
             names |= {x.strip() for x in (ed or "").split(";") if x.strip()}
         skip = {s.strip().lower() for s in o["skip"]}
         mapping = {n: o["prefix"] + n.strip() for n in sorted(names)
-                   if n and not n.strip().lower().startswith(PREFIXES) and n.strip().lower() not in skip}
+                   if n and not n.strip().lower().startswith(PREFIXES) and n.strip().lower() not in skip
+                   and n.strip().lower() not in SCHOOL_LEVELS}
         if not mapping:
             self.stdout.write("Nothing to rename: every department already has a prefix.")
             return

@@ -43,26 +43,26 @@ test("Suggested group first; typing filters; keyboard picks; Esc closes; 'No tea
   await mount();
   const btn = container.querySelector('button[aria-label="Teacher"]');
   await key(btn, "ArrowDown");                                          // opens from the keyboard
-  const groups = [...container.querySelectorAll('[role="group"]')].map((g) => g.getAttribute("aria-label"));
+  const groups = [...document.querySelectorAll('[role="group"]')].map((g) => g.getAttribute("aria-label"));
   expect(groups).toEqual(["Suggested", "Other qualified"]);
-  const box = container.querySelector('[role="combobox"]');
+  const box = document.querySelector('[role="combobox"]');
   expect(document.activeElement).toBe(box);
   await type(box, "santos");
-  expect([...container.querySelectorAll('[role="option"]')].map((o) => o.textContent)).toEqual(["Santos, J. - 11 of 24 hrs"]);
+  expect([...document.querySelectorAll('[role="option"]')].map((o) => o.textContent)).toEqual(["Santos, J. - 11 of 24 hrs"]);
   await key(box, "Enter");
   expect(picked).toEqual(["7"]);
-  expect(container.querySelector('[role="listbox"]')).toBeNull();      // closed after picking
+  expect(document.querySelector('[role="listbox"]')).toBeNull();      // closed after picking
   await act(async () => { btn.click(); });
-  const box2 = container.querySelector('[role="combobox"]');
+  const box2 = document.querySelector('[role="combobox"]');
   await key(box2, "ArrowDown");                                         // Automatic -> first Suggested (Peña)
   await key(box2, "Enter");
   expect(picked).toEqual(["7", "8"]);
   await act(async () => { btn.click(); });
-  const box3 = container.querySelector('[role="combobox"]');
+  const box3 = document.querySelector('[role="combobox"]');
   await type(box3, "zzz");
-  expect(container.textContent).toContain("No teacher found");
+  expect(document.body.textContent).toContain("No teacher found");
   await key(box3, "Escape");
-  expect(container.querySelector('[role="listbox"]')).toBeNull();
+  expect(document.querySelector('[role="listbox"]')).toBeNull();
   expect(picked).toEqual(["7", "8"]);                                  // Esc picks nothing
 });
 
@@ -71,5 +71,45 @@ test("a disabled picker does not open, and a value outside the list shows its la
   const btn = container.querySelector('button[aria-label="Teacher"]');
   expect(btn.disabled).toBe(true);
   expect(btn.textContent).toContain("Old Teacher (current)");
-  expect(container.querySelector('[role="listbox"]')).toBeNull();
+  expect(document.querySelector('[role="listbox"]')).toBeNull();
+});
+
+test("the open list floats outside any clipping box (rendered at the page level, not inside the table)", async () => {
+  await mount();
+  container.style.overflow = "hidden";
+  await act(async () => { container.querySelector('button[aria-label="Teacher"]').click(); });
+  const list = document.querySelector('[role="listbox"]');
+  expect(list).not.toBeNull();
+  expect(container.contains(list)).toBe(false);                          // not clipped by the table's scroll box
+  expect(list.parentElement.style.position).toBe("fixed");
+});
+
+/* ---- keyboard: the grouped list with muted rows (Professor dropdown) and the "Assign anyway?" reason dialog */
+const GROUPED = [
+  { id: 1, label: "Ang, V. (12/24 hrs)", detail: "Lowest load", group: "Suggested" },
+  { id: 2, label: "Mazo, J. (24/24 hrs)", detail: "Full: 24/24 hrs", group: "Qualified", disabled: true },
+  { id: 3, label: "Cruz, L. (6/24 hrs)", detail: "Not connected", group: "Other available (not connected to this subject)", notConnected: true },
+];
+
+test("keyboard: ArrowDown opens, arrows skip muted rows, Enter picks, Escape closes", async () => {
+  await mount({ options: GROUPED, emptyLabel: "-- Professor --" });
+  const field = container.querySelector('button[aria-haspopup="listbox"]');
+  await act(async () => { field.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })); });
+  const search = document.querySelector('[role="combobox"]');
+  expect(search).not.toBeNull();
+  expect(document.activeElement).toBe(search);                                    // focus goes to the search box
+  const key = async (k) => act(async () => { search.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true })); });
+  await key("ArrowDown");                                                         // "-- Professor --" -> Ang
+  await key("ArrowDown");                                                         // Mazo is muted: skipped -> Cruz
+  expect(search.getAttribute("aria-activedescendant")).toMatch(/-3$/);
+  await key("Enter");
+  expect(picked[picked.length - 1]).toBe("3");
+  expect(document.querySelector('[role="combobox"]')).toBeNull();                 // closed after picking
+  await act(async () => { field.click(); });
+  await act(async () => { document.querySelector('[role="combobox"]').dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
+  expect(document.querySelector('[role="combobox"]')).toBeNull();
+  await act(async () => { field.click(); });
+  const muted = document.querySelector('[aria-disabled="true"]');
+  await act(async () => { muted.click(); });
+  expect(picked[picked.length - 1]).toBe("3");                                    // clicking a muted row picks nothing
 });

@@ -48,8 +48,8 @@ function useList(level, path, params) {
   return { rows, loading, error, load };
 }
 
-const TH = { textAlign: "left", fontSize: "11.5px", textTransform: "uppercase", color: "#64748b", padding: "8px 10px", borderBottom: "1px solid #e2e8f0" };
-const TD = { padding: "9px 10px", borderBottom: "1px solid #f1f5f9", fontSize: "13px", verticalAlign: "top" };
+const TH = { textAlign: "left", fontSize: "12px", color: "#6b7280", padding: "8px 10px", borderBottom: "1px solid #e5e7eb" };
+const TD = { padding: "9px 10px", borderBottom: "1px solid #f3f4f6", fontSize: "13px", verticalAlign: "top" };
 
 function Table({ head, children, empty }) {
   return (
@@ -58,7 +58,7 @@ function Table({ head, children, empty }) {
         <thead><tr>{head.map((h) => <th key={h} style={TH}>{h}</th>)}</tr></thead>
         <tbody>{children}</tbody>
       </table>
-      {empty && <p style={{ color: "#64748b", fontSize: "13px", padding: "10px" }}>{empty}</p>}
+      {empty && <p style={{ color: "#6b7280", fontSize: "13px", padding: "10px" }}>{empty}</p>}
     </div>
   );
 }
@@ -147,7 +147,7 @@ export function RoomsTab({ level, config }) {
         <b>{config.building}{config.floor != null ? ` — floor ${config.floor} (JHS classrooms only)` : ""}</b>
         <button style={btnPrimary} onClick={() => { setErr(""); setEdit({ floor: config.floor ?? 1, capacity: 40, room_type: "classroom", is_active: true }); }}>Add room</button>
       </div>
-      <p style={{ color: "#64748b", fontSize: "12.5px", marginTop: 0 }}>Rooms listed here belong to {level} only and are never used by the college schedule.</p>
+      <p style={{ color: "#6b7280", fontSize: "13px", marginTop: 0 }}>Rooms listed here belong to {level} only and are never used by the college schedule.</p>
       {rooms.error && <Notice tone="error">{rooms.error}</Notice>}
       <Table head={["Room", "Floor", "Type", "Capacity", "Status", ""]} empty={!rooms.loading && rooms.rows.length === 0 ? "No rooms yet." : ""}>
         {rooms.rows.map((r) => (
@@ -203,7 +203,7 @@ export function FacultyTab({ level }) {
       <Table head={["Teacher", "ID", "Department", "Specializations", "Load", "Availability", "Status", ""]} empty={!faculty.loading && shown.length === 0 ? "No teachers found." : ""}>
         {shown.map((f) => (
           <tr key={f.id}>
-            <td style={TD}><b>{f.full_name}</b><div style={{ fontSize: "11px", color: "#64748b" }}>{f.qualifications}</div></td>
+            <td style={TD}><b>{f.full_name}</b><div style={{ fontSize: "12px", color: "#6b7280" }}>{f.qualifications}</div></td>
             <td style={TD}>{f.employee_id}</td><td style={TD}>{f.department || "—"}</td>
             <td style={TD}>{f.specializations || "—"}</td>
             <td style={TD}>{f.weekly_hours} / {f.max_weekly_hours} h</td>
@@ -338,7 +338,7 @@ export function CurriculumTab({ level, windows, periodLabel, structure }) {
           <Notice tone={issues.errors ? "error" : issues.warnings ? "warn" : "ok"}>
             <b>{issues.errors} error(s), {issues.warnings} warning(s)</b>{!issues.issues.length && " — curriculum is complete and consistent."}
             <ul style={{ margin: "6px 0 0", paddingLeft: "18px", maxHeight: "180px", overflowY: "auto" }}>
-              {issues.issues.slice(0, 60).map((i, k) => <li key={k}>{i.severity === "error" ? "⛔" : "⚠️"} {i.message}</li>)}
+              {issues.issues.slice(0, 60).map((i, k) => <li key={k}><strong style={{ fontWeight: 600 }}>{i.severity === "error" ? "Error:" : "Warning:"}</strong> {i.message}</li>)}
             </ul>
           </Notice>
         )}

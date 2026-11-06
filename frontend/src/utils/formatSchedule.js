@@ -1,3 +1,4 @@
+import { formatTime } from "./formatDateTime";
 // Matches UPHSL's own schedule display format, e.g. "T 11:30AM-2:30PM", "SAT 10:30AM-12:30PM".
 
 const DAY_ABBREV = {
@@ -5,17 +6,10 @@ const DAY_ABBREV = {
 };
 
 /**
- * "14:00:00" or "14:00" -> "2:00PM"
+ * "14:00:00" or "14:00" -> "2:00PM" (or "14:00" with the 24-hour setting)
  */
 function to12Hour(timeStr) {
-  if (!timeStr) return "";
-  const [hStr, mStr] = timeStr.split(":");
-  let h = parseInt(hStr, 10);
-  const m = mStr || "00";
-  const period = h >= 12 ? "PM" : "AM";
-  h = h % 12;
-  if (h === 0) h = 12;
-  return `${h}:${m}${period}`;
+  return formatTime(timeStr, { compact: true });     // follows My settings (12- or 24-hour)
 }
 
 /**

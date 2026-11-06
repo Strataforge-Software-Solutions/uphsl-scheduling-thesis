@@ -43,6 +43,16 @@ class UPHSLTokenObtainPairSerializer(TokenObtainPairSerializer):
 class LoginView(TokenObtainPairView):
     serializer_class = UPHSLTokenObtainPairSerializer
 
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+        if response.status_code == 200:
+            # audit log: who signed in, when, from which IP address (nothing about the password is stored)
+            from audit import recorder
+            u = User.objects.filter(pk=(response.data.get("user") or {}).get("id")).first()
+            if u is not None:
+                recorder.record("login", "user", u.pk, summary=f"{u.username} signed in", user=u, request=request)
+        return response
+
 
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])

@@ -48,3 +48,24 @@ class CanEditOwnScheduleKind(permissions.BasePermission):
             return True
         return can_edit_schedule_kind(request.user, obj.subject.classification,
                                       obj.section.program.department)
+
+
+class CanEditSections(permissions.BasePermission):
+    """Sections. Read: anyone logged in. Write: the Registrar (any college) or a Dean (sections of their own college(s) only)."""
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        return user.role == "registrar" or (user.role == "faculty" and user.faculty_type == "dean")
+
+    def has_object_permission(self, request, view, obj):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        user = request.user
+        if user.role == "registrar":
+            return True
+        return (user.role == "faculty" and user.faculty_type == "dean"
+                and getattr(getattr(obj, "program", None), "department", None) in user.departments)

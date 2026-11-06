@@ -48,9 +48,32 @@ def _college_teachers(dept):
     return out
 
 
-def options(program, year_level, semester):
-    """Read-only. Qualified teachers of the program's college per major subject, with current load (drafts that Generate would
-    replace are not counted; classes locked by hand, approved and published ones are)."""
+def _window(raw):
+    """{"start": "07:00", "end": "10:00", "day": "Mon"} from the dialog -> ((start, end) minutes | None, "Mon" | None)."""
+    raw = raw if isinstance(raw, dict) else {}
+    win = None
+    try:
+        a, b = str(raw.get("start") or ""), str(raw.get("end") or "")
+        if a or b:
+            win = (int(a[:2]) * 60 + int(a[3:5]) if a else 0, int(b[:2]) * 60 + int(b[3:5]) if b else 24 * 60)
+    except (TypeError, ValueError, IndexError):
+        win = None
+    day = str(raw.get("day") or "")[:3].title() or None
+    return win, day
+
+
+def subject_groups(user, subject, sections, semester, replaced, window=None, day=None, school_year=None):
+    """The three Professor groups (engine.faculty_groups) of one subject row of the Generate dialog."""
+    from . import faculty_groups as fg
+    n = max(1, len(sections))
+    return fg.build(user, subject, sections[0], term=semester, school_year=school_year,
+                    blocks=[int(round(float(h) * 60)) for h in blocks_for_subject(subject)], sections=n, window=window, day=day,
+                    exclude_ids=replaced, need_hours=weekly_hours(subject) * n, after_label=True)
+
+
+def options(program, year_level, semester, user=None):
+    """Read-only. Qualified teachers of the program's college per major subject, with current load (the Workload page number, plus
+    the hours left after Generate replaces this scope's drafts) and the three Professor groups per subject (engine.faculty_groups)."""
     from curriculum.models import Subject
     from .models import Schedule, Section
     from .workload import hours_by_teacher_term, limit_for
@@ -66,6 +89,7 @@ def options(program, year_level, semester):
     spec = {t.id: {f.id for f in t.specializations.all()} for t in teachers}
     lim = limits_readonly()
     hrs = hours_by_teacher_term([t.id for t in teachers], exclude_schedule_ids=replaced)
+    hrs_all = hours_by_teacher_term([t.id for t in teachers])          # what the Workload page shows
     by_code = {s.code: s for s in subjects}
     rows, used = [], set()
     for s in subjects:
@@ -80,40 +104,51 @@ def options(program, year_level, semester):
             "partner_id": partner.id if partner else None,
             "blocks": [int(round(float(h) * 60)) for h in blocks_for_subject(s)],
             "no_qualified_reason": "" if q or not sections else why_nobody(s, sections[0], teachers, spec),
+            "groups": subject_groups(user, s, sections, semester, replaced) if (user is not None and sections) else None,
         })
+        if rows[-1]["groups"]:
+            used.update(o["id"] for o in rows[-1]["groups"]["other"])        # not-connected faculty offered for this row
     info = {}
     week = free_week([t for t in teachers if t.id in used], semester, replaced)
     for t in teachers:
         if t.id not in used:
             continue
         cur = round(hrs.get(t.id, {}).get(semester, 0.0), 2)
+        shown = round(hrs_all.get(t.id, {}).get(semester, 0.0), 2)
         info[t.id] = {"id": t.id, "label": short_name(t), "full_name": t.user.get_full_name().strip() or t.user.username,
                       "school_id": t.user.school_id, "username": t.user.username,
-                      "faculty_type": t.user.faculty_type, "current_hours": cur, "max_hours": limit_for(t, lim),
+                      "faculty_type": t.user.faculty_type, "current_hours": shown, "projected_hours": cur,
+                      "after_generate_hours": cur if abs(cur - shown) > 1e-9 else None, "max_hours": limit_for(t, lim),
                       **week.get(t.id, {"free": {}, "preferred": {}, "submitted": False})}
     return {"program_id": program.id, "department": dept, "year_level": year_level, "semester": semester,
             "policy": lim["policy"], "sections": len(sections), "subjects": rows, "teachers": info}
 
 
-def validate(user, subjects_by_section, raw, school_year, semester):
-    """(error text | "", {subject_id: faculty_id}). Called by Generate BEFORE any draft is replaced."""
+def validate(user, subjects_by_section, raw, school_year, semester, windows=None, replaced=()):
+    """(error text | "", {subject_id: faculty_id}, {subject_id: override note}). Called by Generate BEFORE any draft is replaced.
+    A value is a faculty id, or {"teacher": id, "override_qualification": true, "reason": "..."} for a manual Assign anyway (a person
+    NOT connected to the subject), re-checked here against the groups computed now (faculty_groups.check_override)."""
     raw = raw or {}
     if not isinstance(raw, dict):
-        return "Professor choices are not valid.", {}
-    picked = {}
+        return "Professor choices are not valid.", {}, {}
+    picked, wants_override = {}, {}
     for key, tid in raw.items():
+        if isinstance(tid, dict):
+            if str(tid.get("override_qualification", "")).lower() in ("1", "true", "yes"):
+                wants_override[str(key)] = str(tid.get("reason") or "")
+            tid = tid.get("teacher")
         if tid in (None, "", 0, "0"):
             continue
         try:
             picked[int(key)] = int(tid)
         except (TypeError, ValueError):
-            return "Professor choices are not valid.", {}
+            return "Professor choices are not valid.", {}, {}
     if not picked:
-        return "", {}
+        return "", {}, {}
     is_dean = getattr(user, "role", "") == "faculty" and getattr(user, "faculty_type", "") == "dean"
     if not is_dean:
         return ("Only a Dean chooses professors here (for the program subjects of their own college). "
-                "Leave the Professor on Automatic."), {}
+                "Leave the Professor on Automatic."), {}, {}
     from faculty.models import FacultyProfile
     from .models import TimeSlot
     from .views import _build_availability_rules
@@ -122,32 +157,45 @@ def validate(user, subjects_by_section, raw, school_year, semester):
     profiles = {p.id: p for p in FacultyProfile.objects.select_related("user").prefetch_related("specializations")
                 .filter(pk__in=set(picked.values()))}
     rules = None
-    out = {}
+    out, overrides = {}, {}
     for sid, tid in picked.items():
         sub = subs.get(sid)
         if sub is None:
             continue                                   # not part of this run (e.g. locked by hand): nothing to apply
         if sub.classification == "minor":
             return (f"{sub.code} is a Gen Ed (minor) subject: its professor is chosen by the Registrar's generation, not here. "
-                    "Leave it on Automatic."), {}
+                    "Leave it on Automatic."), {}, {}
         sec = secs[sid]
         dept = sec.program.department
         p = profiles.get(tid)
         if p is None or not p.user.is_active:
-            return f"The professor chosen for {sub.code} does not exist or is not active.", {}
+            return f"The professor chosen for {sub.code} does not exist or is not active.", {}, {}
         name = p.user.get_full_name().strip() or p.user.username
         if dept not in (user.departments or []):
-            return (f"{sub.code} belongs to {dept}, which is not your department. Leave it on Automatic."), {}
+            return (f"{sub.code} belongs to {dept}, which is not your department. Leave it on Automatic."), {}, {}
         from .teacher_scope import teacher_allowed           # the one department + qualification rule (also used by Edit -> Save)
         _why = teacher_allowed(user, p, sub, sec)
+        if _why and str(sid) in wants_override:
+            # a manual Assign anyway: only the qualification check is skipped, and only after every other rule is re-checked now
+            from . import faculty_groups as fg
+            secs_of = [s_ for s_, lst in subjects_by_section.items() if sub in lst]
+            win, day = _window((windows or {}).get(str(sid)) or (windows or {}).get(sid))
+            groups = subject_groups(user, sub, secs_of or [sec], semester, list(replaced), window=win, day=day, school_year=school_year)
+            try:
+                reason = fg.check_override(user, sub, sec, p, wants_override[str(sid)], groups)
+            except fg.OverrideError as e:
+                return e.message, {}, {}
+            overrides[sid] = fg.override_meta(user, reason)
+            out[sid] = tid
+            continue
         if _why:
-            return _why + " Or leave it on Automatic.", {}
+            return _why + " Or leave it on Automatic.", {}, {}
         if rules is None:
             rules = _build_availability_rules(list(profiles.values()), list(TimeSlot.objects.all()), school_year, semester)
             slot_ids = set(TimeSlot.objects.values_list("id", flat=True))
         if slot_ids and slot_ids <= rules.get(p.id, set()):
             return (f"{name} has no available teaching time in {semester} (their submitted availability blocks every time). "
-                    f"Choose another professor for {sub.code}, or update the availability first."), {}
+                    f"Choose another professor for {sub.code}, or update the availability first."), {}, {}
         out[sid] = tid
     # a Lecture and its Lab have ONE teacher: two different choices are refused; one choice covers the pair
     for sid, tid in list(out.items()):
@@ -158,15 +206,21 @@ def validate(user, subjects_by_section, raw, school_year, semester):
         if partner.id in out and out[partner.id] != tid:
             lec, lab = (sub, partner) if not sub.code.endswith("L") else (partner, sub)
             return (f"{lec.code} and {lab.code} are the Lecture and Lab of one subject and must have the same professor. "
-                    "Choose the same professor for both, or leave both on Automatic."), {}
+                    "Choose the same professor for both, or leave both on Automatic."), {}, {}
+        if partner.id in out and sid in overrides and partner.id not in overrides:
+            overrides[partner.id] = overrides[sid]           # one class: the same Assign anyway covers its Lec and Lab
         if partner.id not in out:
             p = profiles[tid]
+            if sid in overrides:
+                overrides[partner.id] = overrides[sid]
+                out[partner.id] = tid
+                continue
             if not is_qualified(p, partner, secs[partner.id], {f.id for f in p.specializations.all()}):
                 name = p.user.get_full_name().strip() or p.user.username
                 return (f"{name} is chosen for {sub.code}, but its Lecture and Lab must have the same professor and {name} is not "
-                        f"qualified for {partner.code}. Choose another professor, or leave it on Automatic."), {}
+                        f"qualified for {partner.code}. Choose another professor, or leave it on Automatic."), {}, {}
             out[partner.id] = tid
-    return "", out
+    return "", out, overrides
 
 
 def _hm(t):

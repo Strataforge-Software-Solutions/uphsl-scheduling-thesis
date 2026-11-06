@@ -8,7 +8,7 @@ import ScheduleProblemsModal from "./ScheduleProblemsModal";
    Fixing is suggest-then-confirm: "Fix" opens the pop-up with the free days and times for one of the two classes (same room first);
    nothing is changed until the Dean / Registrar confirms, and the server checks every rule again before saving. */
 const KIND = {
-  teacher: { label: "Teacher", bg: "#fee2e2", fg: "#a4231a" },
+  teacher: { label: "Teacher", bg: "#fee2e2", fg: "#b91c1c" },
   room: { label: "Room", bg: "#ffedd5", fg: "#9a3412" },
   section: { label: "Students", bg: "#ede9fe", fg: "#5b21b6" },
 };
@@ -16,9 +16,9 @@ const KIND = {
 function ClassBox({ c, shared, kind }) {
   const hi = (k) => (kind === k ? { background: "#fef9c3", borderRadius: "4px", padding: "0 3px", fontWeight: 600 } : null);
   return (
-    <div style={{ flex: "1 1 240px", minWidth: 0, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "8px 10px", fontSize: "12.5px" }}>
-      <div style={{ fontWeight: 600, color: "#1f2937" }}>{c.subject}{c.demo && <span style={{ marginLeft: 6, fontSize: 11, color: "#92400e" }}>(sample)</span>}</div>
-      <div style={{ color: "#475569", marginTop: 2 }}>
+    <div style={{ flex: "1 1 240px", minWidth: 0, background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 6, padding: "8px 10px", fontSize: "13px" }}>
+      <div style={{ fontWeight: 600, color: "#111827" }}>{c.subject}{c.demo && <span style={{ marginLeft: 6, fontSize: 12, color: "#92400e" }}>(sample)</span>}</div>
+      <div style={{ color: "#4b5563", marginTop: 2 }}>
         <span style={hi("section")}>{c.section}</span> · <span style={hi("teacher")}>{c.teacher}</span> · <span style={hi("room")}>{c.room}</span>
       </div>
       <div style={{ color: "#003366", marginTop: 2, fontWeight: 600 }}>{c.time}</div>
@@ -30,38 +30,38 @@ export function ConflictList({ report, emptyText = "No conflicts found.", onReso
   if (!report) return null;
   if (!report.total) {
     return (
-      <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#166534", borderRadius: "8px", padding: "10px 14px", fontSize: "13px" }}>
-        ✔ {emptyText}{report.checked ? ` (${report.checked} class${report.checked === 1 ? "" : "es"} checked)` : ""}
+      <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#166534", borderRadius: 6, padding: "10px 14px", fontSize: "13px" }}>
+        {emptyText}{report.checked ? ` (${report.checked} class${report.checked === 1 ? "" : "es"} checked)` : ""}
       </div>
     );
   }
   return (
     <div>
-      <div style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", marginBottom: "10px" }}>
+      <div style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", borderRadius: 6, padding: "10px 14px", fontSize: "13px", marginBottom: "10px" }}>
         <strong>{report.total} conflict{report.total === 1 ? "" : "s"} found</strong>
         {Object.entries(report.counts || {}).map(([k, n]) => (
-          <span key={k} style={{ marginLeft: 10, background: KIND[k]?.bg, color: KIND[k]?.fg, borderRadius: 999, padding: "2px 9px", fontSize: 12 }}>{KIND[k]?.label}: {n}</span>
+          <span key={k} style={{ marginLeft: 10, background: KIND[k]?.bg, color: KIND[k]?.fg, borderRadius: 4, padding: "2px 9px", fontSize: 12 }}>{KIND[k]?.label}: {n}</span>
         ))}
       </div>
       {report.conflicts.map((c, i) => (
-        <div key={i} style={{ border: "1px solid #e2e8f0", borderRadius: "10px", padding: "10px 12px", marginBottom: "10px", background: "white" }}>
+        <div key={i} style={{ border: "1px solid #e5e7eb", borderRadius: 6, padding: "10px 12px", marginBottom: "10px", background: "white" }}>
           <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", marginBottom: "8px" }}>
-            <span style={{ background: KIND[c.kind]?.bg, color: KIND[c.kind]?.fg, borderRadius: 999, padding: "2px 10px", fontSize: 12, fontWeight: 600 }}>{c.kind_label} conflict</span>
-            <span style={{ fontSize: "12.5px", color: "#475569", flex: 1 }}>{c.message}</span>
+            <span style={{ background: KIND[c.kind]?.bg, color: KIND[c.kind]?.fg, borderRadius: 4, padding: "2px 10px", fontSize: 12, fontWeight: 600 }}>{c.kind_label} conflict</span>
+            <span style={{ fontSize: "13px", color: "#4b5563", flex: 1 }}>{c.message}</span>
             {onResolve && (
-              <button onClick={() => onResolve(c, i)} disabled={busy} style={{ background: "#003366", color: "white", border: "none", padding: "6px 14px", borderRadius: 6, cursor: busy ? "default" : "pointer", fontSize: 12.5 }}>
+              <button onClick={() => onResolve(c, i)} disabled={busy} style={{ background: "#003366", color: "white", border: "none", padding: "6px 14px", borderRadius: 6, cursor: busy ? "default" : "pointer", fontSize: 13 }}>
                 Fix this conflict
               </button>
             )}
           </div>
-          {fixed[i] && <div style={{ background: fixed[i].ok ? "#ecfdf5" : "#fef2f2", color: fixed[i].ok ? "#166534" : "#991b1b", borderRadius: 6, padding: "6px 10px", fontSize: 12.5, marginBottom: 8 }}>{fixed[i].summary}</div>}
+          {fixed[i] && <div style={{ background: fixed[i].ok ? "#ecfdf5" : "#fef2f2", color: fixed[i].ok ? "#166534" : "#991b1b", borderRadius: 6, padding: "6px 10px", fontSize: 13, marginBottom: 8 }}>{fixed[i].summary}</div>}
           <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
             <ClassBox c={c.a} kind={c.kind} />
             <ClassBox c={c.b} kind={c.kind} />
           </div>
         </div>
       ))}
-      {report.total > report.conflicts.length && <p style={{ fontSize: 12.5, color: "#64748b" }}>Showing the first {report.conflicts.length} of {report.total}.</p>}
+      {report.total > report.conflicts.length && <p style={{ fontSize: 13, color: "#6b7280" }}>Showing the first {report.conflicts.length} of {report.total}.</p>}
     </div>
   );
 }
@@ -113,16 +113,16 @@ export default function ConflictChecker() {
     });
   };
 
-  const btn = { background: "white", color: "#003366", border: "1px solid #cdd6e0", padding: "8px 14px", borderRadius: "6px", cursor: "pointer" };
+  const btn = { background: "white", color: "#003366", border: "1px solid #d1d5db", padding: "8px 14px", borderRadius: "6px", cursor: "pointer" };
   return (
     <div>
-      <p style={{ fontSize: "13px", color: "#475569", maxWidth: "780px", marginTop: 0 }}>
+      <p style={{ fontSize: "13px", color: "#4b5563", maxWidth: "780px", marginTop: 0 }}>
         Checks the whole class schedule for a teacher, a room or a group of students booked for two classes at the same time
         {report && report.allowance_minutes ? ` (students may overlap by up to ${report.allowance_minutes} minutes).` : " (no overlap is allowed for students either)."} Run it after generating or editing schedules.
         To fix one, press <strong>Fix this conflict</strong>: you choose which class moves and to which free day and time; nothing changes until you confirm.
       </p>
       <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center", marginBottom: "14px" }}>
-        <select value={semester} onChange={(e) => setSemester(e.target.value)} aria-label="Semester" style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid #cdd6e0" }}>
+        <select value={semester} onChange={(e) => setSemester(e.target.value)} aria-label="Semester" style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid #d1d5db" }}>
           <option value="">All semesters</option>
           <option value="1st Sem">1st Sem</option>
           <option value="2nd Sem">2nd Sem</option>
@@ -134,7 +134,7 @@ export default function ConflictChecker() {
         {report?.total > 0 && <button onClick={() => setFixing(report.conflicts)} disabled={busy} title="Opens every conflict with the free days and times you can move one of the two classes to. Nothing changes until you confirm.">Review and fix conflicts</button>}
         {report?.demo_rows > 0 && <button style={btn} onClick={() => demo("remove")} disabled={busy}>Remove sample conflicts</button>}
       </div>
-      {error && <p style={{ color: "#a4231a", fontSize: 13 }}>{error}</p>}
+      {error && <p style={{ color: "#b91c1c", fontSize: 13 }}>{error}</p>}
       {note && <p style={{ color: "#166534", fontSize: 13 }}>{note}</p>}
       {report ? <ConflictList report={report} emptyText="No conflicts: no teacher, room or student group is double-booked." onResolve={(c) => setFixing([c])} busy={busy} /> : <p>Checking…</p>}
       {fixing && (

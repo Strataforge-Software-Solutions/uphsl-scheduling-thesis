@@ -9,21 +9,26 @@ import FacultyTimePopover from "./FacultyTimePopover";
 import { rankProfessors } from "../utils/suggestProfessors";
 import ErrorBoundary from "./ErrorBoundary";
 import TeacherPicker from "./TeacherPicker";
+import AssignAnywayDialog, { OverrideBadge } from "./AssignAnywayDialog";
+import UnplacedFacultyDialog from "./UnplacedFacultyDialog";
+import { groupOptions, pickerExtras } from "../utils/facultyGroups";
 import SharedClassModal, { sharedLabel } from "./SharedClassModal";
 import RoomSelect from "./RoomSelect";
 import { ResolverWindow, notifyWorkloadChanged } from "./OverloadResolver";
 import { toMin, timeWindowProblem, startOptions, endOptions, pickStart, pickEnd, needHint, needMinutes, professorFits, freeText as profFreeText,
   DAY_START, DAY_END } from "../utils/timeWindow";
+import { formatTime } from "../utils/formatDateTime";
 
 /* Generate Schedule -- shared by the Registrar (minor / Gen Ed subjects) and the Dean (major subjects). */
 const STANDARD_YEARS = ["1st Year", "2nd Year", "3rd Year", "4th Year", "5th Year"];
 const STANDARD_SEMESTERS = ["1st Sem", "2nd Sem"];
+const DAY_FULL = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday", Sat: "Saturday", Sun: "Sunday" };
 
 const uniqueClasses = (list) => Object.values(Object.fromEntries((list || []).map((c) => [`${c.section_id}-${c.subject_id}`, c])));
-const popBtn = { background: "#003366", color: "white", border: "1px solid #003366", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontSize: 12.5, whiteSpace: "nowrap" };
+const popBtn = { background: "#003366", color: "white", border: "1px solid #003366", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontSize: 13, whiteSpace: "nowrap" };
 // Start / End times: every 30 minutes from 7:00 AM to 8:00 PM (the college time-slot grid), limited per row so the range always
 // holds the subject's longest class period (utils/timeWindow.js startOptions / endOptions; the server checks the same rule)
-const timeLabel = (t) => { const [h, m] = String(t).split(":").map(Number); return `${((h + 11) % 12) + 1}:${String(m || 0).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`; };
+const timeLabel = (t) => formatTime(t);
 // the longest unbroken class period a subject needs comes from the server (Subject.need_minutes): see utils/timeWindow.js
 
 function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGenerated, hideTitle = false, onProgramName }) {
@@ -51,10 +56,11 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
   const [sharedInfo, setSharedInfo] = useState(null);   // shared-class choices of the minor subjects of the chosen program / year / semester
   const [sharedItem, setSharedItem] = useState(null);
   const loadShared = React.useCallback(async () => {
-    if (!programId || !yearLevel || !semester) { setSharedInfo(null); return; }
+    // only the Registrar's Gen Ed view uses the shared-class choices (the Dean's dialog no longer lists Gen Ed subjects)
+    if (!isRegistrar || !programId || !yearLevel || !semester) { setSharedInfo(null); return; }
     try { setSharedInfo((await API.get("/engine/shared-classes/options/", { params: { program_id: programId, year_level: yearLevel, semester } })).data); }
     catch (_e) { setSharedInfo(null); }
-  }, [programId, yearLevel, semester]);
+  }, [isRegistrar, programId, yearLevel, semester]);
   useEffect(() => { loadShared(); }, [loadShared]);
   const sharedFor = (id) => (sharedInfo?.subjects || []).find((x) => x.subject_id === id);
   const [problems, setProblems] = useState(false);   // the Schedule problems window: opened ONLY by "Review conflicts" (real clashes)
@@ -91,12 +97,35 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
       .then((res) => setProfOpts(res.data)).catch(() => setProfOpts({ subjects: [], teachers: {}, error: true }));
   }, [isRegistrar, programId, yearLevel, semester]);
   const profRow = (sid) => (profOpts?.subjects || []).find((x) => x.subject_id === sid);
+  const [rowGroups, setRowGroups] = useState({});        // {sid: {key, data}}: the groups for the row's chosen Day / Start / End
+  const [askOverride, setAskOverride] = useState(null);  // {sid, person, code, title}: a not-connected pick waiting for confirmation
+  const [facultyFor, setFacultyFor] = useState(null);    // a skipped class: "See other available faculty"
+  const winKey = (p) => (p && (p.start || p.end || p.day) ? `${p.day || ""}|${p.start || ""}|${p.end || ""}` : "");
+  useEffect(() => { setRowGroups({}); }, [profOpts]);
+  useEffect(() => {
+    if (isRegistrar || !profOpts || profOpts.error) return;
+    Object.entries(picks).forEach(([sid, p]) => {
+      const k = winKey(p);
+      if (!k || rowGroups[sid]?.key === k || !profRow(Number(sid))?.groups) return;
+      setRowGroups((g) => ({ ...g, [sid]: { key: k, data: null } }));
+      API.get("/engine/generate/professor-groups/", { params: { program_id: programId, year_level: yearLevel, semester, subject_id: sid,
+        day: p.day || "", start: p.start || "", end: p.end || "" } })
+        .then((r) => setRowGroups((g) => (g[sid]?.key === k ? { ...g, [sid]: { key: k, data: r.data } } : g)))
+        .catch(() => {});
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [picks, profOpts]);
+  const groupsFor = (sid) => {
+    const pr = profRow(sid);
+    const k = winKey(picks[sid]);
+    return (k && rowGroups[sid]?.key === k && rowGroups[sid].data) || pr?.groups || null;
+  };
   /* A Lecture and its Lab have one teacher: choosing for one sets the other too. */
-  const setProfessor = (sid, value) => {
+  const setProfessor = (sid, value, override = null) => {
     const partner = profRow(sid)?.partner_id;
     setPicks((p) => {
-      const next = { ...p, [sid]: { ...(p[sid] || {}), teacher: value } };
-      if (partner) next[partner] = { ...(p[partner] || {}), teacher: value };
+      const next = { ...p, [sid]: { ...(p[sid] || {}), teacher: value, override } };
+      if (partner) next[partner] = { ...(p[partner] || {}), teacher: value, override };
       return next;
     });
   };
@@ -176,8 +205,12 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
       const room_choices = {}, time_windows = {}, teacher_choices = {};
       Object.entries(picks).forEach(([sid, p]) => {
         if (p.room) room_choices[sid] = Number(p.room);
-        if (p.start || p.end) time_windows[sid] = { start: p.start || "", end: p.end || "" };
-        if (p.teacher) teacher_choices[sid] = Number(p.teacher);
+        if (p.start || p.end || p.day) time_windows[sid] = { start: p.start || "", end: p.end || "", ...(p.day ? { day: p.day } : {}) };
+        if (p.teacher) {
+          teacher_choices[sid] = p.override
+            ? { teacher: Number(p.teacher), override_qualification: true, reason: p.override.reason }   // Assign anyway (re-checked on the server)
+            : Number(p.teacher);
+        }
       });
       const res = await API.post("/engine/generate-schedule/", {
         program_id: programId, year_level: yearLevel, semester, merge_minors: mergeMinors, room_choices, time_windows, keep_edited: keepEdited, only_missing: onlyMissing === true, ...(isRegistrar ? {} : { teacher_choices }),
@@ -214,7 +247,7 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
   return (
     <div>
       {!hideTitle && <h3>{isRegistrar ? "Generate Schedule — Gen Ed Subjects" : `Generate Schedule — ${progName()} Subjects`}</h3>}
-      <p style={{ fontSize: "13px", color: "#475569", maxWidth: "760px", marginTop: 0 }}>
+      <p style={{ fontSize: "13px", color: "#4b5563", maxWidth: "760px", marginTop: 0 }}>
         {isRegistrar
           ? "You generate the Gen Ed subjects. The Dean of each college then generates the program subjects and they are placed around yours in the same weekly schedule. You can edit and approve Gen Ed subjects only."
           : `You generate the ${progName()} subjects. They are placed around the Registrar's Gen Ed subjects in the same weekly schedule. You can edit, remove and approve ${progName()} subjects only; the Gen Ed subjects are view-only.`}
@@ -251,7 +284,7 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
           onRetry={() => run(true)} retrying={running} />
       )}
       {badRows.length > 0 && (
-        <div role="alert" style={{ marginTop: 8, fontSize: 12.5, color: "#a4231a" }}>
+        <div role="alert" style={{ marginTop: 8, fontSize: 13, color: "#b91c1c" }}>
           Fix the Start / End Time of {badRows.join(", ")} before generating (see the red note in {badRows.length === 1 ? "that row" : "those rows"}).
         </div>
       )}
@@ -263,21 +296,21 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
         const shown = scope.filter((s) => s.classification === kindWord).sort((a, b) => String(a.code).localeCompare(String(b.code)));
         const otherCount = scope.length - shown.length;
         return (
-          <div style={{ marginTop: "16px", border: "1px solid #e0e6ed", borderRadius: "10px", overflow: "hidden" }}>
+          <div style={{ marginTop: "16px", border: "1px solid #e5e7eb", borderRadius: 6, overflow: "hidden" }}>
             <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "6px", padding: "10px 14px", background: "#f7f9fc", fontSize: "13px" }}>
               <strong style={{ color: "#003366" }}>Subjects to be scheduled — {yearLevel}, {semester}</strong>
-              <span style={{ color: "#64748b" }}>
+              <span style={{ color: "#6b7280" }}>
                 {allSubjects === null ? "Loading…" : `${shown.length} ${kindWord} subject${shown.length === 1 ? "" : "s"}`}
               </span>
             </div>
             {allSubjects !== null && shown.length === 0 ? (
-              <p style={{ margin: 0, padding: "12px 14px", fontSize: "13px", color: "#a4231a" }}>
+              <p style={{ margin: 0, padding: "12px 14px", fontSize: "13px", color: "#b91c1c" }}>
                 No {kindWord} subjects are set up for this year and semester. Check the Curriculum tab before generating.
               </p>
             ) : (
               <div style={{ maxHeight: "min(460px, 60vh)", overflow: "auto" }}>
-                <table style={{ margin: 0, boxShadow: "none", border: "none", borderRadius: 0, width: "100%", minWidth: isRegistrar ? 1170 : 1180, tableLayout: "fixed" }}>
-                  <thead><tr><th style={{ width: 86 }}>Code</th><th style={{ width: isRegistrar ? 200 : 180 }}>Subject</th><th style={{ width: 118 }}>Needs</th>{!isRegistrar && <th style={{ width: 230 }}>Professor</th>}<th style={{ width: 310 }}>Room</th><th style={{ width: 128 }}>Start Time</th><th style={{ width: 128 }}>End Time</th>{isRegistrar && <th style={{ width: 190 }}>Shared Class / Programs</th>}</tr></thead>
+                <table style={{ margin: 0, boxShadow: "none", border: "none", borderRadius: 0, width: "100%", minWidth: isRegistrar ? 1194 : 1204, tableLayout: "fixed" }}>
+                  <thead><tr><th style={{ width: 110 }}>Code</th><th style={{ width: isRegistrar ? 200 : 180 }}>Subject</th><th style={{ width: 118 }}>Needs</th>{!isRegistrar && <th style={{ width: 230 }}>Professor</th>}<th style={{ width: 310 }}>Room</th><th style={{ width: 128 }}>Start Time</th><th style={{ width: 128 }}>End Time</th>{isRegistrar && <th style={{ width: 190 }}>Shared Class / Programs</th>}</tr></thead>
                   <tbody>
                     {shown.map((s) => {
                       const p = picks[s.id] || {};
@@ -305,28 +338,34 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
                         <ErrorBoundary key={s.id} row colSpan={7} what={`the row for ${s.code}`}>
                         <React.Fragment>
                         <tr style={timeProblem ? { background: "#fff5f5" } : undefined}>
-                          <td style={{ whiteSpace: "nowrap", verticalAlign: "middle" }}>{s.code}</td><td style={{ verticalAlign: "middle" }}>{s.title}</td>
-                          <td style={{ verticalAlign: "middle", fontSize: 12, lineHeight: 1.35, color: "#334155" }}>
+                          <td style={{ verticalAlign: "middle", overflowWrap: "anywhere", wordBreak: "break-word", fontSize: s.code.length > 9 ? 12.5 : undefined }}>{s.code}</td><td style={{ verticalAlign: "middle" }}>{s.title}</td>
+                          <td style={{ verticalAlign: "middle", fontSize: 12, lineHeight: 1.35, color: "#374151" }}>
                             <div><strong>{hrs(perWeek)} hrs/wk</strong></div><div>{kindText}</div><div>{nSec} section{nSec === 1 ? "" : "s"}</div>
                           </td>
                           {!isRegistrar && (() => {
                             const pr = profRow(s.id);
                             const opts = pr ? pr.qualified.map((id) => profOpts.teachers[id]).filter(Boolean) : [];
                             const chosen = p.teacher ? profOpts?.teachers?.[p.teacher] : null;
-                            const total = chosen ? chosen.current_hours + chosenHours(chosen.id) : 0;
+                            const total = chosen ? (chosen.projected_hours ?? chosen.current_hours) + chosenHours(chosen.id) : 0;
+                            const groups = groupsFor(s.id);
                             const over = chosen && chosen.max_hours > 0 && total > chosen.max_hours + 1e-9;
                             const partner = pr?.partner_id ? (profOpts.subjects.find((x) => x.subject_id === pr.partner_id) || {}).code : "";
                             return (
                               <td style={{ verticalAlign: "top" }}>
                                 <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                                   <div style={{ flex: 1, minWidth: 0 }}>
-                                    <TeacherPicker compact ariaLabel={`Professor for ${s.code}`} value={p.teacher || ""} onChange={(v) => setProfessor(s.id, v)}
-                                      disabled={!pr || opts.length === 0 || (keepEdited && pr.sections === 0)}
+                                    <TeacherPicker compact ariaLabel={`Professor for ${s.code}`} value={p.teacher || ""}
+                                      onChange={(v, opt) => (opt && opt.notConnected
+                                        ? setAskOverride({ sid: s.id, person: opt.person, code: s.code, title: s.title })
+                                        : setProfessor(s.id, v, null))}
+                                      {...(groups ? pickerExtras(groups) : {})}
+                                      disabled={!pr || (!groups && opts.length === 0) || (keepEdited && pr.sections === 0)}
                                       title={partner ? `${s.code} and ${partner} are a Lecture and Lab: they keep one professor.` : undefined}
                                       emptyLabel={profOpts === null ? "Loading…" : (profOpts.error ? "Automatic (professor list not loaded)" : "Automatic")}
                                       options={(() => {
                                         // The Professor list for this program / year / semester is loaded AFTER the table first renders
                                         // (and again whenever the scope changes): until this row's entry is there, there is nothing to rank.
+                                        if (groups) return groupOptions(groups);            // the server's three groups
                                         if (!pr || opts.length === 0) return [];
                                         // advice only: qualified teachers who fit this row (limit + free time inside the chosen range) first
                                         const range = (p.start || p.end) ? [p.start ? toMin(p.start) : 0, p.end ? toMin(p.end) : 24 * 60] : null;
@@ -341,25 +380,30 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
                                         ];
                                       })()} />
                                   </div>
-                                  <button type="button" disabled={opts.length === 0} onClick={() => setTimeFor({ code: s.code, teachers: opts, initialId: p.teacher || "" })}
+                                  <button type="button" disabled={opts.length === 0} onClick={() => setTimeFor({ code: s.code, sid: s.id, need: needMinutes(s), teachers: opts, initialId: p.teacher || "" })}
                                     aria-label={`Faculty time for ${s.code}`} title="See the teacher's availability, load and classes"
-                                    style={{ background: "white", color: "#003366", border: "1px solid #94a3b8", borderRadius: "50%", width: 24, height: 24, padding: 0, fontSize: 13, lineHeight: "22px", cursor: opts.length ? "pointer" : "not-allowed", flex: "0 0 auto", boxShadow: "none" }}>ⓘ</button>
+                                    style={{ background: "white", color: "#003366", border: "1px solid #6b7280", borderRadius: "50%", width: 24, height: 24, padding: 0, fontSize: 13, lineHeight: "22px", cursor: opts.length ? "pointer" : "not-allowed", flex: "0 0 auto", boxShadow: "none" }}>ⓘ</button>
                                 </div>
                                 {profOpts && !profOpts.error && !pr && (
-                                  <div style={{ fontSize: 11, color: "#64748b", marginTop: 3 }}>No suggestions for {s.code} (not in the professor list).</div>
+                                  <div style={{ fontSize: 12, color: "#6b7280", marginTop: 3 }}>No suggestions for {s.code} (not in the professor list).</div>
                                 )}
                                 {profOpts?.error && (
-                                  <div style={{ fontSize: 11, color: "#a4231a", marginTop: 3 }}>The professor list could not be loaded; Generate will choose automatically.</div>
+                                  <div style={{ fontSize: 12, color: "#b91c1c", marginTop: 3 }}>The professor list could not be loaded; Generate will choose automatically.</div>
                                 )}
                                 {pr && opts.length === 0 && pr.no_qualified_reason && (
-                                  <div style={{ fontSize: 11, color: "#a4231a", marginTop: 3, lineHeight: 1.3 }}>{pr.no_qualified_reason}</div>
+                                  <div style={{ fontSize: 12, color: "#b91c1c", marginTop: 3, lineHeight: 1.3 }}>{pr.no_qualified_reason}</div>
                                 )}
                                 {pr && keepEdited && pr.sections === 0 && opts.length > 0 && (
-                                  <div style={{ fontSize: 11, color: "#475569", marginTop: 3, lineHeight: 1.3 }}>🔒 Every section of {s.code} was edited by hand and is kept as it is. Untick "Keep the classes I edited by hand" to choose a professor.</div>
+                                  <div style={{ fontSize: 12, color: "#4b5563", marginTop: 3, lineHeight: 1.3 }}>Locked: every section of {s.code} was edited by hand and is kept as it is. Untick "Keep the classes I edited by hand" to choose a professor.</div>
                                 )}
-                                {chosen && partner && <div style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>Also teaches {partner} (Lec and Lab keep one professor).</div>}
+                                {chosen && partner && <div style={{ fontSize: 12, color: "#4b5563", marginTop: 3 }}>Also teaches {partner} (Lec and Lab keep one professor).</div>}
+                                {p.teacher && p.override && (
+                                  <div style={{ marginTop: 4, fontSize: 12, color: "#4b5563", lineHeight: 1.35 }}>
+                                    <OverrideBadge reason={p.override.reason} /> Reason: {p.override.reason}
+                                  </div>
+                                )}
                                 {over && (
-                                  <div role="alert" style={{ fontSize: 11, color: "#a4231a", marginTop: 3, lineHeight: 1.3 }}>
+                                  <div role="alert" style={{ fontSize: 12, color: "#b91c1c", marginTop: 3, lineHeight: 1.3 }}>
                                     {chosen.label} would have {hrs(total)} of {chosen.max_hours} hrs with your choices ({hrs(pr.total_hours)} hrs here for {pr.sections} section{pr.sections === 1 ? "" : "s"}). {profOpts.policy === "strict" ? "The limit is strict: classes over it will not be placed." : "Generate will warn about the overload."}
                                   </div>
                                 )}
@@ -375,6 +419,14 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
                               {(p.start && !starts.includes(p.start) ? [p.start, ...starts] : starts).map((t) => (
                                 <option key={t} value={t}>{timeLabel(t)}{mark(outside(toMin(t), p.end ? toMin(p.end) : DAY_END))}</option>))}
                             </select>
+                            {p.day && (
+                              <div style={{ marginTop: 4, fontSize: 12, color: "#1e3a8a", display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}
+                                title="Set from the Faculty time window: Generate places this subject on this day only">
+                                Day: <strong>{DAY_FULL[p.day] || p.day}</strong>
+                                <button type="button" aria-label={`Clear the day for ${s.code}`} onClick={() => setPick(s.id, "day", "")}
+                                  style={{ background: "white", color: "#374151", border: "1px solid #d1d5db", borderRadius: 4, padding: "0 6px", fontSize: 12, cursor: "pointer", lineHeight: "18px" }}>Clear</button>
+                              </div>
+                            )}
                           </td>
                           <td>
                             <select style={sel} value={p.end || ""} onChange={(e) => setTimes(s, "end", e.target.value)} aria-label={`End time for ${s.code}`}>
@@ -387,13 +439,13 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
                             <td style={{ verticalAlign: "middle" }}>
                               {sharedFor(s.id) ? (
                                 <button onClick={() => setSharedItem(sharedFor(s.id))} style={{ background: "#fff", color: "#003366", border: "1px solid #003366", borderRadius: 6, padding: "3px 8px", fontSize: 12, cursor: "pointer", maxWidth: "100%", whiteSpace: "normal", textAlign: "left" }}>{sharedLabel(sharedFor(s.id))}</button>
-                              ) : <span style={{ fontSize: 12, color: "#94a3b8" }}>…</span>}
+                              ) : <span style={{ fontSize: 12, color: "#6b7280" }}>…</span>}
                             </td>
                           )}
                         </tr>
                         {showHint && (
                           <tr>
-                            <td colSpan={7} style={{ paddingTop: 0, fontSize: 11.5, color: "#475569", lineHeight: 1.4 }} aria-label={`Time hint for ${s.code}`}>
+                            <td colSpan={7} style={{ paddingTop: 0, fontSize: 12, color: "#4b5563", lineHeight: 1.4 }} aria-label={`Time hint for ${s.code}`}>
                               {s.code}: {needHint(s, p.start)}.
                               {timeNotice[s.id] ? <span style={{ color: "#92400e" }}> {timeNotice[s.id]}</span> : null}
                               {prof && (prof.submitted
@@ -404,7 +456,7 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
                         )}
                         {timeProblem && (
                           <tr style={{ background: "#fff5f5" }}>
-                            <td colSpan={7} role="alert" style={{ paddingTop: 0, fontSize: 12, color: "#a4231a" }}>
+                            <td colSpan={7} role="alert" style={{ paddingTop: 0, fontSize: 12, color: "#b91c1c" }}>
                               {s.code}: {timeProblem} Choose a longer range, or set Start / End to "Any time".
                             </td>
                           </tr>
@@ -418,7 +470,7 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
               </div>
             )}
             {otherCount > 0 && (
-              <p style={{ margin: 0, padding: "8px 14px", fontSize: "12px", color: "#64748b", borderTop: "1px solid #eef2f6" }}>
+              <p style={{ margin: 0, padding: "8px 14px", fontSize: "12px", color: "#6b7280", borderTop: "1px solid #f3f4f6" }}>
                 {otherCount} {isRegistrar ? "program" : "Gen Ed"} subject{otherCount === 1 ? "" : "s"} for this term {isRegistrar ? "are generated by each Dean" : "are generated by the Registrar"}.
               </p>
             )}
@@ -426,31 +478,13 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
         );
       })()}
 
-      {!isRegistrar && programId && yearLevel && semester && sharedInfo && sharedInfo.subjects.length > 0 && (
-        <div style={{ marginTop: "14px", border: "1px solid #e0e6ed", borderRadius: "10px", overflow: "hidden" }}>
-          <div style={{ padding: "10px 14px", background: "#f7f9fc", fontSize: "13px" }}>
-            <strong style={{ color: "#003366" }}>Gen Ed (minor) subjects of this program — for your information</strong>
-            <div style={{ color: "#64748b", marginTop: 2 }}>The Registrar schedules these and decides which programs share a class. Shown here so you know which times your students already use.</div>
-          </div>
-          <table style={{ margin: 0, boxShadow: "none", border: "none", borderRadius: 0, width: "100%" }}>
-            <thead><tr><th>Code</th><th>Subject</th><th>Shared class (set by the Registrar)</th></tr></thead>
-            <tbody>
-              {sharedInfo.subjects.map((x) => (
-                <tr key={x.subject_id}><td>{x.code}</td><td>{x.title}</td>
-                  <td style={{ fontSize: 12.5, color: "#334155" }}>{sharedLabel(x)}</td></tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      <label style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "12px", fontSize: "13px", color: "#334155" }}
+      <label style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "12px", fontSize: "13px", color: "#374151" }}
         title="A class you edited or moved by hand stays exactly where you put it. Untick to let Generate place those classes again too.">
         <input type="checkbox" checked={keepEdited} onChange={(e) => setKeepEdited(e.target.checked)} />
         Keep the classes I edited by hand (they are locked; untick to place them again)
       </label>
       {isRegistrar && (
-        <label style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "12px", fontSize: "13px", color: "#334155" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "12px", fontSize: "13px", color: "#374151" }}>
           <input type="checkbox" checked={mergeMinors} onChange={(e) => setMergeMinors(e.target.checked)} />
           Share Gen Ed classes with other departments when the students fit in the room
         </label>
@@ -462,12 +496,12 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
             const need = uniqueClasses(result.conflicts).length, clashN = result.clashes?.total || 0;
             const ok = need === 0 && clashN === 0;
             return (
-              <div style={{ background: ok ? "#ecfdf5" : "#fffbeb", border: `1px solid ${ok ? "#a7f3d0" : "#fde68a"}`, borderRadius: 8, padding: "10px 14px", fontSize: 13.5, maxWidth: 760, color: "#1e293b" }}>
+              <div style={{ background: ok ? "#ecfdf5" : "#fffbeb", border: `1px solid ${ok ? "#a7f3d0" : "#fde68a"}`, borderRadius: 6, padding: "10px 14px", fontSize: 14, maxWidth: 760, color: "#111827" }}>
                 <div><strong>{result.created_schedule_ids.length}</strong> class period{result.created_schedule_ids.length === 1 ? "" : "s"} saved as <strong>Draft</strong> (nothing is final until you approve it in the Schedules tab).</div>
                 {need > 0 && (
                   <div><strong>{need}</strong> class{need === 1 ? " was" : "es were"} skipped: {need === 1 ? "it" : "they"} could not be placed without breaking a rule.{" "}
                     <button type="button" onClick={() => setSkipped(uniqueClasses(result.conflicts))}
-                      style={{ background: "none", border: "none", boxShadow: "none", color: "#003366", textDecoration: "underline", padding: 0, fontSize: 13.5, cursor: "pointer" }}>See why</button>
+                      style={{ background: "none", border: "none", boxShadow: "none", color: "#003366", textDecoration: "underline", padding: 0, fontSize: 14, cursor: "pointer" }}>See why</button>
                   </div>
                 )}
                 {(result.missing_untouched || []).map((t, i) => <div key={i} style={{ color: "#7a4b00" }}>{t}</div>)}
@@ -476,27 +510,27 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
             );
           })()}
           {(result.kept_edited || []).length > 0 && (
-            <div style={{ background: "#f0f6ff", border: "1px solid #cfe0f7", borderRadius: 8, padding: "8px 12px", fontSize: 13, color: "#1e3a5f", maxWidth: 760, marginTop: 8 }}>
-              🔒 {result.kept_edited.length} class{result.kept_edited.length === 1 ? "" : "es"} you edited by hand were kept where you put them: {result.kept_edited.join(", ")}.
+            <div style={{ background: "#f0f6ff", border: "1px solid #cfe0f7", borderRadius: 6, padding: "8px 12px", fontSize: 13, color: "#1e3a5f", maxWidth: 760, marginTop: 8 }}>
+              {result.kept_edited.length} class{result.kept_edited.length === 1 ? "" : "es"} you edited by hand were kept where you put them: {result.kept_edited.join(", ")}.
             </div>
           )}
           {result.clashes && result.clashes.total > 0 && (
-            <div id="gen-clashes" role="alert" style={{ margin: "10px 0", maxWidth: "860px", border: "2px solid #b91c1c", background: "#fef2f2", borderRadius: 8, padding: "10px 12px" }}>
-              <div style={{ fontWeight: 700, fontSize: "14px", color: "#b91c1c", marginBottom: "4px" }}>
-                ⚠ {result.clashes.total} real conflict{result.clashes.total === 1 ? "" : "s"} found after generating (same teacher, room or students at the same time)
+            <div id="gen-clashes" role="alert" style={{ margin: "10px 0", maxWidth: "860px", border: "2px solid #b91c1c", background: "#fef2f2", borderRadius: 6, padding: "10px 12px" }}>
+              <div style={{ fontWeight: 600, fontSize: "14px", color: "#b91c1c", marginBottom: "4px" }}>
+                {result.clashes.total} real conflict{result.clashes.total === 1 ? "" : "s"} found after generating (same teacher, room or students at the same time)
               </div>
-              <div style={{ fontSize: 12.5, color: "#7f1d1d", marginBottom: 8 }}>This should not happen: please review {result.clashes.total === 1 ? "it" : "them"} before approving anything.</div>
+              <div style={{ fontSize: 13, color: "#7f1d1d", marginBottom: 8 }}>This should not happen: please review {result.clashes.total === 1 ? "it" : "them"} before approving anything.</div>
               <ConflictList report={result.clashes} emptyText="No conflicts." />
               <button onClick={() => setProblems(true)} style={{ background: "#b91c1c", color: "white", border: "none", borderRadius: 6, padding: "7px 16px", fontSize: 13, cursor: "pointer", marginTop: 8 }}>Review conflicts</button>
             </div>
           )}
           {result.warning && (
-            <div style={{ background: "#fff8e6", border: "1px solid #f0d58a", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", color: "#5b4500", maxWidth: "760px", margin: "10px 0" }}>
+            <div style={{ background: "#fff8e6", border: "1px solid #f0d58a", borderRadius: 6, padding: "10px 14px", fontSize: "13px", color: "#5b4500", maxWidth: "760px", margin: "10px 0" }}>
               {result.warning}
             </div>
           )}
           {result.merged_classes && result.merged_classes.length > 0 && (
-            <div style={{ background: "#eef7ee", border: "1px solid #b7dcb7", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", color: "#1d5a1d", maxWidth: "760px", margin: "10px 0" }}>
+            <div style={{ background: "#eef7ee", border: "1px solid #b7dcb7", borderRadius: 6, padding: "10px 14px", fontSize: "13px", color: "#1d5a1d", maxWidth: "760px", margin: "10px 0" }}>
               <strong>{result.merged_classes.length} shared class{result.merged_classes.length === 1 ? "" : "es"}:</strong> these subjects joined another department's class, so they use no extra teacher, room or time.
               <ul style={{ margin: "6px 0 0 18px", padding: 0 }}>
                 {result.merged_classes.map((m, i) => (
@@ -506,7 +540,7 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
             </div>
           )}
           {result.shared_classes && result.shared_classes.length > 0 && (
-            <div style={{ background: "#eef7ee", border: "1px solid #b7dcb7", borderRadius: "8px", padding: "10px 14px", fontSize: "13px", color: "#1d5a1d", maxWidth: "760px", margin: "10px 0" }}>
+            <div style={{ background: "#eef7ee", border: "1px solid #b7dcb7", borderRadius: 6, padding: "10px 14px", fontSize: "13px", color: "#1d5a1d", maxWidth: "760px", margin: "10px 0" }}>
               <strong>{result.shared_classes.length} shared class{result.shared_classes.length === 1 ? "" : "es"} generated</strong> (one teacher, room and time for all participating programs):
               <ul style={{ margin: "6px 0 0 18px", padding: 0 }}>
                 {result.shared_classes.map((m, i) => (
@@ -524,14 +558,14 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
             </p>
           )}
           {result.room_notes && result.room_notes.length > 0 && (
-            <div style={{ margin: "10px 0", padding: "10px 14px", background: "#f0f6ff", border: "1px solid #cfe0f7", borderRadius: "8px", fontSize: "12.5px", color: "#1e3a5f" }}>
+            <div style={{ margin: "10px 0", padding: "10px 14px", background: "#f0f6ff", border: "1px solid #cfe0f7", borderRadius: 6, fontSize: "13px", color: "#1e3a5f" }}>
               <b>Room assignments</b>
               {result.room_notes.map((n, i) => <div key={i} style={{ marginTop: "3px" }}>{n}</div>)}
             </div>
           )}
           <WorkloadWarningList warnings={result.workload_warnings} canResolve />
           {(result.lunch_gap_warnings || []).length > 0 && (
-            <div role="status" style={{ marginTop: 10, background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "10px 12px", fontSize: 12.5, color: "#92400e" }}>
+            <div role="status" style={{ marginTop: 10, background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 6, padding: "10px 12px", fontSize: 13, color: "#92400e" }}>
               <strong>Lunch gap (optional setting): {result.lunch_gap_warnings.length} day{result.lunch_gap_warnings.length === 1 ? "" : "s"} without a free hour between 10:30 AM and 2:30 PM.</strong>{" "}
               Every class was still placed; these are warnings only.
               <ul style={{ margin: "6px 0 0 18px", padding: 0 }}>{result.lunch_gap_warnings.slice(0, 12).map((w, i) => <li key={i}>{w}</li>)}</ul>
@@ -542,39 +576,62 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
       {result?.error && <p style={{ color: "red" }}>{result.error}</p>}
       {timeFor && (
         <FacultyTimePopover teachers={timeFor.teachers} initialId={timeFor.initialId} subjectCode={timeFor.code} semester={semester}
-          programId={programId} yearLevel={yearLevel} onClose={() => setTimeFor(null)} />
+          programId={programId} yearLevel={yearLevel} onClose={() => setTimeFor(null)} needMinutes={timeFor.need}
+          onAssign={isRegistrar ? undefined : (tid, day, start, end) => {
+            // the Dean's manual assignment from the Faculty time window: Professor + Day + Start / End of this subject's row.
+            // Nothing is saved here; Generate places it there (or skips it with the reason) and checks every rule again.
+            setProfessor(timeFor.sid, String(tid));
+            setPicks((pk) => ({ ...pk, [timeFor.sid]: { ...(pk[timeFor.sid] || {}), teacher: String(tid), day, start, end } }));
+            setTimeNotice((n) => ({ ...n, [timeFor.sid]: "Professor, day and time set from the Faculty time window." }));
+            setTimeFor(null);
+          }} />
       )}
       {skipped && (
         <div role="alertdialog" aria-label="Some classes were not placed" style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div style={{ background: "white", borderRadius: 12, maxWidth: 720, width: "100%", maxHeight: "86vh", display: "flex", flexDirection: "column", boxShadow: "0 12px 40px rgba(0,0,0,.3)", borderTop: "5px solid #d97706" }}>
+          <div style={{ background: "white", borderRadius: 6, maxWidth: 720, width: "100%", maxHeight: "86vh", display: "flex", flexDirection: "column", boxShadow: "var(--shadow-pop)", borderTop: "5px solid #d97706" }}>
             <div style={{ padding: "16px 20px 6px" }}>
-              <h3 style={{ margin: 0, color: "#92400e" }}>⚠ Some classes were not placed</h3>
-              <p style={{ margin: "6px 0 0", fontSize: 13, color: "#475569" }}>
+              <h3 style={{ margin: 0, color: "#92400e" }}>Some classes were not placed</h3>
+              <p style={{ margin: "6px 0 0", fontSize: 13, color: "#4b5563" }}>
                 {skipped.length} class{skipped.length === 1 ? " was" : "es were"} skipped because {skipped.length === 1 ? "it" : "they"} could not be placed without breaking a rule.
                 Everything else was saved as Draft. Nothing was changed to make room.
               </p>
             </div>
             <div style={{ overflow: "auto", padding: "4px 20px" }}>
               {skipped.map((c) => (
-                <div key={`${c.section_id}-${c.subject_id}`} style={{ padding: "9px 0", borderBottom: "1px solid #f1f5f9", fontSize: 13 }}>
-                  <div style={{ fontWeight: 600, color: "#1e293b" }}>{c.code || String(c.subject).split(" - ")[0]} — {c.title || String(c.subject).split(" - ").slice(1).join(" - ")}</div>
-                  <div style={{ color: "#64748b", fontSize: 12 }}>Section {String(c.section)} · {c.year_level}</div>
-                  <div style={{ color: "#a4231a", marginTop: 3 }}>{c.reason || "No reason was recorded."}</div>
+                <div key={`${c.section_id}-${c.subject_id}`} style={{ padding: "9px 0", borderBottom: "1px solid #f3f4f6", fontSize: 13 }}>
+                  <div style={{ fontWeight: 600, color: "#111827" }}>{c.code || String(c.subject).split(" - ")[0]} — {c.title || String(c.subject).split(" - ").slice(1).join(" - ")}</div>
+                  <div style={{ color: "#6b7280", fontSize: 12 }}>Section {String(c.section)} · {c.year_level}</div>
+                  <div style={{ color: "#b91c1c", marginTop: 3 }}>{c.reason || "No reason was recorded."}</div>
+                  {!isRegistrar && /qualified/i.test(c.reason || "") && c.section_id && c.subject_id && (
+                    <button type="button" onClick={() => setFacultyFor(c)}
+                      style={{ marginTop: 6, background: "white", color: "#003366", border: "1px solid #003366", borderRadius: 4, padding: "4px 10px", fontSize: 12 }}>
+                      See other available faculty
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
-            <div style={{ padding: "12px 20px", textAlign: "right", borderTop: "1px solid #eef2f6" }}>
-              <button onClick={() => setSkipped(null)} autoFocus style={{ background: "#003366", color: "white", border: "none", borderRadius: 6, padding: "7px 22px", fontSize: 13.5, cursor: "pointer" }}>OK</button>
+            <div style={{ padding: "12px 20px", textAlign: "right", borderTop: "1px solid #f3f4f6" }}>
+              <button onClick={() => setSkipped(null)} autoFocus style={{ background: "#003366", color: "white", border: "none", borderRadius: 6, padding: "7px 22px", fontSize: 14, cursor: "pointer" }}>OK</button>
             </div>
           </div>
         </div>
       )}
+      {askOverride && (
+        <AssignAnywayDialog person={askOverride.person} subjectCode={askOverride.code} subjectTitle={askOverride.title}
+          onCancel={() => setAskOverride(null)}
+          onConfirm={(reason) => { setProfessor(askOverride.sid, String(askOverride.person.id), { reason }); setAskOverride(null); }} />
+      )}
+      {facultyFor && (
+        <UnplacedFacultyDialog cls={facultyFor} onClose={() => setFacultyFor(null)}
+          onPlaced={() => { setSkipped((list) => (list || []).filter((x) => !(x.section_id === facultyFor.section_id && x.subject_id === facultyFor.subject_id))); setListKey((k) => k + 1); }} />
+      )}
       {popup && (
         <div role="alertdialog" aria-label={popup.title} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div style={{ background: "white", borderRadius: 12, maxWidth: 520, width: "100%", padding: "18px 20px", boxShadow: "0 12px 40px rgba(0,0,0,.3)", borderTop: `5px solid ${popup.tone === "bad" ? "#b91c1c" : "#d97706"}` }}>
-            <h3 style={{ margin: "0 0 10px", color: popup.tone === "bad" ? "#b91c1c" : "#92400e" }}>⚠ {popup.title}</h3>
+          <div style={{ background: "white", borderRadius: 6, maxWidth: 520, width: "100%", padding: "18px 20px", boxShadow: "var(--shadow-pop)", borderTop: `5px solid ${popup.tone === "bad" ? "#b91c1c" : "#d97706"}` }}>
+            <h3 style={{ margin: "0 0 10px", color: popup.tone === "bad" ? "#b91c1c" : "#92400e" }}>{popup.title}</h3>
             {popup.items.map((it, i) => (
-              <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", padding: "8px 0", borderBottom: "1px solid #f1f5f9", fontSize: 13.5 }}>
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", padding: "8px 0", borderBottom: "1px solid #f3f4f6", fontSize: 14 }}>
                 <span>{it.text}</span>
                 {it.action === "clashes" && <button onClick={() => { setPopup(null); setProblems(true); }} style={popBtn}>{it.label}</button>}
                 {it.action === "unplaced" && <button onClick={() => { setPopup(null); setProblems(true); }} style={popBtn}>{it.label}</button>}

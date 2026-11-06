@@ -148,6 +148,72 @@ BS Radiologic Technology. Tests: `curriculum.tests`.
   the section's other classes are NOT considered, so it is advice only; Generate re-checks everything and skips with the reason.
   Code: `frontend/src/utils/suggestProfessors.js` (tests `suggestProfessors.test.js`), `engine.tests.SuggestedProfessorDataTests`.
 
+## Class schedule PDF (portrait)
+
+* Print / Preview (Dean and Registrar, `PrintPreviewButton.js`) first asks for the year level: 1st, 2nd, 3rd, 4th Year, or
+  "All year levels (1st - 4th)". The other filters (program, semester, status, Gen Ed / program, college) still apply.
+* `backend/engine/pdf_export.py` (layout only): **A4 portrait**, 0.5 in margins.
+  * "All year levels": ONE year level per page (page 1 = 1st Year, 2 = 2nd, ...; a year level without classes is skipped, no blank
+    page). Every page has the school header and its heading ("BS Computer Science - 1st Year - 1st Semester, A.Y. 2026-2027").
+    The signatory block appears ONCE, directly below the table of the last page.
+  * One year level: one page with its signatory.
+  * Each page is measured before printing: row padding, then the font, are reduced (text 9 pt down to 8 pt) until it fits. About
+    24 rows with a Lec / Lab note on every row (28+ without notes) fit one page; a longer year level continues on the next page
+    (rows never split, header row repeated) with the signatory kept with its last rows, and is logged (year level + row count).
+  * Day & Time is sized to its longest text so "Wed 10:00AM-12:00PM" stays on one line (the width comes from Subject).
+  * Signatories: "Prepared by" = the Dean account of each college in the PDF; "Approved by" = `SCHOOL_DIRECTOR_NAME` in that file.
+  Tests: `engine.tests.SchedulePdfLayoutTests` (cases a-e), `PrintPreviewButton.test.js`.
+
+## Gen Ed move requests (Dean -> Registrar)
+
+* A Dean presses **Request move** on a Gen Ed class of their own college (Schedules tab), picks one of the times the Registrar could
+  move it to (`POST /api/engine/gened-requests/options/`: the Registrar's own clash-free list -- same teacher and room, every attending
+  section free) and gives a reason. Nothing moves; the Registrar is notified (`engine/gened_requests.py`, model `GenEdMoveRequest`).
+* The Registrar sees "Gen Ed move requests from the Deans" on the Schedules tab: **Approve & move** re-checks every schedule at that
+  moment (`engine.reschedule.apply`: lock, fresh rows, conflict scan, undo on any clash) and moves ONLY that Gen Ed class (all sections
+  of a shared class together). Another Dean's major or any other class is never moved or overwritten: if the time was taken meanwhile,
+  the request becomes "Could not be applied" and nothing changes. An approved / published class must be moved back to Draft first
+  (the request stays pending). **Reject** declines; the Dean can **Cancel** a pending request. The Dean is notified of the outcome.
+  Tests: `engine.tests.GenEdMoveRequestTests`, `GenEdRequests.test.js`. Run `python manage.py migrate` once (new table).
+
+## Faculty availability is a preference (not a limit)
+
+* A teacher's **preferred** and **available** windows no longer close the rest of the day. Generate tries, for each class, a time
+  inside their preferred window first, then their available window, then any other open time (`engine/availability.py` tiers 0/1/2,
+  used in the value ordering only). Only times the teacher marked **Unavailable** stay closed for Generate
+  (`engine.views._build_availability_rules`).
+* **By hand**, a Dean / the Registrar may place a class at any time where nothing clashes (teacher, room, students): "Choose a new day
+  and time" lists every clash-free time, the teacher's preferred / available ones first, then those marked "outside their
+  availability" and last "marked UNAVAILABLE by the teacher" (`engine/reschedule.py`). Changing a shared class's teacher works the same
+  way (`engine/shared_edit.py`). Room, teacher, section and Lecture-before-Lab rules are unchanged.
+* The Faculty time pop-over shows "Best time (their preference)" and "Also possible" for each day.
+* **Assign from the Faculty time window (Dean):** each free time long enough for the subject is clickable; choose the start and
+  "Assign to this time". It fills the row's Professor, **Day** and Start / End (nothing saved yet). Generate sends
+  `time_windows[sid] = {start, end, day}`; the day is a hard choice for that subject only (`rooms.rules.day_choice_for`, used by
+  `build_domain`, the skip reason and the blocker report). Tests: `AssignedDayTests`, `FacultyTimePopover.test.js`.
+  Tests: `engine.tests.AvailabilityAsPreferenceTests` (and the updated availability tests).
+
+## Editing a shared (merged) class
+
+* A shared Gen Ed class (several sections, one `Schedule.merge_key`) is edited as ONE class by the Registrar: the Edit dialog says
+  "Shared class: A.b2 + A2 · 51 students" and a new teacher or room (`POST /api/engine/shared-classes/edit/`, `engine/shared_edit.py`)
+  or day / time ("Choose a new day and time", `engine/reschedule.py`) is applied to every attending section together, so it stays shared.
+* Checked for the whole group before saving (all or nothing): owner (Registrar), all rows Draft, the teacher qualified for every section
+  (CAS rule), available, free and within the weekly limit; the room allowed for every college and seating all students together; every
+  section free at a new time (Lecture before Lab kept); a conflict scan before / after (no new clash) and the generation lock.
+* A single row of a shared class is still never changed alone (PATCH is refused). Edited rows get the "Edited" lock so Generate keeps
+  them. Tests: `engine.tests.SharedClassGroupEditTests`.
+
+## Major subjects: discipline families for every college
+
+* `engine/qualification.py` `MAJOR_FAMILIES` (majors only): Nursing, Radiologic Technology, Business, Hospitality / Tourism and
+  Communication, next to Computing, Mathematics and Allied Health. A teacher of the subject's own college whose degree / specialization
+  is in that discipline qualifies (e.g. "BS Radiologic Technology" / "Radiographic Positioning" for RAD1101). The same-college rule and
+  the Gen Ed (CAS) rule are unchanged. Before this, 226 majors (BA Comm, BSBA, Hospitality, Tourism, Nursing, RadTech) had nobody
+  qualified because none has a field recorded; after it, 0. Tests: `engine.tests.ProgramDisciplineFamilyTests`.
+* Faculty saved as "Radiologic Technology" / "Nursing" (without "College of") are not counted in their college:
+  `python manage.py prefix_departments` (preview) then `--apply` renames them consistently everywhere.
+
 ## No fixed lunch period (college)
 
 * 12:00-1:00 PM is an ordinary class time on every day (Mon-Sat): classes may start, end or run through noon. Lunch is whatever free

@@ -60,6 +60,9 @@ def report(section, subject, hours, window, timeslots, blocks, assigned, teacher
         return None                                     # paired-day lectures (Nursing) are not reported per period
     need = int(round(float(hours) * 60))
     days = sorted({t.day for t in timeslots}, key=lambda d: _DAY_INDEX.get(d[:3].lower(), 99))
+    from rooms.rules import day_choice_for
+    if day_choice_for(subject.id):          # the Dean assigned one day (Faculty time window): only that day's periods count
+        days = [d for d in days if d[:3].title() == day_choice_for(subject.id)]
     caps_lim, caps_used = (caps or (None, None))
     caps_lim, caps_used = caps_lim or {}, caps_used or {}
     fit = [r for r in rooms if not ((getattr(r, "capacity", 0) or 0) and size and r.capacity < size)]

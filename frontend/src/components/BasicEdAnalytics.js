@@ -3,6 +3,7 @@ import Badge from "./Badge";
 import { StatTile, HBarChart } from "./Charts";
 import { be, errText, inputStyle, cardStyle, btn, btnPrimary, Notice } from "./basicEdUi";
 import { periodOptionsAll } from "../utils/terms";
+import { formatTime } from "../utils/formatDateTime";
 
 /* Principal's Analytics tab (SHS or JHS, never both): teacher workload from the LATEST generated timetables of this school level.
    Same look as the Dean's Analytics (stat tiles, bar charts, cards). Read-only, except "Apply" on a recommendation, which changes the
@@ -10,16 +11,16 @@ import { periodOptionsAll } from "../utils/terms";
    re-reads the server every 30 s while it is visible and whenever the window regains focus, so a new or edited timetable shows up. */
 
 const STATUS = {
-  over: { label: "Overloaded", tone: "warning", color: "#c0392b" },
-  at_limit: { label: "At limit", tone: "neutral", color: "#e0a72e" },
-  balanced: { label: "Balanced", tone: "success", color: "#2e7d52" },
-  under: { label: "Underloaded", tone: "neutral", color: "#2563eb" },
+  over: { label: "Overloaded", tone: "warning", color: "#b91c1c" },
+  at_limit: { label: "At limit", tone: "neutral", color: "#b45309" },
+  balanced: { label: "Balanced", tone: "success", color: "#003366" },
+  under: { label: "Underloaded", tone: "neutral", color: "#5b7fa6" },
 };
 const DAY_NAME = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday", Sat: "Saturday" };
 const KIND_LABEL = { overload: "Overload", daily_limit: "Daily limit", double_booked: "Double-booked", availability: "Availability",
   specialization: "Specialization", no_replacement: "No replacement", no_teacher: "No teacher" };
 const REFRESH_MS = 30000;
-const th = { textAlign: "left", padding: "9px 12px", background: "#f1f5f9", borderBottom: "1px solid #e2e8f0", fontSize: 12.5, color: "#334155", whiteSpace: "nowrap" };
+const th = { textAlign: "left", padding: "9px 12px", background: "#f3f4f6", borderBottom: "1px solid #e5e7eb", fontSize: 13, color: "#374151", whiteSpace: "nowrap" };
 const td = { padding: "10px 12px", borderBottom: "1px solid #eef2f7", fontSize: 13, verticalAlign: "top" };
 const fmt = (h) => (Number.isInteger(h) ? String(h) : String(Math.round(h * 10) / 10));
 
@@ -27,10 +28,10 @@ function LoadBar({ value, max, status }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
   return (
     <div style={{ minWidth: 110 }}>
-      <div style={{ background: "#e8eef7", borderRadius: 999, height: 8, overflow: "hidden" }}>
+      <div style={{ background: "#e8eef7", borderRadius: 4, height: 8, overflow: "hidden" }}>
         <div style={{ width: `${pct}%`, height: "100%", background: (STATUS[status] || STATUS.balanced).color }} />
       </div>
-      <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 3 }}>{fmt(value)} / {max} h</div>
+      <div style={{ fontSize: 12, color: "#6b7280", marginTop: 3 }}>{fmt(value)} / {max} h</div>
     </div>
   );
 }
@@ -40,26 +41,26 @@ function TeacherDetail({ t }) {
     <div style={{ padding: "12px 16px", background: "#f7f9fc", fontSize: 13 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
         <div>
-          <div style={{ fontWeight: 700, color: "#003366", marginBottom: 6 }}>Assigned subjects</div>
-          {t.subjects.length === 0 ? <span style={{ color: "#64748b" }}>No classes in this timetable.</span> : (
+          <div style={{ fontWeight: 600, color: "#003366", marginBottom: 6 }}>Assigned subjects</div>
+          {t.subjects.length === 0 ? <span style={{ color: "#6b7280" }}>No classes in this timetable.</span> : (
             <table style={{ borderCollapse: "collapse", width: "100%" }}>
               <tbody>{t.subjects.map((s) => (
                 <tr key={s.code}>
                   <td style={{ padding: "4px 8px 4px 0", overflowWrap: "anywhere" }}><b>{s.code}</b> {s.name}</td>
-                  <td style={{ padding: "4px 0", color: "#475569", whiteSpace: "nowrap" }}>{s.sections.length} section{s.sections.length === 1 ? "" : "s"} · {s.periods} periods · {fmt(s.hours)} h</td>
+                  <td style={{ padding: "4px 0", color: "#4b5563", whiteSpace: "nowrap" }}>{s.sections.length} section{s.sections.length === 1 ? "" : "s"} · {s.periods} periods · {fmt(s.hours)} h</td>
                 </tr>))}</tbody>
             </table>)}
         </div>
         <div>
-          <div style={{ fontWeight: 700, color: "#003366", marginBottom: 6 }}>Class hours by day</div>
-          {Object.keys(t.hours_by_day).length === 0 ? <span style={{ color: "#64748b" }}>—</span>
+          <div style={{ fontWeight: 600, color: "#003366", marginBottom: 6 }}>Class hours by day</div>
+          {Object.keys(t.hours_by_day).length === 0 ? <span style={{ color: "#6b7280" }}>—</span>
             : Object.entries(t.hours_by_day).map(([d, h]) => <div key={d}>{DAY_NAME[d] || d}: <b>{fmt(h)} h</b></div>)}
         </div>
         <div>
-          <div style={{ fontWeight: 700, color: "#003366", marginBottom: 6 }}>Specialization &amp; availability</div>
-          <div>{t.specializations.length ? t.specializations.join(", ") : <span style={{ color: "#64748b" }}>No specialization recorded</span>}</div>
-          <div style={{ color: "#475569", marginTop: 4 }}>Available: {t.available_days.length ? t.available_days.map((d) => DAY_NAME[d] || d).join(", ") : "all days (no limits set)"}</div>
-          {t.department && <div style={{ color: "#475569" }}>Department: {t.department}{t.strand ? ` · ${t.strand}` : ""}</div>}
+          <div style={{ fontWeight: 600, color: "#003366", marginBottom: 6 }}>Specialization &amp; availability</div>
+          <div>{t.specializations.length ? t.specializations.join(", ") : <span style={{ color: "#6b7280" }}>No specialization recorded</span>}</div>
+          <div style={{ color: "#4b5563", marginTop: 4 }}>Available: {t.available_days.length ? t.available_days.map((d) => DAY_NAME[d] || d).join(", ") : "all days (no limits set)"}</div>
+          {t.department && <div style={{ color: "#4b5563" }}>Department: {t.department}{t.strand ? ` · ${t.strand}` : ""}</div>}
         </div>
       </div>
     </div>
@@ -116,7 +117,7 @@ export default function BasicEdAnalytics({ level, overview }) {
   };
 
   if (error) return <Notice tone="error">{error} <button style={btn} onClick={() => load(false)}>Retry</button></Notice>;
-  if (!data) return <p style={{ color: "#64748b" }}>Loading analytics…</p>;
+  if (!data) return <p style={{ color: "#6b7280" }}>Loading analytics…</p>;
   const s = data.summary;
   const chart = rows.slice(0, 40).map((t) => ({ label: t.full_name, value: t.hours }));
   const lbl = (n) => (periodOptions.find(([k]) => k === n) || [n, `Period ${n}`])[1];
@@ -131,14 +132,14 @@ export default function BasicEdAnalytics({ level, overview }) {
             {data.periods.map((n) => <option key={n} value={n}>{lbl(n)}</option>)}
           </select>)}
         <button style={btn} onClick={() => load(false)}>Refresh</button>
-        {updated && <span style={{ fontSize: 12, color: "#64748b" }}>Updated {updated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · refreshes automatically</span>}
+        {updated && <span style={{ fontSize: 12, color: "#6b7280" }}>Updated {formatTime(updated)} · refreshes automatically</span>}
       </div>
 
       {!data.has_schedule ? (
         <Notice tone="info">No {level} timetable exists yet for {lbl(data.period)}. Generate one in the Schedules tab; the teacher analytics appear here right away.</Notice>
       ) : (
         <>
-          <p style={{ fontSize: 13, color: "#334155", marginTop: 0 }}>
+          <p style={{ fontSize: 13, color: "#374151", marginTop: 0 }}>
             Based on the latest {level} timetables for {lbl(data.period)} ({data.runs.map((r) => `Grade ${r.grade_level} v${r.version} ${r.status}`).join(" · ")}).
             Hours are class hours per week; each teacher is measured against their own weekly limit.
             Underloaded = below {data.thresholds.under_pct}% of the limit and clearly under the average; at limit = {data.thresholds.at_limit_pct}% or more.
@@ -146,10 +147,10 @@ export default function BasicEdAnalytics({ level, overview }) {
           <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 20 }}>
             <StatTile label="Teachers" value={`${s.with_load}/${s.teachers}`} />
             <StatTile label="Average Load" value={`${fmt(s.average_hours)} h`} />
-            <StatTile label="Overloaded" value={s.over} accent={s.over ? "#c0392b" : "#2e7d52"} />
-            <StatTile label="Underloaded" value={s.under} accent={s.under ? "#2563eb" : "#2e7d52"} />
-            <StatTile label="Workload Std. Deviation" value={`${fmt(s.std_dev)} hrs`} accent="#b8860b" />
-            <StatTile label="Workload Conflicts" value={s.conflicts} accent={s.conflicts ? "#c0392b" : "#2e7d52"} />
+            <StatTile label="Overloaded" value={s.over} accent={s.over ? "#b91c1c" : undefined} />
+            <StatTile label="Underloaded" value={s.under} />
+            <StatTile label="Workload std. deviation" value={`${fmt(s.std_dev)} hrs`} />
+            <StatTile label="Workload conflicts" value={s.conflicts} accent={s.conflicts ? "#b91c1c" : undefined} />
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 20, marginBottom: 20 }}>
@@ -164,7 +165,7 @@ export default function BasicEdAnalytics({ level, overview }) {
               </div>
               <div style={{ ...cardStyle, marginBottom: 0 }}>
                 <h4 style={{ marginTop: 0, color: "#003366" }}>Load Status</h4>
-                <HBarChart color="#b8860b" unit=" teachers" data={Object.entries(STATUS).map(([k, v]) => ({ label: v.label, value: s[k] }))} />
+                <HBarChart color="#003366" unit=" teachers" data={Object.entries(STATUS).map(([k, v]) => ({ label: v.label, value: s[k] }))} />
               </div>
             </div>
           </div>
@@ -178,22 +179,22 @@ export default function BasicEdAnalytics({ level, overview }) {
                 {Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
               </select>
             </div>
-            <div style={{ overflowX: "auto", maxHeight: 520, overflowY: "auto", border: "1px solid #e2e8f0", borderRadius: 10 }}>
+            <div style={{ overflowX: "auto", maxHeight: 520, overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: 6 }}>
               <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 760 }}>
                 <thead><tr>
                   <th style={th}>Teacher</th><th style={th}>Subjects</th><th style={{ ...th, textAlign: "right" }}>Sections</th>
                   <th style={{ ...th, textAlign: "right" }}>Class hours</th><th style={th}>Load</th><th style={th}>Status</th><th style={th}></th>
                 </tr></thead>
                 <tbody>
-                  {rows.length === 0 && <tr><td style={{ ...td, color: "#64748b" }} colSpan={7}>Nothing to show.</td></tr>}
+                  {rows.length === 0 && <tr><td style={{ ...td, color: "#6b7280" }} colSpan={7}>Nothing to show.</td></tr>}
                   {rows.map((t) => (
                     <React.Fragment key={t.faculty_id}>
                       <tr onClick={() => setOpen(open === t.faculty_id ? null : t.faculty_id)} style={{ cursor: "pointer" }}>
-                        <td style={{ ...td, fontWeight: 600 }}>{t.full_name}<div style={{ fontSize: 11.5, color: "#94a3b8", fontWeight: 400 }}>{t.employee_id}</div></td>
+                        <td style={{ ...td, fontWeight: 600 }}>{t.full_name}<div style={{ fontSize: 12, color: "#6b7280", fontWeight: 400 }}>{t.employee_id}</div></td>
                         <td style={{ ...td, maxWidth: 300, overflowWrap: "anywhere" }}>
-                          {t.subject_count === 0 ? <span style={{ color: "#94a3b8" }}>None assigned</span>
+                          {t.subject_count === 0 ? <span style={{ color: "#6b7280" }}>None assigned</span>
                             : <>{t.subjects.slice(0, 3).map((x) => x.code).join(", ")}{t.subject_count > 3 ? ` +${t.subject_count - 3} more` : ""}
-                              <div style={{ fontSize: 11.5, color: "#64748b" }}>{t.subject_count} subject{t.subject_count === 1 ? "" : "s"} · {t.periods} periods</div></>}
+                              <div style={{ fontSize: 12, color: "#6b7280" }}>{t.subject_count} subject{t.subject_count === 1 ? "" : "s"} · {t.periods} periods</div></>}
                         </td>
                         <td style={{ ...td, textAlign: "right" }}>{t.sections}</td>
                         <td style={{ ...td, textAlign: "right", fontWeight: 600 }}>{fmt(t.hours)} h</td>
@@ -213,27 +214,27 @@ export default function BasicEdAnalytics({ level, overview }) {
             <h4 style={{ marginTop: 0, color: "#003366" }}>Workload conflicts ({data.conflicts.length})</h4>
             {data.conflicts.length === 0 ? <p style={{ margin: 0, fontSize: 13, color: "#166534" }}>No workload conflicts: every teacher is within their weekly and daily limits, free, available and qualified for their classes.</p>
               : data.conflicts.map((c, i) => (
-                <div key={i} style={{ borderLeft: `4px solid ${c.severity === "error" ? "#dc2626" : "#e0a72e"}`, background: c.severity === "error" ? "#fef2f2" : "#fffbeb", borderRadius: 8, padding: "9px 12px", marginBottom: 8, fontSize: 13 }}>
+                <div key={i} style={{ borderLeft: `4px solid ${c.severity === "error" ? "#dc2626" : "#e0a72e"}`, background: c.severity === "error" ? "#fef2f2" : "#fffbeb", borderRadius: 6, padding: "9px 12px", marginBottom: 8, fontSize: 13 }}>
                   <div><Badge tone="warning">{KIND_LABEL[c.kind] || c.kind}</Badge> <span style={{ marginLeft: 6 }}>{c.message}</span></div>
-                  <div style={{ color: "#475569", marginTop: 4 }}>Suggested adjustment: {c.suggestion}</div>
+                  <div style={{ color: "#4b5563", marginTop: 4 }}>Suggested adjustment: {c.suggestion}</div>
                 </div>))}
           </div>
 
           <div style={cardStyle}>
             <h4 style={{ marginTop: 0, color: "#003366" }}>Workload balancing recommendations ({data.recommendations.length})</h4>
-            <p style={{ marginTop: 0, fontSize: 12.5, color: "#64748b" }}>Each suggestion moves one subject in one section to a teacher with the right specialization who is free at all those times, inside their availability and within their weekly and daily limits.</p>
+            <p style={{ marginTop: 0, fontSize: 13, color: "#6b7280" }}>Each suggestion moves one subject in one section to a teacher with the right specialization who is free at all those times, inside their availability and within their weekly and daily limits.</p>
             {note && <Notice tone={note.tone}>{note.text}</Notice>}
-            {data.recommendations.length === 0 ? <p style={{ margin: 0, fontSize: 13, color: "#475569" }}>Nothing to rebalance right now.</p>
+            {data.recommendations.length === 0 ? <p style={{ margin: 0, fontSize: 13, color: "#4b5563" }}>Nothing to rebalance right now.</p>
               : data.recommendations.map((r, i) => (
-                <div key={i} style={{ border: "1px solid #dbe3ec", borderRadius: 8, padding: "10px 12px", marginBottom: 8, fontSize: 13, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+                <div key={i} style={{ border: "1px solid #e5e7eb", borderRadius: 6, padding: "10px 12px", marginBottom: 8, fontSize: 13, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
                   <div style={{ flex: "1 1 320px", minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, overflowWrap: "anywhere" }}>{r.subject} · {r.section}</div>
-                    <div>{r.from} <span style={{ color: "#64748b" }}>({fmt(r.from_hours_before)} → {fmt(r.from_hours_after)} h)</span> ➜ <b>{r.to}</b> <span style={{ color: "#64748b" }}>({fmt(r.to_hours_before)} → {fmt(r.to_hours_after)} h)</span></div>
-                    <div style={{ color: "#64748b", fontSize: 12.5, marginTop: 2 }}>{r.periods} period{r.periods === 1 ? "" : "s"} · {fmt(r.hours)} h a week. {r.reason}</div>
+                    <div style={{ fontWeight: 600, overflowWrap: "anywhere" }}>{r.subject} · {r.section}</div>
+                    <div>{r.from} <span style={{ color: "#6b7280" }}>({fmt(r.from_hours_before)} → {fmt(r.from_hours_after)} h)</span> to <b>{r.to}</b> <span style={{ color: "#6b7280" }}>({fmt(r.to_hours_before)} → {fmt(r.to_hours_after)} h)</span></div>
+                    <div style={{ color: "#6b7280", fontSize: 13, marginTop: 2 }}>{r.periods} period{r.periods === 1 ? "" : "s"} · {fmt(r.hours)} h a week. {r.reason}</div>
                   </div>
                   {r.editable
                     ? <button style={btnPrimary} disabled={applying !== null} onClick={() => apply(r, i)}>{applying === i ? "Applying…" : "Apply"}</button>
-                    : <span style={{ fontSize: 12, color: "#64748b" }}>Timetable is {r.run_status}; request a revision to change it.</span>}
+                    : <span style={{ fontSize: 12, color: "#6b7280" }}>Timetable is {r.run_status}; request a revision to change it.</span>}
                 </div>))}
           </div>
         </>

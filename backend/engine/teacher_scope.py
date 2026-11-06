@@ -92,10 +92,24 @@ def options(user, schedule_ids):
     if not can_edit_schedule_kind(user, r0.subject.classification, r0.section.program.department):
         return None, "You cannot change this class.", 403
     ids = [r.id for r in rows]
+    shared = None
+    members = [(r0.section, r0.subject)]
+    if r0.merge_key:
+        # a SHARED class is edited as one class (engine.shared_edit): the teacher must suit every attending section, and the rows
+        # of the other sections are the same class, not a clash
+        from .shared_edit import group_rows
+        grp = group_rows(r0.merge_key)
+        ids = [r.id for r in grp]
+        members = list({r.section_id: (r.section, r.subject) for r in grp}.values())
+        shared = {"sections": [f"{sec.program.name} {sec.name}" for sec, _sub in members],
+                  "students": sum(int(sec.student_count or 0) for sec, _sub in members)}
     slots = list({r.timeslot_id: r.timeslot for r in rows}.values())
     need = sum((s.end_time.hour * 60 + s.end_time.minute - s.start_time.hour * 60 - s.start_time.minute) / 60 for s in slots)
     term = r0.term or r0.section.semester
     allowed = candidates(user, r0.subject, r0.section)
+    for sec, sub in members[1:]:
+        ok = {t.id for t in candidates(user, sub, sec, allowed)}
+        allowed = [t for t in allowed if t.id in ok]
     # the class's current teacher is listed only when the rule allows them; otherwise (older data) they are named separately,
     # never offered as a choice, with the reason
     outside = "" if r0.teacher_id in {t.id for t in allowed} else teacher_allowed(user, r0.teacher, r0.subject, r0.section)
@@ -124,7 +138,17 @@ def options(user, schedule_ids):
                     "current_hours": cur, "max_hours": mx, "suggested": not why, "why": why,
                     "current": t.id == r0.teacher_id})
     out.sort(key=lambda x: (not x["suggested"], x["current_hours"], x["label"].lower()))
+    from . import faculty_groups as fg
+    from .scheduler import _is_lab_of
+    _prow = next((p for p in Schedule.objects.filter(section=r0.section, term=term).select_related("subject")
+                  if _is_lab_of(r0.subject, p.subject) or _is_lab_of(p.subject, r0.subject)), None)
+    partner = _prow.teacher_id if _prow else None
+    groups = fg.build(user, r0.subject, r0.section, term=term, school_year=r0.school_year or None, exact_slots=slots, exclude_ids=ids,
+                      need_hours=need, partner_teacher_id=partner)
     return {"subject": r0.subject.code, "title": r0.subject.title, "kind": "major" if is_major(r0.subject) else "minor",
             "departments": allowed_departments(user, r0.subject, r0.section) or [], "teacher": r0.teacher_id,
             "current_outside": {"id": r0.teacher_id, "full_name": _name(r0.teacher), "reason": outside} if outside else None,
+            "shared": shared,
+            "override": r0.qualification_override, "override_badge": fg.badge_text(r0.qualification_override),
+            "groups": groups, "partner_code": _prow.subject.code if _prow else "",
             "teachers": out}, "", 200

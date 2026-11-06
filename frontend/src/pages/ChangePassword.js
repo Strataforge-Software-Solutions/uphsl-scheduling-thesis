@@ -1,4 +1,6 @@
 import PasswordInput from "../components/PasswordInput";
+import logo from "../assets/uphsl_logo.png";
+import "./Login.css";
 import React, { useEffect, useState } from "react";
 import { changePassword, getCurrentUser, markPasswordChanged, refreshCurrentUser } from "../services/api";
 
@@ -20,7 +22,7 @@ function ChangePassword({ onDone }) {
     e.preventDefault();
     setError("");
     if (!newPassword || !confirm) {
-      setError("Please fill in both password fields.");
+      setError("Fill in both password fields.");
       return;
     }
     if (newPassword !== confirm) {
@@ -47,97 +49,31 @@ function ChangePassword({ onDone }) {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "#eef2f6", fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif" }}>
-      <div style={{
-        background: "#003366", padding: "14px 28px", display: "flex", alignItems: "center", gap: "14px",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-      }}>
-        <span style={{ color: "white", fontWeight: 700, fontSize: "18px", letterSpacing: "0.2px" }}>
-          U-FAST — University-Faculty Academic Scheduling Tool
-        </span>
+    <div className="login-container">
+      <div className="login-header">
+        <img src={logo} alt="UPHSL logo" className="login-logo" />
+        <h2>U-FAST</h2>
+        <p className="login-subtitle">University - Faculty Academic Scheduling Tool</p>
       </div>
 
-      <div style={{ display: "flex", justifyContent: "center", paddingTop: "60px" }}>
-        <form
-          onSubmit={handleSubmit}
-          style={{
-            background: "linear-gradient(180deg, #003b7a 0%, #002347 100%)",
-            borderRadius: "18px",
-            padding: "32px 36px",
-            width: "360px",
-            boxShadow: "0 15px 40px rgba(0,0,0,0.25)",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", marginBottom: "18px" }}>
-            <span style={{ color: "white", fontWeight: 700, fontSize: "14px", marginRight: "10px", whiteSpace: "nowrap" }}>
-              Login ID:
-            </span>
-            <div style={{
-              flex: 1, background: "#dbe4ee", borderRadius: "6px", padding: "9px 12px",
-              fontSize: "13.5px", color: "#1f2937", fontWeight: 600,
-            }}>
-              {displayName}
-            </div>
-          </div>
+      <form className="login-form" onSubmit={handleSubmit}>
+        <h3>Set a new password</h3>
+        <p className="login-help" style={{ margin: "-8px 0 16px" }}>
+          Signed in as <strong style={{ color: "#111827" }}>{displayName}</strong>. Choose a password of at least 8 characters before you continue.
+        </p>
+        <div className="login-field">
+          <label htmlFor="new-password">New password</label>
+          <PasswordInput id="new-password" autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
+        </div>
+        <div className="login-field">
+          <label htmlFor="confirm-password">Confirm new password</label>
+          <PasswordInput id="confirm-password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
+        </div>
+        {error && <p className="login-error" role="alert">{error}</p>}
+        <button type="submit" disabled={submitting}>{submitting ? "Saving…" : "Save password"}</button>
+      </form>
 
-          <p style={{ color: "rgba(255,255,255,0.85)", fontSize: "13px", margin: "0 0 14px 0" }}>
-            Create New Password
-          </p>
-
-          <div style={{ marginBottom: "10px" }}>
-            <label style={{ color: "rgba(255,255,255,0.75)", fontSize: "12px", display: "block", marginBottom: "4px" }}>
-              Password
-            </label>
-            <PasswordInput
-              autoComplete="new-password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              required
-              style={{
-                width: "100%", padding: "10px 12px", borderRadius: "7px", border: "none",
-                fontSize: "13.5px", boxSizing: "border-box",
-              }}
-            />
-          </div>
-
-          <div style={{ marginBottom: "8px" }}>
-            <label style={{ color: "rgba(255,255,255,0.75)", fontSize: "12px", display: "block", marginBottom: "4px" }}>
-              Confirm Password
-            </label>
-            <PasswordInput
-              autoComplete="new-password"
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              required
-              style={{
-                width: "100%", padding: "10px 12px", borderRadius: "7px", border: "none",
-                fontSize: "13.5px", boxSizing: "border-box",
-              }}
-            />
-          </div>
-
-          {error && (
-            <p style={{ color: "#ffb4b4", fontSize: "12.5px", marginBottom: "10px", textAlign: "center" }}>
-              {error}
-            </p>
-          )}
-
-          <div style={{ display: "flex", justifyContent: "center", marginTop: "8px" }}>
-            <button
-              type="submit"
-              disabled={submitting}
-              style={{
-                background: "white", color: "#003366", border: "none",
-                padding: "11px 40px", borderRadius: "999px", fontWeight: 700, fontSize: "13.5px",
-                cursor: submitting ? "default" : "pointer", opacity: submitting ? 0.7 : 1,
-                boxShadow: "0 4px 10px rgba(0,0,0,0.2)",
-              }}
-            >
-              {submitting ? "Saving…" : "SUBMIT"}
-            </button>
-          </div>
-        </form>
-      </div>
+      <footer className="login-footer">© 2026 UPHSL Manila · U-FAST</footer>
     </div>
   );
 }

@@ -14,6 +14,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
 from faculty.models import FacultyProfile
+from .conflicts import find_conflicts
 from .models import Schedule, TimeSlot
 from .permissions import can_edit_schedule_kind
 

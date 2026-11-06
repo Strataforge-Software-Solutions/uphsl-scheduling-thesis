@@ -7,7 +7,9 @@ suggest()  lists only options that pass every rule at this moment: the teacher i
            assignment or the room picked in the preview) and only when there is no such room is the best suitable free room named.
 apply()    re-derives the options on the server, checks the chosen one is still among them, then inside a database lock changes only
            this class, re-checks every clash on what was saved and rolls everything back if anything is wrong.
-Nothing else is moved: no other class, no other room."""
+Nothing else is moved: no other class, no other room.
+A SHARED class (several sections, one Schedule.merge_key) moves as ONE class: every attending section must be free at the new time
+(and keep Lecture before Lab), and all of its rows move together, so the sharing never breaks (engine.shared_edit)."""
 from collections import defaultdict
 
 from django.db import transaction
@@ -76,6 +78,18 @@ def _class_info(subject, section, rows):
             "teacher": (rows[0].teacher.user.get_full_name().strip() or rows[0].teacher.user.username) if rows else ""}
 
 
+def _group(user, rows, mode, any_status=False):
+    """For a move of a SHARED class: [(section, subject, rows)] of every attending section (checked: owner, all Draft, consistent);
+    None for an ordinary class."""
+    if mode != "move" or not rows or not rows[0].merge_key:
+        return None
+    from .shared_edit import SharedEditError, check_group, group_rows
+    try:
+        return check_group(user, group_rows(rows[0].merge_key), ignore_status=any_status)
+    except SharedEditError as e:
+        raise RescheduleError(e.message, e.status)
+
+
 def _load(ids, section_id, subject_id):
     from .models import Section
     from curriculum.models import Subject
@@ -95,7 +109,12 @@ def _load(ids, section_id, subject_id):
     return section, subject, rows, "place"
 
 
-def suggest(user, *, ids=None, section_id=None, subject_id=None, room_id=None, school_year="", limit=MAX_OPTIONS, _full=False, window=None, _rooms=None, _inner=False):
+def suggest(user, *, ids=None, section_id=None, subject_id=None, room_id=None, school_year="", limit=MAX_OPTIONS, _full=False, window=None, _rooms=None, _inner=False,
+            _any_status=False, teacher_id=None, override_qualification=False, override_reason=""):
+    """_any_status: READ-ONLY listing for a class that is approved / published (a Dean's Gen Ed move request); apply() never uses it.
+    teacher_id: place a NOT-YET-PLACED class with the teacher the Dean picked from the three Professor groups ("not placed" pop-up).
+    A teacher who is not connected to the subject needs override_qualification + override_reason (a manual Assign anyway, re-checked
+    with engine.faculty_groups); their times must then be inside their submitted availability."""
     from rooms import rules as rr
     from rooms.models import Room
     from faculty.models import FacultyProfile
@@ -103,7 +122,8 @@ def suggest(user, *, ids=None, section_id=None, subject_id=None, room_id=None, s
     section, subject, rows, mode = _load(ids, section_id, subject_id)
     if not _owns(user, subject, section):
         raise RescheduleError("This class belongs to another owner. Only its own Dean (program subjects) or the Registrar (Gen Ed) can move it.", 403)
-    if any(not _can_edit(user, r) for r in rows):
+    members = _group(user, rows, mode, _any_status)       # a shared class: every attending section moves together
+    if members is None and not _any_status and any(not _can_edit(user, r) for r in rows):
         raise RescheduleError("This class cannot be moved from here: it is approved / published, or shared with other sections. "
                               "Move it back to draft first.", 403)
     term = section.semester
@@ -116,7 +136,7 @@ def suggest(user, *, ids=None, section_id=None, subject_id=None, room_id=None, s
             hours = next((h for h in expected if isinstance(h, S.PairHours) and _minutes_of(h) == total), None)
         if hours is None:
             hours = total / 60.0
-        skip_ids = {r.id for r in rows}
+        skip_ids = {r.id for r in rows} | ({r.id for _s, _sub, rs in members for r in rs} if members else set())
         teacher_rows = rows
     else:
         left = list(expected)
@@ -178,6 +198,25 @@ def suggest(user, *, ids=None, section_id=None, subject_id=None, room_id=None, s
                         if S._is_lab_of(subject, p.subject) or S._is_lab_of(p.subject, subject)), None)
         if partner is not None:
             teacher = partner.teacher
+    strict_teacher = None
+    if teacher is None and teacher_id:
+        from .teacher_scope import teacher_allowed
+        picked = next((t for t in teachers_all if t.id == int(teacher_id)), None)
+        if picked is None:
+            raise RescheduleError("That faculty member does not exist or is not active.", 404)
+        why = teacher_allowed(user, picked, subject, section)
+        if why:
+            if not override_qualification:
+                raise RescheduleError(why, 422)
+            from . import faculty_groups as fg
+            groups = fg.build(user, subject, section, term=term, school_year=school_year or None,
+                              blocks=[int(round(float(hours) * 60))], window=window, need_hours=float(hours))
+            try:
+                fg.check_override(user, subject, section, picked, override_reason, groups)
+            except fg.OverrideError as e:
+                raise RescheduleError(e.message, e.status)
+            strict_teacher = picked
+        teacher = picked
     if teacher is not None:
         teachers = [teacher]
     else:
@@ -197,6 +236,17 @@ def suggest(user, *, ids=None, section_id=None, subject_id=None, room_id=None, s
                  "fit": "; ".join(w) + " (not yet a recorded specialization: the Dean can add it in the Faculty tab)"} for _p, t, w in near[:5]]})
     timeslots = list(TimeSlot.objects.all())
     rules = _build_availability_rules(teachers, timeslots, school_year or (rows[0].school_year if rows else None), term or None)
+    # A Dean / the Registrar placing a class BY HAND may use any time where nothing clashes, even outside the teacher's submitted
+    # availability: those times are listed after the teacher's preferred / available ones and are clearly marked.
+    from . import availability as _avm
+    _tiers, _ = _avm.build(teachers, timeslots, school_year or (rows[0].school_year if rows else None), term or None)
+
+    def _tier(t, real):
+        """0 preferred (or nothing submitted), 1 available, 2 outside their availability, 3 a time they marked unavailable."""
+        if any(sl.id in rules.get(t.id, set()) for sl in real):
+            return 3
+        m = _tiers.get(t.id)
+        return max(m.get(sl.id, 2) for sl in real) if m else 0
     blocks = S.with_half_blocks(S.build_block_slots(timeslots, hours), window)
     if window:               # the Start / End Time the Dean chose for this subject stays a hard limit
         blocks = [b for b in blocks if window[0] <= _mins(b.start_time) and _mins(b.end_time) <= window[1]]
@@ -204,8 +254,9 @@ def suggest(user, *, ids=None, section_id=None, subject_id=None, room_id=None, s
     tol = class_tolerance_minutes()
     t_ids, r_ids = {t.id for t in teachers}, {r.id for r in candidate_rooms}
     from django.db.models import Q
+    sec_ids = {sec.id for sec, _sub, _r in members} if members else {section.id}
     booked = Schedule.objects.filter(term=term).exclude(pk__in=skip_ids).filter(
-        Q(teacher_id__in=t_ids) | Q(room_id__in=r_ids) | Q(section_id=section.id)).select_related("timeslot")
+        Q(teacher_id__in=t_ids) | Q(room_id__in=r_ids) | Q(section_id__in=sec_ids)).select_related("timeslot")
     by_t, by_r, by_s = defaultdict(list), defaultdict(list), defaultdict(list)
     day_load = defaultdict(int)
     for b in booked:
@@ -213,9 +264,10 @@ def suggest(user, *, ids=None, section_id=None, subject_id=None, room_id=None, s
         if b.merge_key and rows and b.merge_key == rows[0].merge_key:
             continue
         by_t[b.teacher_id].append(iv); by_r[b.room_id].append(iv)
-        if b.section_id == section.id:
-            by_s[0].append(iv)
-            day_load[iv[0]] += iv[2] - iv[1]
+        if b.section_id in sec_ids:
+            by_s[b.section_id].append(iv)
+            if b.section_id == section.id:
+                day_load[iv[0]] += iv[2] - iv[1]
 
     def overlap(ivs, day, s, e):
         return sum(max(0, min(e, ie) - max(s, is_)) for d, is_, ie in ivs if d == day)
@@ -224,6 +276,7 @@ def suggest(user, *, ids=None, section_id=None, subject_id=None, room_id=None, s
               "lec_lab_order": 0}
     from . import lecorder
     order = lecorder.bounds(subject, section.id, term, exclude_ids=skip_ids)      # Lecture before Lab (the solver's rule)
+    other_orders = [lecorder.bounds(sub, sec.id, term, exclude_ids=skip_ids) for sec, sub, _r in (members or []) if sec.id != section.id]
     cur_key = tuple(sorted(r.timeslot_id for r in rows)) if mode == "move" else None
     found = []
     for blk in blocks:
@@ -234,14 +287,13 @@ def suggest(user, *, ids=None, section_id=None, subject_id=None, room_id=None, s
             continue
         counts["possible"] += 1
         ivs = [(sl.day[:3], _mins(sl.start_time), _mins(sl.end_time)) for sl in real]
-        if lecorder.violates(order, ivs):
+        if lecorder.violates(order, ivs) or any(lecorder.violates(o, ivs) for o in other_orders):
             counts["lec_lab_order"] += 1
             continue
-        ok_t = [t for t in teachers if not any(sl.id in rules.get(t.id, set()) for sl in real)]
-        if not ok_t:
-            counts["teacher_unavailable"] += 1
+        free_t = [t for t in teachers if not any(overlap(by_t[t.id], d, s, e) > 0 for d, s, e in ivs)]
+        if strict_teacher is not None and _tier(strict_teacher, real) >= 2:
+            counts["teacher_unavailable"] += 1          # Assign anyway: only inside the person's submitted availability
             continue
-        free_t = [t for t in ok_t if not any(overlap(by_t[t.id], d, s, e) > 0 for d, s, e in ivs)]
         if not free_t:
             counts["teacher_busy"] += 1
             continue
@@ -249,21 +301,22 @@ def suggest(user, *, ids=None, section_id=None, subject_id=None, room_id=None, s
         if not free_r:
             counts["room_busy"] += 1
             continue
-        if sum(overlap(by_s[0], d, s, e) for d, s, e in ivs) > tol:
+        if any(sum(overlap(by_s[sid], d, s, e) for d, s, e in ivs) > tol for sid in sec_ids):
             counts["students_busy"] += 1
             continue
         load = sum(day_load[d] for d, _s, _e in ivs[:1])
-        found.append((load, DAY_ORDER.get(ivs[0][0], 9), ivs[0][1], blk, real, free_t, free_r))
-    found.sort(key=lambda x: (x[0], x[1], x[2]))
+        free_t.sort(key=lambda t: _tier(t, real))
+        found.append((_tier(free_t[0], real), load, DAY_ORDER.get(ivs[0][0], 9), ivs[0][1], blk, real, free_t, free_r))
+    found.sort(key=lambda x: (x[0], x[1], x[2], x[3]))
     options = []
     per_day = defaultdict(int)
     hours_by_t = wl.hours_by_teacher_term([t.id for t in teachers]) if mode == "place" and len(teachers) > 1 else {}
-    for load, di, start, blk, real, free_t, free_r in found:
+    for tier, load, di, start, blk, real, free_t, free_r in found:
         if limit < 100 and not _full and per_day[real[0].day[:3]] >= PER_DAY:
             continue
         t = free_t[0]
         if mode == "place":
-            order = sorted(free_t, key=lambda x: hours_by_t[x.id][term] if x.id in hours_by_t else 0)
+            order = sorted(free_t, key=lambda x: (_tier(x, real), hours_by_t[x.id][term] if x.id in hours_by_t else 0))
             t = None
             for cand in order[:6]:
                 if wl.check_assignment(cand, term, real, []) is None:
@@ -280,7 +333,10 @@ def suggest(user, *, ids=None, section_id=None, subject_id=None, room_id=None, s
         else:
             first = [sl for sl in real if sl.day[:3] == days[0]]
             label = f"{' & '.join(days)} {_fmt(_mins(first[0].start_time))} – {_fmt(_mins(first[-1].end_time))}"
+        tier = _tier(t, real)
+        label += {2: " · outside their availability", 3: " · marked UNAVAILABLE by the teacher"}.get(tier, "")
         options.append({"key": f"{t.id}:{r.id}:{'-'.join(str(i) for i in sorted(sl.id for sl in real))}", "slot_ids": [sl.id for sl in real],
+                        "availability": {0: "preferred", 1: "available", 2: "outside", 3: "unavailable"}[tier],
                         "day": days[0], "days": days, "start": f"{s0 // 60:02d}:{s0 % 60:02d}", "end": f"{e0 // 60:02d}:{e0 % 60:02d}", "label": label,
                         "teacher_id": t.id, "teacher": t.user.get_full_name().strip() or t.user.username, "room_id": r.id, "room": r.name})
         per_day[days[0]] += 1
@@ -298,7 +354,8 @@ def suggest(user, *, ids=None, section_id=None, subject_id=None, room_id=None, s
         if counts["room_busy"]:
             bits.append(f"{counts['room_busy']} find {rn} already booked")
         if counts["students_busy"]:
-            bits.append(f"{counts['students_busy']} clash with the section's other classes")
+            bits.append(f"{counts['students_busy']} clash with the " + ("other classes of a section that shares this class"
+                                                                       if members else "section's other classes"))
         if counts["lec_lab_order"]:
             bits.append(f"{counts['lec_lab_order']} would put the Lab before its Lecture ({lecorder.message(order, subject)})")
         if counts["teacher_overload"]:
@@ -311,7 +368,8 @@ def suggest(user, *, ids=None, section_id=None, subject_id=None, room_id=None, s
     asg_fixed = bool(asg and asg.get("fixed"))
     may_change_room = bool(room is not None and not _inner and (not major or (designated is None and not asg_fixed)))
     if not options and not _inner:
-        kw = dict(ids=ids, section_id=section_id, subject_id=subject_id, room_id=room_id, school_year=school_year, limit=limit, _full=_full, _inner=True)
+        kw = dict(ids=ids, section_id=section_id, subject_id=subject_id, room_id=room_id, school_year=school_year, limit=limit, _full=_full, _inner=True,
+                  _any_status=_any_status, teacher_id=teacher_id, override_qualification=override_qualification, override_reason=override_reason)
         if window:
             # step 3: the window the Dean chose has no free time in this room -> other times in the SAME room
             outside = suggest(user, window=None, **kw)["options"]
@@ -341,18 +399,30 @@ def suggest(user, *, ids=None, section_id=None, subject_id=None, room_id=None, s
     return {"mode": mode, "class": _class_info(subject, section, rows), "room": {"id": room.id if room else None, "name": room.name if room else "",
             "kept": bool(rows) or room is not None, "note": room_note}, "hours": float(hours), "options": options, "checked": counts,
             "outside_options": outside, "room_options": room_options, "room_change_allowed": may_change_room,
-            "reason": reason, "can_apply": bool(options or outside or room_options)}
+            "reason": reason, "can_apply": bool(options or outside or room_options),
+            "assign_anyway": strict_teacher is not None}
 
 
-def apply(user, *, key, ids=None, section_id=None, subject_id=None, room_id=None, school_year="", window=None):
+def apply(user, *, key, ids=None, section_id=None, subject_id=None, room_id=None, school_year="", window=None,
+          teacher_id=None, override_qualification=False, override_reason=""):
     from . import locks
     from notifications.models import Notification
-    res = suggest(user, ids=ids, section_id=section_id, subject_id=subject_id, room_id=room_id, school_year=school_year, _full=True, window=window)
+    res = suggest(user, ids=ids, section_id=section_id, subject_id=subject_id, room_id=room_id, school_year=school_year, _full=True, window=window,
+                  teacher_id=teacher_id, override_qualification=override_qualification, override_reason=override_reason)
+    _ov_meta = None
+    if res.get("assign_anyway"):
+        from . import faculty_groups as fg
+        _ov_meta = fg.override_meta(user, (override_reason or "").strip())
     opt = next((o for o in res["options"] + res["outside_options"] + res["room_options"] if o["key"] == key), None)
     if opt is None:
         raise RescheduleError("That day and time is no longer available (something changed). The list has been refreshed. Pick another option.", 409,
                               {"refresh": True})
     section, subject, rows, mode = _load(ids, section_id, subject_id)
+    members = _group(user, rows, mode)
+    mk = rows[0].merge_key if members else ""
+    seed_rows = rows                                         # the section the dialog was opened for (the note below)
+    if members:
+        rows = [r for _s, _sub, rs in members for r in rs]
     from faculty.models import FacultyProfile
     from rooms.models import Room
     teacher = FacultyProfile.objects.select_related("user").get(pk=opt["teacher_id"])
@@ -362,7 +432,7 @@ def apply(user, *, key, ids=None, section_id=None, subject_id=None, room_id=None
     year = school_year or (rows[0].school_year if rows else "") or Schedule.objects.filter(term=term).values_list("school_year", flat=True).first() or ""
     old_ids = [r.id for r in rows] if mode == "move" else []
     # "what changed", in words, for the confirmation note: "Mon 8:00 AM–9:00 AM → Tue 9:30 AM–10:30 AM, room stays 307D"
-    old_when = _when(rows) if (mode == "move" and rows) else "not placed"
+    old_when = _when(seed_rows) if (mode == "move" and seed_rows) else "not placed"
     old_room = rows[0].room if (mode == "move" and rows) else None
     old_teacher = rows[0].teacher if (mode == "move" and rows) else None
     with transaction.atomic():
@@ -373,19 +443,31 @@ def apply(user, *, key, ids=None, section_id=None, subject_id=None, room_id=None
             raise RescheduleError("This class was changed by someone else. Reload and try again.", 409)
         Schedule.objects.filter(pk__in=old_ids).delete()
         for sl in slots:
-            msgs = find_conflicts(teacher=teacher, room=room, section=section, timeslot=sl, semester=term)
-            if msgs:
-                transaction.set_rollback(True)
-                raise RescheduleError(f"{sl.day[:3]} {_fmt(_mins(sl.start_time))} is no longer free: {msgs[0]} Nothing was changed.", 409)
+            for sec_ in ([m[0] for m in members] if members else [section]):
+                msgs = find_conflicts(teacher=teacher, room=room, section=sec_, timeslot=sl, semester=term, merge_key=mk)
+                if msgs:
+                    transaction.set_rollback(True)
+                    raise RescheduleError(f"{sl.day[:3]} {_fmt(_mins(sl.start_time))} is no longer free: {msgs[0]} Nothing was changed.", 409)
         if mode == "place":
             over = wl.check_assignment(teacher, term, slots, [])
             if over:
                 transaction.set_rollback(True)
                 raise RescheduleError(over["message"], 409, {"workload_overload": over})
-        made = Schedule.objects.bulk_create([Schedule(subject=subject, teacher=teacher, room=room, section=section, timeslot=sl, school_year=year,
-                                                      status="draft", term=term, is_manual_override=True) for sl in slots])
+        if members:          # every attending section, same teacher / room / time, the same shared-class key
+            made = Schedule.objects.bulk_create([Schedule(subject=sub, teacher=teacher, room=room, section=sec_, timeslot=sl,
+                                                          school_year=(rs[0].school_year or year), status="draft", term=term,
+                                                          is_manual_override=True, merge_key=mk)
+                                                 for sec_, sub, rs in members for sl in slots])
+        else:
+            made = Schedule.objects.bulk_create([Schedule(subject=subject, teacher=teacher, room=room, section=section, timeslot=sl, school_year=year,
+                                                          status="draft", term=term, is_manual_override=True, qualification_override=_ov_meta)
+                                                 for sl in slots])
+            if _ov_meta:
+                from . import faculty_groups as fg
+                fg.log_overrides(user, made, '"not placed" pop-up')
         new_ids = [m.id for m in made if m.id is not None] or list(
-            Schedule.objects.filter(section=section, subject=subject, term=term, timeslot__in=slots).values_list("id", flat=True))
+            (Schedule.objects.filter(merge_key=mk, timeslot__in=slots) if members else
+             Schedule.objects.filter(section=section, subject=subject, term=term, timeslot__in=slots)).values_list("id", flat=True))
         shared = []
         if mode == "place" and subject.classification == "minor" and subject.lab_units == 0:
             # a Gen Ed class placed here keeps the shared-class programs the Registrar chose: the confirmed members join the same time
@@ -405,8 +487,10 @@ def apply(user, *, key, ids=None, section_id=None, subject_id=None, room_id=None
         if teacher.user_id != getattr(user, "id", None):
             Notification.objects.create(recipient=teacher.user, notif_type="schedule_update",
                                         message=f"{subject.code} ({section.program.name} {section.name}) is now {opt['label']} in {room.name}.")
+    together = (" together with " + ", ".join(f"{s_.program.name} {s_.name}" for s_, _sub, _r in members if s_.id != section.id)
+                + " (shared class)") if members else ""
     return {"ok": True, "mode": mode, "shared": [{k: v for k, v in m.items() if k != "schedule_ids"} for m in shared],
-            "summary": f"{subject.code} — {section.program.name} {section.name} is now {opt['label']} in {room.name} "
+            "summary": f"{subject.code} — {section.program.name} {section.name}{together} is now {opt['label']} in {room.name} "
             f"({teacher.user.get_full_name().strip() or teacher.user.username}). Room unchanged; no other class was moved.",
             "changes": (f"{old_when} → {opt['label']}, "
                         + (f"room stays {room.name}" if old_room is not None and old_room.id == room.id else
@@ -415,3 +499,28 @@ def apply(user, *, key, ids=None, section_id=None, subject_id=None, room_id=None
                            if old_teacher is not None and old_teacher.id == teacher.id else
                            f", teacher {teacher.user.get_full_name().strip() or teacher.user.username}")),
             "new_ids": new_ids, "removed_ids": old_ids}
+
+
+def unplaced_groups(user, section_id, subject_id):
+    """READ-ONLY, for "See other available faculty" in the "not placed" pop-up: the three Professor groups (engine.faculty_groups) for the
+    part of the class that is still missing. Nothing is assigned here: the Dean chooses a person, then one of that person's free times."""
+    from . import faculty_groups as fg
+    section, subject, rows, mode = _load(None, section_id, subject_id)
+    if not _owns(user, subject, section):
+        raise RescheduleError("This class belongs to another owner. Only its own Dean (program subjects) or the Registrar (Gen Ed) can place it.", 403)
+    left = list(S.blocks_for_subject(subject))
+    for run in _runs(rows):
+        m = sum(_mins(r.timeslot.end_time) - _mins(r.timeslot.start_time) for r in run)
+        hit = next((h for h in left if _minutes_of(h) == m), None)
+        if hit is not None:
+            left.remove(hit)
+    if not left:
+        raise RescheduleError("This class is already placed, so there is nothing left to place.", 409, {"already_placed": True})
+    hours = sorted(left, key=lambda h: -float(h))[0]
+    partner = next((p for p in Schedule.objects.filter(section=section, term=section.semester).select_related("subject", "teacher__user")
+                    if S._is_lab_of(subject, p.subject) or S._is_lab_of(p.subject, subject)), None)
+    groups = fg.build(user, subject, section, term=section.semester, blocks=[_minutes_of(hours)], need_hours=float(hours),
+                      partner_teacher_id=partner.teacher_id if partner else None)
+    groups["fixed_teacher"] = (partner.teacher.user.get_full_name().strip() or partner.teacher.user.username) if partner else ""
+    groups["section_id"], groups["hours"] = section.id, float(hours)
+    return groups

@@ -1,3 +1,4 @@
+import { formatTime } from "./formatDateTime";
 /* "Suggested" professors for one subject row of the Generate preview -- ADVICE ONLY (the server re-checks everything on Generate).
    Every teacher passed in is already qualified (the server's list). A teacher is suggested when
      - this row (all its sections), plus the other rows already chosen for them, stays within their weekly limit, and
@@ -5,7 +6,7 @@
        section, inside the Dean's Start-End range.
    Rooms and the section's other classes are not considered here. Ranking: most overlap with their "preferred" time, then lower load. */
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const clock = (m) => { const h = Math.floor(m / 60); return `${((h + 11) % 12) + 1}:${String(m % 60).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`; };
+const clock = (m) => formatTime(m);
 
 function clip(intervals, range) {
   if (!range) return intervals.map(([a, b]) => [a, b]);

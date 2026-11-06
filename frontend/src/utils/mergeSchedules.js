@@ -20,7 +20,7 @@ export function mergeSchedulesByDay(schedules) {
   // Bucket by identity (subject/section/room/teacher/day) first, ignoring time.
   const buckets = {};
   for (const s of schedules) {
-    const key = [s.subject_code, s.section_name, s.room_name, s.teacher_name, s.timeslot_day].join("|");
+    const key = [s.subject_code, s.section_name, s.room_name, s.teacher, s.timeslot_day].join("|");      // teacher id: two people may share a name
     (buckets[key] = buckets[key] || []).push(s);
   }
 
@@ -68,6 +68,7 @@ export function mergeSchedulesByDay(schedules) {
           start: s.timeslot_start,
           end: s.timeslot_end,
           is_manual_override: !!s.is_manual_override,
+          qualification_override: s.qualification_override || null,      // "Assigned by Dean (not connected)"
           status: s.status || "draft",
         };
         groups.push(current);

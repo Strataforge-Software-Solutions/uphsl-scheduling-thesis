@@ -21,3 +21,5 @@ build/
 .vscode/
 .DS_Store
 Thumbs.db
+# uploaded profile pictures (backend/media)
+backend/media/

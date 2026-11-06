@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 
 /** Password field with an eye button that shows / hides what is typed. Drop-in for <input type="password">: same props. */
-export default function PasswordInput({ style, color = "#64748b", ...props }) {
+export default function PasswordInput({ style, color = "#6b7280", ...props }) {
   const [shown, setShown] = useState(false);
   const label = shown ? "Hide password" : "Show password";
   return (
@@ -10,7 +10,7 @@ export default function PasswordInput({ style, color = "#64748b", ...props }) {
       <button
         type="button" onClick={() => setShown((v) => !v)} aria-label={label} title={label} aria-pressed={shown}
         style={{ position: "absolute", top: "50%", right: 8, transform: "translateY(-50%)", width: 30, height: 30, minWidth: 0,
-          margin: 0, padding: 0, border: "none", background: "transparent", borderRadius: 6, cursor: "pointer", color,
+          margin: 0, padding: 0, border: "none", background: "transparent", borderRadius: 4, cursor: "pointer", color,
           display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "none" }}
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

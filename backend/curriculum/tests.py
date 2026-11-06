@@ -125,7 +125,7 @@ class RespiratoryTherapyCurriculumTests(APITestCase):
 
 
 class RespiratoryTherapySectionTests(APITestCase):
-    """--sections: one section per year level and semester (B.c1 ... B.c4), only the missing ones, never duplicated."""
+    """--sections: one section per year level and semester (RT1 ... RT4), only the missing ones, never duplicated."""
 
     def setUp(self):
         Program.objects.create(name="BS Physical Therapy", department=AH)
@@ -144,7 +144,7 @@ class RespiratoryTherapySectionTests(APITestCase):
         got = self.sections()
         self.assertEqual(set(got), set(EXPECTED))                                          # every year level and semester of the file
         self.assertEqual({k: v[0] for k, v in got.items()},
-                         {k: f"B.c{k[0][0]}" for k in EXPECTED})                           # 1st Year -> B.c1 ... 4th Year -> B.c4
+                         {k: f"RT{k[0][0]}" for k in EXPECTED})                           # 1st Year -> RT1 ... 4th Year -> RT4
         self.assertEqual(got[("1st Year", "1st Sem")][1], 30); self.assertEqual(got[("4th Year", "2nd Sem")][1], 20)
         self.assertIn("0 sections added", run("--sections", "--apply"))
         self.assertEqual(len(self.sections()), 8)
@@ -156,7 +156,7 @@ class RespiratoryTherapySectionTests(APITestCase):
         self.assertIn("7 sections added", out)
         got = self.sections()
         self.assertEqual(got[("1st Year", "1st Sem")], ("B.c1", 33))                     # the Dean's number is not overwritten
-        self.assertEqual(got[("2nd Year", "1st Sem")], ("B.c2", 35))
+        self.assertEqual(got[("2nd Year", "1st Sem")], ("RT2", 35))
 
     def test_bad_student_numbers_are_refused(self):
         from django.core.management.base import CommandError
@@ -210,3 +210,80 @@ class RespiratoryTherapyFacultyTests(APITestCase):
         self.assertIn("skip  F1082", out); self.assertIn("5 faculty created", out)
         other.refresh_from_db()
         self.assertEqual((other.first_name, other.department), ("Someone", "College of Nursing"))
+
+
+
+class PrefixDepartmentsSchoolLevelTests(APITestCase):
+    """prefix_departments renames colleges ("Nursing" -> "College of Nursing") but never a school level such as SHS."""
+
+    def test_shs_is_never_prefixed(self):
+        from io import StringIO
+        from django.core.management import call_command
+        from accounts.models import User
+        from curriculum.models import Program
+        Program.objects.create(name="BS Nursing PD", department="Nursing")
+        mk = lambda sid, dept: User.objects.create(username=f"PD{sid}", school_id=f"PD{sid}", role="faculty", faculty_type="full_time",
+                                                   department=dept)
+        nurse, shs, jhs = mk(1, "Nursing"), mk(2, "SHS"), mk(3, "Junior High School")
+        out = StringIO()
+        call_command("prefix_departments", stdout=out)                            # preview
+        self.assertIn("'Nursing' -> 'College of Nursing'", out.getvalue())
+        self.assertNotIn("College of SHS", out.getvalue())
+        call_command("prefix_departments", "--apply", stdout=StringIO())
+        for u, want in ((nurse, "College of Nursing"), (shs, "SHS"), (jhs, "Junior High School")):
+            u.refresh_from_db()
+            self.assertEqual(u.department, want)
+
+    def test_fix_school_level_departments_undoes_college_of_shs_only(self):
+        from io import StringIO
+        from django.core.management import call_command
+        from accounts.models import User
+        mk = lambda sid, dept: User.objects.create(username=f"FX{sid}", school_id=f"FX{sid}", role="faculty", faculty_type="full_time",
+                                                   department=dept)
+        shs, nurse, cas = mk(1, "College of SHS"), mk(2, "College of Nursing"), mk(3, "College of Arts and Science")
+        out = StringIO()
+        call_command("fix_school_level_departments", stdout=out)                  # preview: nothing changes
+        self.assertIn("'College of SHS' -> 'SHS'", out.getvalue())
+        shs.refresh_from_db()
+        self.assertEqual(shs.department, "College of SHS")
+        call_command("fix_school_level_departments", "--apply", stdout=StringIO())
+        for u, want in ((shs, "SHS"), (nurse, "College of Nursing"), (cas, "College of Arts and Science")):
+            u.refresh_from_db()
+            self.assertEqual(u.department, want)
+        out = StringIO()
+        call_command("fix_school_level_departments", "--apply", stdout=out)       # re-run: nothing to do
+        self.assertIn("Nothing to fix", out.getvalue())
+
+
+class SectionCodeTests(APITestCase):
+    """Section names: program code + year number (CS1, IT2, RAD3, BAC1, TM4, HM1, HRDM2, MM3, N1, PT1, OT2, RT3); a letter is added
+    only when a program has several sections in the same year level and semester. The preview writes nothing."""
+
+    def test_codes_per_program(self):
+        from curriculum.section_codes import known_prefix
+        expect = {
+            "BS Computer Science": "CS", "BS Information Technology": "IT", "BS Radiologic Technology": "RAD", "BA Communication": "BAC",
+            "BS Tourism Management": "TM", "BS Hospitality Management": "HM", "BSBA Major in Human Resource Development Management": "HRDM",
+            "BSBA Major in Marketing Management": "MM", "BS Nursing": "N", "BS Physical Therapy": "PT", "BS Occupational Therapy": "OT",
+            "BS Respiratory Therapy": "RT",
+        }
+        for name, code in expect.items():
+            self.assertEqual(known_prefix(name), code, name)
+
+    def test_rename_command_preview_then_apply(self):
+        from io import StringIO
+        from django.core.management import call_command
+        from curriculum.models import Program
+        from engine.models import Section
+        cs = Program.objects.create(name="BS Computer Science", department="College of Computer Studies")
+        nu = Program.objects.create(name="BS Nursing", department="College of Nursing")
+        a = Section.objects.create(name="A1", program=cs, year_level="1st Year", semester="1st Sem")
+        b = Section.objects.create(name="A1", program=cs, year_level="1st Year", semester="2nd Sem")
+        c = Section.objects.create(name="A3", program=cs, year_level="3rd Year", semester="1st Sem")
+        d = Section.objects.create(name="A3x", program=cs, year_level="3rd Year", semester="1st Sem")      # two sections: CS3A, CS3B
+        n = Section.objects.create(name="N2old", program=nu, year_level="2nd Year", semester="1st Sem")
+        call_command("apply_section_codes", stdout=StringIO())
+        self.assertEqual(Section.objects.get(pk=a.pk).name, "A1")                          # preview: nothing written
+        call_command("apply_section_codes", "--apply", stdout=StringIO())
+        got = {x.pk: x.name for x in Section.objects.all()}
+        self.assertEqual((got[a.pk], got[b.pk], got[c.pk], got[d.pk], got[n.pk]), ("CS1", "CS1", "CS3A", "CS3B", "N2"))

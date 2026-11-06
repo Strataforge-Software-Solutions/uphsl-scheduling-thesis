@@ -5,6 +5,8 @@ import ChangePassword from "./pages/ChangePassword";
 import Dashboard from "./components/Dashboard";
 import { getCurrentUser } from "./services/api";
 import LoadErrorBanner from "./components/LoadErrorBanner";
+import Settings from "./pages/Settings";
+import { PreferencesProvider } from "./services/preferences";
 
 function App() {
   const [user, setUser] = useState(getCurrentUser());
@@ -12,6 +14,7 @@ function App() {
   const handleLoginSuccess = (loggedInUser) => setUser(loggedInUser);
 
   return (
+    <PreferencesProvider userId={user?.id}>
     <Router>
       <LoadErrorBanner />
       <Routes>
@@ -36,8 +39,17 @@ function App() {
             : <Dashboard user={user} />
           }
         />
+        <Route
+          path="/settings"
+          element={
+            !user ? <Navigate to="/login" />
+            : user.must_change_password ? <Navigate to="/change-password" />
+            : <Settings user={user} />
+          }
+        />
       </Routes>
     </Router>
+    </PreferencesProvider>
   );
 }
 

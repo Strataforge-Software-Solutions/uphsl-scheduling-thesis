@@ -1,4 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { onJump } from "../services/jump";
+import { useLandingTab } from "../services/preferences";
 import { reportLoadError } from "../services/loadError";
 import API, { getCurrentUser, logout, displayName } from "../services/api";
 import { formatSchedule } from "../utils/formatSchedule";
@@ -10,6 +12,8 @@ import PageHeader from "./PageHeader";
 import Badge from "./Badge";
 import { StatTile, HBarChart, RecentActivity } from "./Charts";
 import ScheduleEditModal from "./ScheduleEditModal";
+import { RequestMoveModal, GenEdRequestsPanel } from "./GenEdRequests";
+import PrintPreviewButton, { printYears } from "./PrintPreviewButton";
 import { kindLabel, kindFilterOptions } from "../utils/labels";
 import DeanRooms from "./DeanRooms";
 import HowToUse from "./HowToUse";
@@ -29,6 +33,8 @@ import WorkloadPanel from "./WorkloadPanel";
 import OverloadBanner, { onWorkloadChanged, ResolverWindow, notifyWorkloadChanged } from "./OverloadResolver";
 import AddFacultyModal from "./AddFacultyModal";
 import "./DashboardTheme.css";
+import { OverrideBadge } from "./AssignAnywayDialog";
+import { formatDate } from "../utils/formatDateTime";
 
 function StatusPill({ status }) {
   if (status === "published") return <Badge tone="success">Published</Badge>;
@@ -38,27 +44,27 @@ function StatusPill({ status }) {
 
 // Same sections in the Dean, Registrar and Admin workspaces: Plan / Academics / People / Insights.
 const DEAN_NAV = [
-  { key: "home", label: "Home", icon: "🏠" },
+  { key: "home", label: "Home", icon: "" },
   { group: "Plan" },
-  { key: "schedules", label: "Schedules", icon: "🗓" },
-  { key: "exams", label: "Exam Schedule", icon: "📝" },
-  { key: "conflicts", label: "Conflicts", icon: "⚠️" },
+  { key: "schedules", label: "Schedules", icon: "" },
+  { key: "exams", label: "Exam Schedule", icon: "" },
+  { key: "conflicts", label: "Conflicts", icon: "" },
   { group: "Academics" },
-  { key: "curriculum", label: "Curriculum", icon: "📖" },
-  { key: "classlists", label: "Class Lists", icon: "🧑‍🎓" },
+  { key: "curriculum", label: "Curriculum", icon: "" },
+  { key: "classlists", label: "Class Lists", icon: "" },
   { group: "People" },
-  { key: "availability", label: "Faculty", icon: "🧑‍🏫" },
-  { key: "coverage", label: "Faculty Coverage", icon: "🙋" },
+  { key: "availability", label: "Faculty", icon: "" },
+  { key: "coverage", label: "Faculty Coverage", icon: "" },
   { group: "Insights" },
-  { key: "analytics", label: "Analytics", icon: "📊" },
+  { key: "analytics", label: "Analytics", icon: "" },
 ];
 const FULL_TIME_NAV = [
-  { key: "schedule", label: "My Schedule", icon: "🗓" },
-  { key: "availability", label: "Availability", icon: "🕐" },
+  { key: "schedule", label: "My Schedule", icon: "" },
+  { key: "availability", label: "Availability", icon: "" },
 ];
 const PART_TIME_NAV = [
-  { key: "schedule", label: "My Schedule", icon: "🗓" },
-  { key: "availability", label: "Availability", icon: "🕐" },
+  { key: "schedule", label: "My Schedule", icon: "" },
+  { key: "availability", label: "Availability", icon: "" },
 ];
 
 const DEAN_HEADERS = {
@@ -82,7 +88,9 @@ const DEAN_HEADERS = {
  */
 function FacultyDashboard({ name, department, departments = [department], facultyType }) {
   const navItems = facultyType === "dean" ? DEAN_NAV : facultyType === "part_time" ? PART_TIME_NAV : FULL_TIME_NAV;
-  const [activeTab, setActiveTab] = useState(navItems.find((i) => i.key).key);
+  const landing = useLandingTab(navItems, navItems.find((i) => i.key).key);
+  const [activeTab, setActiveTab] = useState(landing);
+  useEffect(() => onJump((t) => { if (t === "gened-requests" && facultyType === "dean") setActiveTab("schedules"); }), [facultyType]);
   const user = getCurrentUser();
 
   const handleLogout = () => {
@@ -167,13 +175,13 @@ function WorkloadSummary({ username }) {
   const isOverload = totalHours > target;
 
   const cardStyle = {
-    background: "white", borderRadius: "10px", padding: "18px 22px",
-    boxShadow: "0 1px 4px rgba(0,0,0,0.06)", border: "1px solid #e2e8f0",
+    background: "white", borderRadius: 6, padding: "18px 22px",
+    boxShadow: "none", border: "1px solid #e5e7eb",
     marginBottom: "20px", display: "flex", gap: "32px", alignItems: "center", flexWrap: "wrap",
   };
-  const statStyle = { textAlign: "center" };
-  const numStyle = { fontSize: "26px", fontWeight: 700, color: "#003366" };
-  const labelStyle = { fontSize: "12px", color: "#64748b" };
+  const statStyle = { textAlign: "left" };
+  const numStyle = { fontSize: "18px", fontWeight: 600, color: "#111827", fontVariantNumeric: "tabular-nums" };
+  const labelStyle = { fontSize: "12px", color: "#6b7280" };
 
   return (
     <div style={cardStyle}>
@@ -186,18 +194,18 @@ function WorkloadSummary({ username }) {
         <div style={labelStyle}>Class periods</div>
       </div>
       <div style={statStyle}>
-        <div style={{ ...numStyle, color: isOverload ? "#a4231a" : "#003366" }}>{target}h</div>
+        <div style={{ ...numStyle, color: isOverload ? "#b91c1c" : "#003366" }}>{target}h</div>
         <div style={labelStyle}>Target load</div>
       </div>
       <div style={{ flex: 1, minWidth: "180px" }}>
         <div style={{ height: "10px", borderRadius: "6px", background: "#eef1f5", overflow: "hidden" }}>
           <div style={{
             width: `${percent}%`, height: "100%",
-            background: isOverload ? "#a4231a" : "#003366", transition: "width 0.3s ease",
+            background: isOverload ? "#b91c1c" : "#003366",
           }} />
         </div>
-        <div style={{ fontSize: "12px", color: isOverload ? "#a4231a" : "#64748b", marginTop: "4px" }}>
-          {isOverload ? `⚠ ${(totalHours - target).toFixed(1)}h over target load` : `${percent}% of target load`}
+        <div style={{ fontSize: "12px", color: isOverload ? "#b91c1c" : "#6b7280", marginTop: "4px" }}>
+          {isOverload ? `${(totalHours - target).toFixed(1)}h over target load` : `${percent}% of target load`}
         </div>
       </div>
     </div>
@@ -223,7 +231,7 @@ function AvailabilityRow({ row, onChanged, onDeleted }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const inputStyle = { padding: "6px 8px", borderRadius: "6px", border: "1px solid #cdd6e0", fontSize: "13px", background: "white" };
+  const inputStyle = { padding: "6px 8px", borderRadius: "6px", border: "1px solid #d1d5db", fontSize: "13px", background: "white" };
 
   const startEdit = () => {
     setDay(row.day);
@@ -274,19 +282,19 @@ function AvailabilityRow({ row, onChanged, onDeleted }) {
           <input style={{ ...inputStyle, width: "90px" }} type="time" value={start} onChange={(e) => setStart(e.target.value)} />
           {" – "}
           <input style={{ ...inputStyle, width: "90px" }} type="time" value={end} onChange={(e) => setEnd(e.target.value)} />
-          {error && <div style={{ color: "#a4231a", fontSize: "11.5px", marginTop: "4px" }}>{error}</div>}
+          {error && <div style={{ color: "#b91c1c", fontSize: "12px", marginTop: "4px" }}>{error}</div>}
         </td>
         <td>
           <select style={inputStyle} value={preference} onChange={(e) => setPreference(e.target.value)}>
             {PREFERENCE_OPTIONS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
           </select>
         </td>
-        <td>{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString() : "—"}</td>
+        <td>{row.submitted_at ? formatDate(row.submitted_at) : "—"}</td>
         <td style={{ whiteSpace: "nowrap" }}>
           <button onClick={save} disabled={saving} style={{ marginRight: "6px", background: "#003366", color: "white", border: "none", borderRadius: "6px", padding: "5px 10px", fontSize: "12px", cursor: "pointer" }}>
             {saving ? "Saving…" : "Save"}
           </button>
-          <button onClick={() => setEditing(false)} disabled={saving} style={{ background: "none", color: "#1f2937", border: "1px solid #cdd6e0", borderRadius: "6px", padding: "5px 10px", fontSize: "12px", cursor: "pointer" }}>
+          <button onClick={() => setEditing(false)} disabled={saving} style={{ background: "none", color: "#111827", border: "1px solid #d1d5db", borderRadius: "6px", padding: "5px 10px", fontSize: "12px", cursor: "pointer" }}>
             Cancel
           </button>
         </td>
@@ -300,12 +308,12 @@ function AvailabilityRow({ row, onChanged, onDeleted }) {
       <td>{row.day}</td>
       <td>{row.start_time?.slice(0, 5)}–{row.end_time?.slice(0, 5)}</td>
       <td><Badge tone={badge.tone}>{badge.label}</Badge></td>
-      <td>{row.submitted_at ? new Date(row.submitted_at).toLocaleDateString() : "—"}</td>
+      <td>{row.submitted_at ? formatDate(row.submitted_at) : "—"}</td>
       <td style={{ whiteSpace: "nowrap" }}>
-        <button onClick={startEdit} title="Fix a mistake in this block" style={{ marginRight: "6px", background: "none", color: "#1f2937", border: "1px solid #cdd6e0", borderRadius: "6px", padding: "5px 10px", fontSize: "12px", cursor: "pointer" }}>
+        <button onClick={startEdit} title="Fix a mistake in this block" style={{ marginRight: "6px", background: "none", color: "#111827", border: "1px solid #d1d5db", borderRadius: "6px", padding: "5px 10px", fontSize: "12px", cursor: "pointer" }}>
           Edit
         </button>
-        <button onClick={remove} title="Remove this block" style={{ background: "none", border: "1px solid #f3c2c2", color: "#a4231a", borderRadius: "6px", padding: "5px 10px", fontSize: "12px", cursor: "pointer" }}>
+        <button onClick={remove} title="Remove this block" style={{ background: "none", border: "1px solid #f3c2c2", color: "#b91c1c", borderRadius: "6px", padding: "5px 10px", fontSize: "12px", cursor: "pointer" }}>
           Delete
         </button>
       </td>
@@ -331,10 +339,10 @@ function AvailabilityHistory({ refreshKey }) {
     <div style={{ marginTop: "20px", maxWidth: "720px" }}>
       <h3 style={{ color: "#003366" }}>My Submitted Availability</h3>
       {rows.length === 0 ? (
-        <p style={{ color: "#64748b", fontSize: "13.5px" }}>You haven't submitted any availability yet.</p>
+        <p style={{ color: "#6b7280", fontSize: "14px" }}>You haven't submitted any availability yet.</p>
       ) : (
         <>
-          <p style={{ color: "#64748b", fontSize: "12.5px", marginTop: 0 }}>
+          <p style={{ color: "#6b7280", fontSize: "13px", marginTop: 0 }}>
             Made a mistake -- like two Monday blocks with different preferences? Edit or delete the wrong one below;
             the Dean/Registrar only ever see what's currently listed here.
           </p>
@@ -392,7 +400,7 @@ function DeanView({ department, departments = [department], activeTab, onNavigat
             {programs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
           {programsLoaded && programs.length === 0 && (
-            <span style={{ marginLeft: "12px", fontSize: "13px", color: "#a4231a" }}>
+            <span style={{ marginLeft: "12px", fontSize: "13px", color: "#b91c1c" }}>
               No program has the department name "{departments.join('" or "')}". Ask the IT Admin to run
               {" "}<code>python manage.py prefix_departments</code> so program and account department names match.
             </span>
@@ -403,9 +411,9 @@ function DeanView({ department, departments = [department], activeTab, onNavigat
       {activeTab === "schedules" && (
         <>
           <ScheduleManager programId={programId} programName={(programs.find((p) => String(p.id) === String(programId)) || {}).name || ""} departments={departments} />
-          <details style={{ marginTop: 18, border: "1px solid #dbe5f1", borderRadius: 10, padding: "10px 14px", background: "white" }}>
+          <details style={{ marginTop: 18, border: "1px solid #dbe5f1", borderRadius: 6, padding: "10px 14px", background: "white" }}>
             <summary style={{ cursor: "pointer", fontWeight: 600, color: "#003366" }}>Room assignments — preferred, alternative and fixed rooms per subject</summary>
-            <p style={{ fontSize: 12.5, color: "#64748b" }}>Rooms come from the room records kept by the IT Admin. A preferred or fixed room is used first when you press Generate; you can also pick a room per subject in the Generate preview.</p>
+            <p style={{ fontSize: 13, color: "#6b7280" }}>Rooms come from the room records kept by the IT Admin. A preferred or fixed room is used first when you press Generate; you can also pick a room per subject in the Generate preview.</p>
             <DeanRooms programs={programs} />
           </details>
         </>
@@ -429,7 +437,6 @@ function ScheduleManager({ programId, programName = "", departments = [] }) {
   const [editingGroup, setEditingGroup] = useState(null);
   const [editForm, setEditForm] = useState({ room: "", teacher: "", day: "", start_time: "", end_time: "" });
   const [saveError, setSaveError] = useState("");
-  const [downloading, setDownloading] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [pickTime, setPickTime] = useState(null);      // Edit > "Choose a new day and time" (real free times)
   const [editNote, setEditNote] = useState("");
@@ -439,6 +446,8 @@ function ScheduleManager({ programId, programName = "", departments = [] }) {
   const [selected, setSelected] = useState([]);       // ticked rows (group keys): the bar's actions apply to these ONLY
   const [showMove, setShowMove] = useState(false);
   const [moveNote, setMoveNote] = useState("");
+  const [moveReq, setMoveReq] = useState(null);       // a Gen Ed class the Dean asks the Registrar to move (GenEdRequests.js)
+  const [reqKey, setReqKey] = useState(0);
   // Year Level / Semester filter -- the Dean's own college has several
   // year levels and semesters worth of schedule rows in the same program,
   // and without this there's no way to tell which one you're looking at.
@@ -448,41 +457,6 @@ function ScheduleManager({ programId, programName = "", departments = [] }) {
   // Search + status filter, matching the Registrar's schedule view.
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-
-  // Conflicts found right before printing: {total, conflicts, detail} -> shown with "Fix now" / "Print anyway (marked NOT FINAL)"
-  const [printClash, setPrintClash] = useState(null);
-  const [fixPrintClash, setFixPrintClash] = useState(false);
-  const downloadPdf = async (allowConflicts = false) => {
-    setDownloading(true);
-    try {
-      const res = await API.get("/engine/export-pdf/", {
-        params: {
-          program_id: programId || undefined, year_level: yearLevel || undefined,
-          semester: semester || undefined, status: statusFilter || undefined,
-          classification: typeFilter || undefined,      // Program / Gen Ed / both -- the PDF follows the dropdown
-          allow_conflicts: allowConflicts ? 1 : undefined,
-        },
-        responseType: "blob",
-      });
-      setPrintClash(null);
-      // Opens as a preview/print tab instead of silently saving to Downloads
-      // -- was forcing a download via a hidden <a download> link regardless
-      // of what the server's Content-Disposition said.
-      const url = window.URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
-      window.open(url, "_blank");
-      setTimeout(() => window.URL.revokeObjectURL(url), 60000);
-    } catch (err) {
-      if (err.response?.status === 409) {
-        // the table has conflicts: never print it silently (the error body is a Blob because of responseType)
-        try { setPrintClash(JSON.parse(await err.response.data.text())); }
-        catch (_e) { setPrintClash({ total: 1, conflicts: [], detail: "This table has conflicts. Fix them in the Conflicts tab before printing." }); }
-      } else {
-        alert("Could not generate PDF -- there may be no schedule entries for this program yet.");
-      }
-    } finally {
-      setDownloading(false);
-    }
-  };
 
   const load = () => {
     API.get("/engine/schedules/").then((res) => setSchedules(res.data));
@@ -581,7 +555,9 @@ function ScheduleManager({ programId, programName = "", departments = [] }) {
         });
       } else {
         const extra = override ? { override_workload: true } : {};
-        await Promise.all(group.ids.map((id) => API.patch(`/engine/schedules/${id}/`, { room: form.room, teacher: form.teacher, ...extra })));
+        // Assign anyway (not connected): the reason goes with it; the server re-checks every rule before saving
+        const ov = form.override_reason ? { override_qualification: true, override_reason: form.override_reason } : {};
+        await Promise.all(group.ids.map((id) => API.patch(`/engine/schedules/${id}/`, { room: form.room, teacher: form.teacher, ...extra, ...ov })));
       }
       setEditClash(null); setEditPicked({});
       setEditingGroup(null);
@@ -616,37 +592,15 @@ function ScheduleManager({ programId, programName = "", departments = [] }) {
     saveEdit(editingGroup, false, next);
   };
 
-  const filterSelectStyle = { padding: "9px 12px", borderRadius: "8px", border: "1px solid #cdd6e0", fontSize: "13px", background: "white" };
+  const filterSelectStyle = { padding: "9px 12px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: "13px", background: "white" };
 
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", marginBottom: "14px", flexWrap: "wrap" }}>
         <h3 style={{ margin: 0 }}>Class schedule</h3>
         <div style={{ display: "flex", gap: "8px" }}>
-          <button onClick={() => downloadPdf(false)} disabled={downloading || grouped.length === 0}>
-            {downloading ? "Checking and preparing PDF…" : "🖨 Print / Preview"}
-          </button>
-          {printClash && !fixPrintClash && (
-            <div role="alertdialog" aria-label="Conflicts before printing" style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-              <div style={{ background: "white", borderRadius: 12, maxWidth: 560, width: "100%", padding: "18px 20px", boxShadow: "0 12px 40px rgba(0,0,0,.3)", borderTop: "5px solid #b91c1c" }}>
-                <h3 style={{ margin: "0 0 8px", color: "#b91c1c" }}>⚠ Not printed: {printClash.total} conflict{printClash.total === 1 ? "" : "s"} in this table</h3>
-                <p style={{ fontSize: 13.5, margin: "0 0 8px" }}>{printClash.detail}</p>
-                <ul style={{ fontSize: 13, margin: "0 0 12px 18px", padding: 0, maxHeight: 180, overflowY: "auto" }}>
-                  {(printClash.conflicts || []).slice(0, 8).map((c, i) => <li key={i}>{c.a.code} and {c.b.code}: {c.message}</li>)}
-                </ul>
-                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
-                  <button onClick={() => setPrintClash(null)} style={{ background: "white", color: "#003366", border: "1px solid #003366" }}>Close</button>
-                  <button onClick={() => downloadPdf(true)} title="The PDF is printed with a red NOT FINAL line naming the number of conflicts" style={{ background: "white", color: "#b91c1c", border: "1px solid #b91c1c" }}>Print anyway (marked NOT FINAL)</button>
-                  {(printClash.conflicts || []).length > 0 && <button onClick={() => setFixPrintClash(true)} style={{ background: "#003366", color: "white" }}>Fix them now</button>}
-                </div>
-              </div>
-            </div>
-          )}
-          {printClash && fixPrintClash && (
-            <ScheduleProblemsModal clashes={printClash.conflicts || []} unplaced={[]}
-              onFixed={(d) => { if (d && d.clash != null) setPrintClash((p) => ({ ...p, total: Math.max(0, p.total - 1), conflicts: p.conflicts.filter((_c, i) => i !== d.clash) })); }}
-              onClose={() => { setFixPrintClash(false); setPrintClash(null); load(); }} />
-          )}
+          <PrintPreviewButton disabled={grouped.length === 0} onFixed={load} yearChoices={printYears(byProgram)} defaultYear={yearLevel}
+            params={{ program_id: programId, semester, status: statusFilter, classification: typeFilter }} />
           <button onClick={() => setShowGenerate(true)} title={`Generate the ${programName || "program"} subject schedule`}
                   style={{ background: "#003366", color: "white" }}>
             Generate Schedule
@@ -656,7 +610,7 @@ function ScheduleManager({ programId, programName = "", departments = [] }) {
 
       <div style={{
         display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "center",
-        background: "white", border: "1px solid #e0e6ed", borderRadius: "10px", padding: "12px 14px", marginBottom: "16px",
+        background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "12px 14px", marginBottom: "16px",
       }}>
         <input
           placeholder="Search subjects, teachers, sections"
@@ -691,11 +645,13 @@ function ScheduleManager({ programId, programName = "", departments = [] }) {
         <select style={filterSelectStyle} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
           {kindFilterOptions(programName).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
-        <button onClick={resetFilters} style={{ ...filterSelectStyle, color: "#1f2937" }}>Reset</button>
+        <button onClick={resetFilters} style={{ ...filterSelectStyle, color: "#111827" }}>Reset</button>
       </div>
 
       {/* plain information: this program's subjects that are still not generated (no fixes from here) */}
       <NotGeneratedList programId={programId} yearLevel={yearLevel} semester={semester} refreshKey={schedules.length} />
+      <GenEdRequestsPanel role="dean" refreshKey={reqKey} onChanged={load} />
+      {moveReq && <RequestMoveModal group={moveReq} onClose={() => setMoveReq(null)} onDone={() => setReqKey((k) => k + 1)} />}
 
       <table className="sched-compact">
         <thead>
@@ -721,18 +677,28 @@ function ScheduleManager({ programId, programName = "", departments = [] }) {
               <td>
                 {g.section_name}
                 {g.merged_with && g.merged_with.length > 0 && (
-                  <div style={{ fontSize: "11px", color: "#7a4b00", marginTop: "3px" }}
+                  <div style={{ fontSize: "12px", color: "#7a4b00", marginTop: "3px" }}
                        title="Shared class: these sections attend the same class (same teacher, room and time).">
-                    🤝 Shared with {g.merged_with.join(", ")} · {g.merged_students} students
+                    Shared with {g.merged_with.join(", ")} · {g.merged_students} students
                   </div>
                 )}
               </td>
               <td>{g.room_name}</td>
               <td>{g.teacher_name}</td>
               <td>{formatSchedule(g.timeslot_day, g.start, g.end)}</td>
-              <td>{g.is_manual_override && <span title="Edited by hand: Generate keeps it where it is (locked)"><Badge tone="warning">🔒 Edited</Badge>{" "}</span>}<StatusPill status={g.status} /></td>
+              <td>{g.qualification_override && <><OverrideBadge reason={g.qualification_override.reason} />{" "}</>}{g.is_manual_override && <span title="Edited by hand: Generate keeps it where it is (locked)"><Badge tone="warning">Edited</Badge>{" "}</span>}<StatusPill status={g.status} /></td>
               <td>
-                {!isMine(g) ? <span style={{ fontSize: "12px", color: "#94a3b8" }} title="Gen Ed subjects are edited by the Registrar">View only</span> : (
+                {!isMine(g) ? (
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 3 }}>
+                    <span style={{ fontSize: "12px", color: "#6b7280" }} title="Gen Ed subjects are edited by the Registrar">View only</span>
+                    {g.subject_classification === "minor" && (
+                      <button type="button" onClick={() => setMoveReq(g)} title="Ask the Registrar to move this Gen Ed class (e.g. to free its time for a major)"
+                        style={{ background: "white", color: "#003366", border: "1px solid #003366", borderRadius: 6, padding: "2px 8px", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}>
+                        Request move
+                      </button>
+                    )}
+                  </div>
+                ) : (
                 <RowActions group={g} actions={actions} onEdit={startEdit} selecting={selectedGroups.length > 0} />
                 )}
               </td>
@@ -752,8 +718,8 @@ function ScheduleManager({ programId, programName = "", departments = [] }) {
             title="Change the day and start time of the selected drafts (clashes and the Lec / Lab order are checked)">Change day / time{d ? ` (${d})` : ""}</button>); })()} />
       {actions.dialogs}
       {editNote && (
-        <div role="status" style={{ position: "fixed", bottom: 18, left: 18, zIndex: 1200, background: "#ecfdf5", color: "#166534", border: "1px solid #a7f3d0", borderRadius: 10, padding: "10px 14px", fontSize: 13, maxWidth: 480 }}>
-          ✓ Saved: {editNote} <button onClick={() => setEditNote("")} style={btnStyle("#ffffff", "#166534", "1px solid #a7f3d0")}>OK</button>
+        <div role="status" style={{ position: "fixed", bottom: 18, left: 18, zIndex: 1200, background: "#ecfdf5", color: "#166534", border: "1px solid #a7f3d0", borderRadius: 6, padding: "10px 14px", fontSize: 13, maxWidth: 480 }}>
+          Saved: {editNote} <button onClick={() => setEditNote("")} style={btnStyle("#ffffff", "#166534", "1px solid #a7f3d0")}>OK</button>
         </div>
       )}
       {pickTime && (
@@ -761,7 +727,7 @@ function ScheduleManager({ programId, programName = "", departments = [] }) {
           onClose={() => setPickTime(null)}
           onFixed={(d) => { if (d && d.changes) { setEditNote(`${pickTime.subject_code}: ${d.changes}`); setPickTime(null); setEditingGroup(null); load(); } }} />
       )}
-      {moveNote && <div style={{ background: "#eafaf0", border: "1px solid #b7e4c7", color: "#1e5f3a", padding: "8px 12px", borderRadius: "8px", fontSize: "13px", marginBottom: "10px" }}>{moveNote}</div>}
+      {moveNote && <div style={{ background: "#eafaf0", border: "1px solid #b7e4c7", color: "#1e5f3a", padding: "8px 12px", borderRadius: 6, fontSize: "13px", marginBottom: "10px" }}>{moveNote}</div>}
       {showMove && (
         <MoveClassesModal
           groups={selectedGroups.filter((g) => g.status === "draft")}
@@ -779,6 +745,7 @@ function ScheduleManager({ programId, programName = "", departments = [] }) {
       />
 
       <ScheduleEditModal
+        onOverrideRemoved={() => { setEditingGroup(null); load(); }}
         roomAssignment={editingGroup ? roomAssign[editingGroup.subject] : undefined}
         group={editingGroup}
         rooms={rooms}
@@ -797,11 +764,11 @@ function ScheduleManager({ programId, programName = "", departments = [] }) {
 
       {showGenerate && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "12px" }}>
-          <div style={{ background: "white", borderRadius: "12px", padding: "22px 26px", width: "min(1240px, 96vw)", maxWidth: "100%", maxHeight: "92vh", overflowY: "auto", overflowX: "hidden", boxSizing: "border-box" }}>
+          <div style={{ background: "white", borderRadius: 6, padding: "22px 26px", width: "min(1240px, 96vw)", maxWidth: "100%", maxHeight: "92vh", overflowY: "auto", overflowX: "hidden", boxSizing: "border-box" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
               <h3 style={{ margin: 0, color: "#003366" }}>Generate Schedule — {genProgramName || programName || "Program"} Subjects</h3>
               <button onClick={() => { setShowGenerate(false); load(); }} aria-label="Close"
-                      style={{ border: "none", background: "none", fontSize: "18px", cursor: "pointer", color: "#64748b" }}>Close</button>
+                      style={{ border: "1px solid #d1d5db", background: "white", color: "#374151", fontSize: "13px", fontWeight: 600, padding: "6px 12px", borderRadius: 4, cursor: "pointer" }}>Close</button>
             </div>
             <ErrorBoundary what="the Generate Schedule dialog">
               <GenerateSchedulePanel role="dean" departments={departments} initialProgramId={programId} hideTitle onGenerated={load} onProgramName={setGenProgramName} />
@@ -910,7 +877,7 @@ function DeanCoverageTab({ department, departments = [department] }) {
               {suggestions.map((s) => (
                 <tr key={s.coverage_suggestion_id}>
                   <td>{s.subject} — {s.section}</td>
-                  <td>{s.subject_field ? <Badge tone="neutral">{s.subject_field}</Badge> : <span style={{ color: "#94a3b8" }}>—</span>}</td>
+                  <td>{s.subject_field ? <Badge tone="neutral">{s.subject_field}</Badge> : <span style={{ color: "#6b7280" }}>—</span>}</td>
                   <td>{s.timeslot}</td>
                   <td>{s.suggested_faculty_name || <em>No one available</em>}</td>
                   <td>
@@ -918,9 +885,9 @@ function DeanCoverageTab({ department, departments = [department] }) {
                       ? s.suggested_faculty_specializations.map((spec) => (
                           <Badge key={spec} tone={spec === s.subject_field ? "success" : "neutral"}>{spec}</Badge>
                         ))
-                      : s.suggested_faculty_id ? <span style={{ color: "#94a3b8", fontSize: "12px" }}>No specialization on file</span> : null}
+                      : s.suggested_faculty_id ? <span style={{ color: "#6b7280", fontSize: "12px" }}>No specialization on file</span> : null}
                   </td>
-                  <td style={{ fontSize: "12px", color: "#64748b" }}>{s.reason}</td>
+                  <td style={{ fontSize: "12px", color: "#6b7280" }}>{s.reason}</td>
                   <td>{s.suggested_faculty_id && <button onClick={() => apply(s.coverage_suggestion_id)}>Apply</button>}</td>
                 </tr>
               ))}
@@ -1043,19 +1010,19 @@ function DeanClassListsTab({ department, departments = [department] }) {
     .filter((s) => (!sectionFilter || String(s.section) === String(sectionFilter)))
     .filter((s) => (!searchLower || (s.full_name || "").toLowerCase().includes(searchLower)));
 
-  const inputStyle = { padding: "9px 12px", borderRadius: "8px", border: "1px solid #cdd6e0", fontSize: "13.5px", background: "white" };
+  const inputStyle = { padding: "9px 12px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: "14px", background: "white" };
 
   if (loading) return <p>Loading class lists…</p>;
 
   return (
     <div>
-      {loadError && <p style={{ color: "#a4231a", fontSize: "13px" }}>{loadError} <button onClick={load}>Retry</button></p>}
+      {loadError && <p style={{ color: "#b91c1c", fontSize: "13px" }}>{loadError} <button onClick={load}>Retry</button></p>}
       <div style={{
-        background: "white", borderRadius: "10px", padding: "18px 20px", marginBottom: "20px",
-        border: "1px solid #e0e6ed", boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+        background: "white", borderRadius: 6, padding: "18px 20px", marginBottom: "20px",
+        border: "1px solid #e5e7eb", boxShadow: "none",
       }}>
         <h4 style={{ marginTop: 0, marginBottom: "4px", color: "#003366" }}>Upload a class list</h4>
-        <p style={{ fontSize: "12.5px", color: "#64748b", marginTop: 0, marginBottom: "14px" }}>
+        <p style={{ fontSize: "13px", color: "#6b7280", marginTop: 0, marginBottom: "14px" }}>
           Upload a CSV or Excel file with three columns: <b>Full Name</b>, <b>Section</b>, <b>Year Level</b>. Every student in a block section
           takes that section's whole subject load, so teachers of that section see them on their class list.
         </p>
@@ -1067,30 +1034,30 @@ function DeanClassListsTab({ department, departments = [department] }) {
             <option value="">Current semester</option>
             {semesters.map((x) => <option key={x} value={x}>{x}</option>)}
           </select>
-          <label style={{ ...inputStyle, cursor: "pointer", color: upFile ? "#1f2937" : "#64748b" }}>
+          <label style={{ ...inputStyle, cursor: "pointer", color: upFile ? "#111827" : "#6b7280" }}>
             {upFile ? upFile.name : "Choose file (.csv, .xlsx)"}
             <input type="file" accept=".csv,.xlsx,.xlsm,text/csv" style={{ display: "none" }}
                    onChange={(e) => { setUpFile(e.target.files[0] || null); setUpResult(null); setUpDone(""); setUpError(""); e.target.value = ""; }} />
           </label>
           <button onClick={() => send(false)} disabled={upBusy || !upFile || !upProgram}>{upBusy && !upResult ? "Checking…" : "Check file"}</button>
-          <button onClick={template} style={{ background: "white", color: "#003366", border: "1px solid #cdd6e0" }}>Download template</button>
+          <button onClick={template} style={{ background: "white", color: "#003366", border: "1px solid #d1d5db" }}>Download template</button>
         </div>
-        {upError && <p style={{ color: "#a4231a", fontSize: "12.5px", marginTop: "10px", marginBottom: 0 }}>{upError}</p>}
+        {upError && <p style={{ color: "#b91c1c", fontSize: "13px", marginTop: "10px", marginBottom: 0 }}>{upError}</p>}
         {upDone && <p style={{ color: "#166534", fontSize: "13px", marginTop: "10px", marginBottom: 0 }}>{upDone}</p>}
         {upResult && (
-          <div style={{ marginTop: "12px", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "10px 12px", background: "#f8fafc" }}>
+          <div style={{ marginTop: "12px", border: "1px solid #e5e7eb", borderRadius: 6, padding: "10px 12px", background: "#f9fafb" }}>
             <div style={{ fontSize: "13px" }}>
               <b>{upResult.to_add}</b> student{upResult.to_add === 1 ? "" : "s"} ready to add to {upResult.program} ({upResult.semester})
               {upResult.duplicates ? <> · {upResult.duplicates} already listed (skipped)</> : null}
-              {upResult.error_count ? <span style={{ color: "#a4231a" }}> · {upResult.error_count} row{upResult.error_count === 1 ? " needs" : "s need"} fixing</span> : null}
+              {upResult.error_count ? <span style={{ color: "#b91c1c" }}> · {upResult.error_count} row{upResult.error_count === 1 ? " needs" : "s need"} fixing</span> : null}
             </div>
             {upResult.by_section.length > 0 && (
-              <div style={{ fontSize: "12.5px", color: "#475569", marginTop: "4px" }}>
+              <div style={{ fontSize: "13px", color: "#4b5563", marginTop: "4px" }}>
                 {upResult.by_section.map((b) => `${b.section}: ${b.count}`).join("  ·  ")}
               </div>
             )}
             {upResult.errors.length > 0 && (
-              <ul style={{ margin: "8px 0 0", paddingLeft: "18px", fontSize: "12.5px", color: "#a4231a", maxHeight: "130px", overflowY: "auto" }}>
+              <ul style={{ margin: "8px 0 0", paddingLeft: "18px", fontSize: "13px", color: "#b91c1c", maxHeight: "130px", overflowY: "auto" }}>
                 {upResult.errors.map((er, i) => <li key={i}>Row {er.row}{er.name ? ` (${er.name})` : ""}: {er.message}</li>)}
               </ul>
             )}
@@ -1098,7 +1065,7 @@ function DeanClassListsTab({ department, departments = [department] }) {
               <button onClick={() => send(true)} disabled={upBusy || upResult.to_add === 0}>
                 {upBusy ? "Importing…" : `Import ${upResult.to_add} student${upResult.to_add === 1 ? "" : "s"}`}
               </button>
-              {upResult.error_count > 0 && upResult.to_add > 0 && <span style={{ fontSize: "12px", color: "#64748b" }}>Rows with problems are left out.</span>}
+              {upResult.error_count > 0 && upResult.to_add > 0 && <span style={{ fontSize: "12px", color: "#6b7280" }}>Rows with problems are left out.</span>}
             </div>
           </div>
         )}
@@ -1106,7 +1073,7 @@ function DeanClassListsTab({ department, departments = [department] }) {
 
       <div style={{
         display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "center",
-        background: "white", border: "1px solid #e0e6ed", borderRadius: "10px", padding: "12px 14px", marginBottom: "16px",
+        background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "12px 14px", marginBottom: "16px",
       }}>
         <input
           placeholder="Search name"
@@ -1118,7 +1085,7 @@ function DeanClassListsTab({ department, departments = [department] }) {
           <option value="">All sections</option>
           {sections.map((s) => <option key={s.id} value={s.id}>{sectionLabel(s)} · {s.semester}</option>)}
         </select>
-        <span style={{ fontSize: "12.5px", color: "#64748b" }}>{filtered.length} students</span>
+        <span style={{ fontSize: "13px", color: "#6b7280" }}>{filtered.length} students</span>
       </div>
 
       <table>
@@ -1213,7 +1180,7 @@ function AnalyticsPanel() {
     <div>
       <h3 style={{ color: "#003366" }}>Analytics — Your College</h3>
       {data.semesters && data.semesters.length > 1 && (
-        <p style={{ fontSize: "13px", color: "#334155" }}>
+        <p style={{ fontSize: "13px", color: "#374151" }}>
           Semester:{" "}
           <select value={data.semester || ""} onChange={(e) => setSem(e.target.value)}>
             {data.semesters.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -1227,26 +1194,26 @@ function AnalyticsPanel() {
         <StatTile label="Teachers With Load" value={workload.length} />
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px" }}>
-        <div style={{ background: "white", border: "1px solid #e0e6ed", borderRadius: "10px", padding: "18px 20px" }}>
+        <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "18px 20px" }}>
           <h4 style={{ marginTop: 0, color: "#003366" }}>Teacher Workload</h4>
           <HBarChart data={workload} unit=" hrs" emptyText="No schedule entries yet." />
         </div>
-        <div style={{ background: "white", border: "1px solid #e0e6ed", borderRadius: "10px", padding: "18px 20px" }}>
+        <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "18px 20px" }}>
           <h4 style={{ marginTop: 0, color: "#003366" }}>Room Utilization</h4>
           <HBarChart data={rooms} color="#b8860b" unit=" hrs" emptyText="No schedule entries yet." />
         </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px", marginTop: "20px" }}>
-        <div style={{ background: "white", border: "1px solid #e0e6ed", borderRadius: "10px", padding: "18px 20px" }}>
+        <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "18px 20px" }}>
           <h4 style={{ marginTop: 0, color: "#003366" }}>Class Hours by Day</h4>
           <HBarChart data={Object.entries(data.class_hours_by_day || {}).map(([d, n]) => ({ label: d, value: n }))} unit=" hrs" emptyText="No schedule entries yet." />
         </div>
-        <div style={{ background: "white", border: "1px solid #e0e6ed", borderRadius: "10px", padding: "18px 20px" }}>
+        <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "18px 20px" }}>
           <h4 style={{ marginTop: 0, color: "#003366" }}>Schedule Status</h4>
           <HBarChart data={Object.entries(data.schedule_status || {}).map(([k, n]) => ({ label: k.charAt(0).toUpperCase() + k.slice(1), value: n }))} color="#b8860b" unit=" hrs" emptyText="No schedule entries yet." />
         </div>
       </div>
-      <div style={{ background: "white", border: "1px solid #e0e6ed", borderRadius: "10px", padding: "18px 20px", marginTop: "20px" }}>
+      <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "18px 20px", marginTop: "20px" }}>
         <h4 style={{ marginTop: 0, color: "#003366" }}>Recent Activity</h4>
         <RecentActivity items={data.recent_activity} />
       </div>
@@ -1300,19 +1267,19 @@ function CollegeFacultyRoster({ department, departments = [department] }) {
   // Only block the view on the very first load; a reload after adding a faculty member must not
   // unmount the "Add Faculty" dialog (it is still showing the new School ID).
   if (loading && rows.length === 0) return <p>Loading faculty…</p>;
-  if (loadError) return <p style={{ color: "#a4231a" }}>{loadError}</p>;
+  if (loadError) return <p style={{ color: "#b91c1c" }}>{loadError}</p>;
 
   return (
     <div>
     <WorkloadPanel canSuggest refreshKey={reloadKey} />
     <div style={{
-      background: "white", borderRadius: "10px", padding: "20px 24px",
-      border: "1px solid #e0e6ed", boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+      background: "white", borderRadius: 6, padding: "20px 24px",
+      border: "1px solid #e5e7eb", boxShadow: "none",
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "14px" }}>
         <div>
           <h3 style={{ margin: 0, color: "#003366" }}>College Faculty</h3>
-          <p style={{ margin: "2px 0 0", fontSize: "13px", color: "#64748b" }}>
+          <p style={{ margin: "2px 0 0", fontSize: "13px", color: "#6b7280" }}>
             {rows.length} faculty member{rows.length === 1 ? "" : "s"}
           </p>
         </div>
@@ -1340,7 +1307,7 @@ function CollegeFacultyRoster({ department, departments = [department] }) {
       </div>
 
       {rows.length === 0 ? (
-        <p style={{ color: "#64748b", fontSize: "13.5px" }}>No faculty found for this department yet.</p>
+        <p style={{ color: "#6b7280", fontSize: "14px" }}>No faculty found for this department yet.</p>
       ) : (
         <table>
           <thead>
@@ -1360,10 +1327,10 @@ function CollegeFacultyRoster({ department, departments = [department] }) {
                     <td>{r.full_name}</td>
                     <td>{FACULTY_TYPE_LABEL[r.faculty_type] || r.faculty_type || "—"}</td>
                     <td>{r.load_units} unit{r.load_units === 1 ? "" : "s"}</td>
-                    <td style={r.workload?.overload_hours > 0 ? { color: "#a4231a", fontWeight: 700 } : undefined}
+                    <td style={r.workload?.overload_hours > 0 ? { color: "#b91c1c", fontWeight: 600 } : undefined}
                         title={r.workload?.warning || ""}>
                       {r.workload ? `${r.workload.current_hours} / ${r.workload.max_hours} h` : "—"}
-                      {r.workload?.overload_hours > 0 ? " ⚠" : ""}
+                      {r.workload?.overload_hours > 0 ? " (overloaded)" : ""}
                     </td>
                     <td>{r.availability_days.length ? r.availability_days.join(", ") : "Not submitted yet"}</td>
                     <td>
@@ -1412,17 +1379,17 @@ function FacultyDetailPanel({ row }) {
   return (
     <div style={{ padding: "16px 20px 20px" }}>
       <div style={{ marginBottom: "14px" }}>
-        <p style={{ margin: "0 0 6px", fontSize: "12px", fontWeight: 700, color: "#003366", textTransform: "uppercase", letterSpacing: "0.03em" }}>
+        <p style={{ margin: "0 0 6px", fontSize: "13px", fontWeight: 600, color: "#111827" }}>
           Specialization
         </p>
         {specializations.length === 0 ? (
-          <p style={{ margin: 0, fontSize: "13px", color: "#94a3b8" }}>No specialization on file.</p>
+          <p style={{ margin: 0, fontSize: "13px", color: "#6b7280" }}>No specialization on file.</p>
         ) : (
           <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
             {specializations.map((s) => (
               <span key={s} style={{
                 background: "#e8eef7", color: "#003366", fontSize: "12px", fontWeight: 600,
-                padding: "4px 10px", borderRadius: "999px",
+                padding: "4px 10px", borderRadius: 4,
               }}>
                 {s}
               </span>
@@ -1432,11 +1399,11 @@ function FacultyDetailPanel({ row }) {
       </div>
 
       <div>
-        <p style={{ margin: "0 0 6px", fontSize: "12px", fontWeight: 700, color: "#003366", textTransform: "uppercase", letterSpacing: "0.03em" }}>
+        <p style={{ margin: "0 0 6px", fontSize: "13px", fontWeight: 600, color: "#111827" }}>
           Submitted Availability
         </p>
         {slots.length === 0 ? (
-          <p style={{ margin: 0, fontSize: "13px", color: "#94a3b8" }}>Not submitted yet.</p>
+          <p style={{ margin: 0, fontSize: "13px", color: "#6b7280" }}>Not submitted yet.</p>
         ) : (
           <table style={{ background: "white", maxWidth: "480px" }}>
             <thead><tr><th>Day</th><th>Time</th><th>Preference</th></tr></thead>
@@ -1495,7 +1462,7 @@ function ScheduleView() {
                     onClick={() => setRosterSection(rosterSection === g.section ? null : g.section)}
                     title="See the students in this section"
                   >
-                    🧑‍🎓 {roster.length} student{roster.length !== 1 ? "s" : ""}
+                    {roster.length} student{roster.length !== 1 ? "s" : ""}
                   </button>
                 </td>
               </tr>
@@ -1506,17 +1473,17 @@ function ScheduleView() {
 
       {rosterSection !== null && (
         <div style={{
-          marginTop: "16px", background: "white", borderRadius: "10px", padding: "16px 20px",
-          border: "1px solid #e0e6ed", boxShadow: "0 1px 4px rgba(0,0,0,0.06)", maxWidth: "480px",
+          marginTop: "16px", background: "white", borderRadius: 6, padding: "16px 20px",
+          border: "1px solid #e5e7eb", boxShadow: "none", maxWidth: "480px",
         }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
             <h4 style={{ margin: 0, color: "#003366" }}>
               {grouped.find((g) => g.section === rosterSection)?.section_name || "Class list"}
             </h4>
-            <button onClick={() => setRosterSection(null)} style={{ background: "none", color: "#1f2937", border: "none", cursor: "pointer", fontSize: "16px" }}>×</button>
+            <button onClick={() => setRosterSection(null)} style={{ background: "none", color: "#111827", border: "none", cursor: "pointer", fontSize: "16px" }}>×</button>
           </div>
           {rosterFor(rosterSection).length === 0 ? (
-            <p style={{ color: "#64748b", fontSize: "13px" }}>No students recorded for this section yet -- ask the Registrar/Dean to add the class list.</p>
+            <p style={{ color: "#6b7280", fontSize: "13px" }}>No students recorded for this section yet -- ask the Registrar/Dean to add the class list.</p>
           ) : (
             <table>
               <thead><tr><th>Name</th></tr></thead>
@@ -1566,22 +1533,21 @@ function AvailabilityForm({ onSaved }) {
   };
 
   const fieldLabelStyle = { display: "block", fontSize: "12px", fontWeight: 600, color: "#003366", marginBottom: "6px" };
-  const inputStyle = { width: "100%", padding: "10px 12px", borderRadius: "8px", border: "1px solid #cdd6e0", fontSize: "14px", boxSizing: "border-box", background: "white" };
+  const inputStyle = { width: "100%", padding: "10px 12px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: "14px", boxSizing: "border-box", background: "white" };
 
   return (
     <div style={{ marginTop: "8px", marginBottom: "24px" }}>
       <div style={{
-        background: "white", borderRadius: "12px", padding: "22px 24px", maxWidth: "640px",
-        border: "1px solid #e0e6ed", boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+        background: "white", borderRadius: 6, padding: "22px 24px", maxWidth: "640px",
+        border: "1px solid #e5e7eb", boxShadow: "none",
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
           <div>
-            <h3 style={{ margin: 0, color: "#1f2937", fontSize: "16px" }}>Add an availability block</h3>
-            <p style={{ margin: "2px 0 0", fontSize: "12.5px", color: "#64748b" }}>
+            <h3 style={{ margin: 0, color: "#111827", fontSize: "16px" }}>Add an availability block</h3>
+            <p style={{ margin: "2px 0 0", fontSize: "13px", color: "#6b7280" }}>
               Submitted to the Registrar/Dean for review -- not final until scheduled.
             </p>
           </div>
-          <span style={{ color: "#b8860b", fontSize: "20px" }}>🕐</span>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
@@ -1610,14 +1576,14 @@ function AvailabilityForm({ onSaved }) {
           </div>
         </div>
 
-        {error && <p style={{ color: "#a4231a", fontSize: "13px", marginTop: 0, marginBottom: "14px" }}>{error}</p>}
+        {error && <p style={{ color: "#b91c1c", fontSize: "13px", marginTop: 0, marginBottom: "14px" }}>{error}</p>}
 
         <button
           onClick={submit}
           disabled={saving || !day || !start || !end}
           style={{
             background: "#003366", color: "white", border: "none", padding: "12px 20px",
-            borderRadius: "8px", fontSize: "14px", fontWeight: 600, cursor: saving ? "default" : "pointer",
+            borderRadius: 6, fontSize: "14px", fontWeight: 600, cursor: saving ? "default" : "pointer",
             width: "100%",
           }}
         >

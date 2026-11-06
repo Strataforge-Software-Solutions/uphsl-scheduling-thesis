@@ -139,6 +139,23 @@ def time_window_for(subject_id):
     return _TIMES.get().get(subject_id)
 
 
+# Day chosen for a subject in the Generate preview (the Dean assigned a professor's time from the Faculty time window):
+# {subject_id: "Tue"}. Hard rule for that subject only, like the Start / End time: its class is placed on that day or skipped with why.
+_DAYS = ContextVar("subject_day_choices", default={})
+
+
+def use_day_choices(mapping):
+    return _DAYS.set(mapping or {})
+
+
+def release_day_choices(token):
+    _DAYS.reset(token)
+
+
+def day_choice_for(subject_id):
+    return _DAYS.get().get(subject_id)
+
+
 def assignment_for(subject_id):
     return _ASSIGN.get().get(subject_id)
 
@@ -158,6 +175,24 @@ def release_teacher_choices(token):
 
 def teacher_choice_for(subject_id):
     return _TEACHERS.get().get(subject_id)
+
+
+# "Assign anyway" (this run only): {subject_id: {"teacher": faculty_id, "blocked": set(timeslot ids)}}. A Dean pinned, BY HAND and with a
+# reason, one faculty member who is NOT connected to that subject. The engine accepts exactly that person for exactly that subject and
+# never chooses an unqualified teacher by itself; "blocked" = the times outside the person's submitted availability (a hard window here).
+_QUAL_OVERRIDES = ContextVar("qualification_overrides", default={})
+
+
+def use_qualification_overrides(mapping):
+    return _QUAL_OVERRIDES.set(mapping or {})
+
+
+def release_qualification_overrides(token):
+    _QUAL_OVERRIDES.reset(token)
+
+
+def qualification_override_for(subject_id):
+    return _QUAL_OVERRIDES.get().get(subject_id)
 
 
 # Shared (merged) minor classes: while the batch minor generator runs, the host section of a shared class is sized for the

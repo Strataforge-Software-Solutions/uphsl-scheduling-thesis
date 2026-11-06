@@ -192,6 +192,7 @@ class AssignmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = m.TeachingAssignment
         fields = "__all__"
+        read_only_fields = ("qualification_override",)          # set only by the server's Assign anyway check
 
 
 class EntrySerializer(serializers.ModelSerializer):
@@ -210,8 +211,9 @@ class EntrySerializer(serializers.ModelSerializer):
     class Meta:
         model = m.ScheduleEntry
         fields = ("id", "run", "section", "section_name", "grade_level", "strand_code", "subject", "subject_code", "subject_name",
-                  "learning_area", "teacher", "teacher_name", "room", "room_name", "day", "start_time", "end_time", "is_manual")
-        read_only_fields = ("run", "subject", "subject_code", "subject_name", "learning_area", "is_manual")
+                  "learning_area", "teacher", "teacher_name", "room", "room_name", "day", "start_time", "end_time", "is_manual",
+                  "qualification_override")
+        read_only_fields = ("run", "subject", "subject_code", "subject_name", "learning_area", "is_manual", "qualification_override")
 
 
 class ConflictSerializer(serializers.ModelSerializer):

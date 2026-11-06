@@ -266,6 +266,9 @@ def build_domain(section, subject, teachers, rooms, timeslots, availability_rule
     _chosen = _rrt.teacher_choice_for(subject.id)
     if _chosen is not None:          # the Dean's professor for this run: only that teacher (never a silent swap)
         qualified_teachers = [t for t in qualified_teachers if t.id == _chosen]
+    _ov = _rrt.qualification_override_for(subject.id)
+    if _ov is not None:              # the Dean's manual "Assign anyway" for this one subject: that one person only (never chosen by the engine)
+        qualified_teachers = [t for t in teachers if t.id == _ov["teacher"]]
     gym_exists = any(getattr(r, "room_type", "") == "gym" for r in rooms)
     compatible_rooms = [r for r in rooms if _room_matches_subject(r, subject, gym_exists)]
     # Reserved rooms (M-HJ for IHM, Comp Lab C/D for Computer Studies, Comp Lab B for SHS/JHS) are
@@ -308,10 +311,14 @@ def build_domain(section, subject, teachers, rooms, timeslots, availability_rule
         timeslots = [sl for sl in timeslots if _free(sl)]
     if win:           # the start / end time chosen for this subject in the curriculum preview
         timeslots = [sl for sl in timeslots if win[0] <= _slot_minutes(sl.start_time) and _slot_minutes(sl.end_time) <= win[1]]
+    _day = _rr.day_choice_for(subject.id)
+    if _day:          # the day the Dean assigned from the Faculty time window
+        timeslots = [sl for sl in timeslots if str(sl.day)[:3].title() == _day]
     for teacher in qualified_teachers:
         for room in compatible_rooms:
             for slot in timeslots:
-                if _teacher_available(teacher, slot, availability_rules):
+                if _teacher_available(teacher, slot, availability_rules) and (
+                        _ov is None or _teacher_available(teacher, slot, {teacher.id: _ov["blocked"]})):
                     domain.append((teacher, room, slot))
     return domain
 
@@ -933,11 +940,22 @@ def explain_unresolved(var, assigned, teachers, rooms, block_slots, availability
             return (f"No {hours}-hour class period fits between the chosen start and end time. Widen the Start / End Time of this subject "
                     "in the curriculum preview, or set it to 'Any time'.")
         slots = inside
+    _day = _rr0.day_choice_for(subject.id)
+    if _day:          # the Dean assigned this subject to one day (Faculty time window)
+        slots = [sl for sl in slots if str(sl.day)[:3].title() == _day]
+        if not slots:
+            return (f"No {float(hours):g}-hour class period fits on {_day}"
+                    + (f" inside your {_clock(_win[0])}-{_clock(_win[1])} range" if _win else "")
+                    + ". Choose another time in the Faculty time window, or clear the Day.")
     if not slots:
         return (f"There are no {hours}-hour windows in the time-slot table (needs back-to-back hourly slots). "
                 "Open Settings > Time slots and generate the hourly Mon-Sat slots (7AM-8PM), then press Resolve.")
     from .qualification import qualified_teachers as _qual, why_nobody as _why
     qteachers = _qual(subject, section, teachers, specialization_map)
+    _ov = _rr0.qualification_override_for(subject.id)
+    if _ov is not None:              # "Assign anyway": the pinned person, inside their submitted availability
+        qteachers = [t for t in teachers if t.id == _ov["teacher"]]
+        availability_rules = {**availability_rules, _ov["teacher"]: set(availability_rules.get(_ov["teacher"], set())) | set(_ov["blocked"])}
     if not qteachers:
         return _why(subject, section, teachers, specialization_map)
     # the professor the Dean chose for this subject in the Generate preview: only that teacher is used, and the reason names them

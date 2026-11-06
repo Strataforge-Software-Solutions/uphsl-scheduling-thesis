@@ -200,10 +200,8 @@ def assign(user, schedule_ids, teacher_id):
     _why = teacher_allowed(user, teacher, r0.subject, r0.section)
     if _why:
         raise AssignError(_why, 422)
-    pts, reasons = wl._qualification_match(r0.subject, teacher)          # majors: and the matching this used before (kept: never widened)
-    reasons = reasons or ["Qualified for this Gen Ed area (College of Arts and Science rule)"]
-    if pts == 0 and r0.subject.classification != "minor":
-        raise AssignError(f"{wl._name(teacher)} is not qualified for {r0.subject.title}: no matching specialization, degree or qualification.", 422)
+    _pts, reasons = wl._qualification_match(r0.subject, teacher)          # for the report only: the rule above decides
+    reasons = reasons or ["Qualified (specialization / same-discipline degree)"]
     # 2 availability (their submitted availability must cover every period)
     slots = [r.timeslot for r in rows]
     rules = _build_availability_rules([teacher], list(TimeSlot.objects.all()), r0.school_year, term or None)

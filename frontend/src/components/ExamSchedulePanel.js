@@ -5,6 +5,7 @@ import { HistoricalHint } from "./Charts";
 import RoomSelect from "./RoomSelect";
 import { kindLabel } from "../utils/labels";
 import ExamConflictDialog from "./ExamConflictDialog";
+import { formatDate, formatTimeRange } from "../utils/formatDateTime";
 
 /* Exam Schedule -- shared by the Registrar and the Dean.
      Registrar : sees and prints MINOR subjects only, can edit their date and time.
@@ -17,28 +18,20 @@ const PERIODS = [["prelim", "Prelim"], ["midterm", "Midterm"], ["final", "Final"
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const YEARS = ["1st Year", "2nd Year", "3rd Year", "4th Year", "5th Year"];
 
-const fieldLabel = { display: "block", fontSize: "11.5px", fontWeight: 600, color: "#64748b", marginBottom: "5px", textTransform: "uppercase", letterSpacing: "0.3px" };
-const input = { padding: "9px 10px", borderRadius: "7px", border: "1px solid #cdd6e0", fontSize: "13.5px", minWidth: "140px", background: "white" };
-const card = { background: "white", borderRadius: "10px", padding: "20px 24px", marginBottom: "24px", border: "1px solid #e0e6ed", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" };
-const smallBtn = { background: "white", color: "#003366", border: "1px solid #cdd6e0", padding: "4px 10px", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: "pointer", marginRight: "6px" };
-const th = { textAlign: "left", padding: "10px 12px", background: "#003366", color: "white", fontSize: "12px", letterSpacing: "0.4px", textTransform: "uppercase", fontWeight: 600 };
-const td = { padding: "9px 12px", fontSize: "13.5px", color: "#1f2937", borderBottom: "1px solid #eef2f6", verticalAlign: "middle" };
+const fieldLabel = { display: "block", fontSize: "13px", fontWeight: 600, color: "#374151", marginBottom: "6px" };
+const input = { padding: "9px 10px", borderRadius: 4, border: "1px solid #d1d5db", fontSize: "14px", minWidth: "140px", background: "white" };
+const card = { background: "white", borderRadius: 6, padding: "20px 24px", marginBottom: "24px", border: "1px solid #e5e7eb", boxShadow: "none" };
+const smallBtn = { background: "white", color: "#003366", border: "1px solid #d1d5db", padding: "4px 10px", borderRadius: "4px", fontSize: "12px", fontWeight: 600, cursor: "pointer", marginRight: "6px" };
+const th = { textAlign: "left", padding: "10px 12px", background: "#003366", color: "white", fontSize: "12px", letterSpacing: "0.4px", fontWeight: 600 };
+const td = { padding: "9px 12px", fontSize: "14px", color: "#111827", borderBottom: "1px solid #f3f4f6", verticalAlign: "middle" };
 
-function clock(t) {            // "13:00:00" -> "1:00"
-  if (!t) return "";
-  const [h, m] = t.split(":").map(Number);
-  return `${h % 12 || 12}:${String(m).padStart(2, "0")}`;
-}
-function ampm(t) { return t && Number(t.split(":")[0]) >= 12 ? "PM" : "AM"; }
 function timeRange(e) {
   if (!e.timeslot_start) return "Time not set";
-  const a = ampm(e.timeslot_start), b = ampm(e.timeslot_end);
-  return `${clock(e.timeslot_start)}${a !== b ? " " + a : ""} – ${clock(e.timeslot_end)} ${b}`;
+  return formatTimeRange(e.timeslot_start, e.timeslot_end);
 }
 function niceDate(iso) {
   if (!iso) return "Date not set";
-  const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric", weekday: "long" });
+  return formatDate(iso, { weekday: "long" });
 }
 const weekdayOf = (iso) => WEEKDAYS[new Date(iso + "T00:00:00").getDay()];
 
@@ -216,15 +209,15 @@ function ExamSchedulePanel({ role, programId }) {
       <h3 style={{ color: "#003366", marginTop: 0 }}>
         {isRegistrar ? "Exam Schedule — Gen Ed Subjects" : "Exam Schedule — Program & Gen Ed Subjects"}
       </h3>
-      <p style={{ fontSize: "13px", color: "#475569", marginTop: 0 }}>
+      <p style={{ fontSize: "13px", color: "#4b5563", marginTop: 0 }}>
         {isRegistrar
           ? "You generate, edit and print the Gen Ed exams. Everything is checked against class schedules and the other exams automatically."
           : "You can see the Registrar's Gen Ed exams, but you generate, edit and print only the program-subject exams of your college(s)."}
       </p>
 
       <div style={card}>
-        <h4 style={{ marginTop: 0, marginBottom: "4px", color: "#003366" }}>⚡ Generate Exam Schedule</h4>
-        <p style={{ fontSize: "12.5px", color: "#64748b", marginTop: 0, marginBottom: "18px", maxWidth: "680px" }}>
+        <h4 style={{ marginTop: 0, marginBottom: "4px", color: "#003366" }}>Generate Exam Schedule</h4>
+        <p style={{ fontSize: "13px", color: "#6b7280", marginTop: 0, marginBottom: "18px", maxWidth: "680px" }}>
           Auto-assigns room, proctor and time for every {ownKind} subject in the chosen semester, all year levels at once,
           {isRegistrar ? " across every college." : " across every program of your college(s)."} Exams are spread over the
           exam-week dates below and checked against every class and exam already scheduled.
@@ -252,13 +245,13 @@ function ExamSchedulePanel({ role, programId }) {
             <input style={input} type="date" value={genForm.exam_end_date} min={genForm.exam_start_date || undefined} onChange={(e) => setGenForm({ ...genForm, exam_end_date: e.target.value })} />
           </div>
           <button onClick={runGenerate} disabled={generating || !genForm.semester || !genForm.exam_start_date || !genForm.exam_end_date}
-            style={{ background: generating ? "#6b8bb3" : "#003366", color: "white", border: "none", padding: "10px 24px", borderRadius: "8px", fontSize: "13.5px", fontWeight: 600, cursor: generating ? "default" : "pointer", height: "38px" }}>
+            style={{ background: generating ? "#6b8bb3" : "#003366", color: "white", border: "none", padding: "10px 24px", borderRadius: 6, fontSize: "14px", fontWeight: 600, cursor: generating ? "default" : "pointer", height: "38px" }}>
             {generating ? "Generating…" : "Generate"}
           </button>
         </div>
         {genResult && !genResult.error && (
-          <div style={{ marginTop: "16px", background: "#eafaf0", border: "1px solid #b7e4c7", color: "#1e7a45", borderRadius: "8px", padding: "12px 16px", fontSize: "13px" }}>
-            ✓ {genResult.detail || `Created ${genResult.created_count} exam slot(s) across ${genResult.programs_covered ?? 1} program(s).`}
+          <div style={{ marginTop: "16px", background: "#eafaf0", border: "1px solid #b7e4c7", color: "#1e7a45", borderRadius: 6, padding: "12px 16px", fontSize: "13px" }}>
+            {genResult.detail || `Created ${genResult.created_count} exam slot(s) across ${genResult.programs_covered ?? 1} program(s).`}
             {genResult.validation?.counts && (
               <div style={{ marginTop: "8px", color: genResult.validation.counts.missing || genResult.validation.counts.room_conflicts || genResult.validation.counts.rule_violations ? "#96690a" : "#1e7a45" }}>
                 Checked after generating: {genResult.validation.counts.exams} exams saved ·{" "}
@@ -282,13 +275,13 @@ function ExamSchedulePanel({ role, programId }) {
               </div>
             )}
             {isRegistrar && genResult.pending?.length > 0 && (
-              <button onClick={() => setConflictDialog(true)} style={{ marginTop: "8px", padding: "6px 14px", borderRadius: "8px", border: "none", background: "#003366", color: "#fff", cursor: "pointer" }}>
+              <button onClick={() => setConflictDialog(true)} style={{ marginTop: "8px", padding: "6px 14px", borderRadius: 6, border: "none", background: "#003366", color: "#fff", cursor: "pointer" }}>
                 Resolve {genResult.pending.length} conflict{genResult.pending.length === 1 ? "" : "s"}
               </button>
             )}
             {genResult.unresolved?.length > 0 && (
               <div style={{ marginTop: "8px", color: "#96690a" }}>
-                ⚠ {genResult.unresolved.length} could not be placed:
+                {genResult.unresolved.length} could not be placed:
                 <ul style={{ margin: "4px 0 0 18px", padding: 0 }}>{genResult.unresolved.map((u, i) => <li key={i}>{u}</li>)}</ul>
               </div>
             )}
@@ -297,10 +290,10 @@ function ExamSchedulePanel({ role, programId }) {
         {!isRegistrar && (
           <div style={{ marginTop: "12px" }}>
             <button onClick={() => setDeanDialog(true)} disabled={!genForm.semester || !genForm.exam_start_date || !genForm.exam_end_date}
-              style={{ padding: "7px 16px", borderRadius: "8px", border: "1px solid #003366", background: "#fff", color: "#003366", cursor: "pointer" }}>
+              style={{ padding: "7px 16px", borderRadius: 6, border: "1px solid #003366", background: "#fff", color: "#003366", cursor: "pointer" }}>
               Registrar requests — move my exams that block Gen Ed exams
             </button>
-            <span style={{ fontSize: "12px", color: "#64748b", marginLeft: "8px" }}>(uses the semester, period and exam week above)</span>
+            <span style={{ fontSize: "12px", color: "#6b7280", marginLeft: "8px" }}>(uses the semester, period and exam week above)</span>
           </div>
         )}
         {deanDialog && (
@@ -311,8 +304,8 @@ function ExamSchedulePanel({ role, programId }) {
             onApplied={() => { load(); setGenResult((g) => g && ({ ...g, pending: [], unresolved: [] })); }} />
         )}
         {genResult?.error && (
-          <div style={{ marginTop: "16px", background: "#fdecea", border: "1px solid #f3b3ac", color: "#a4231a", borderRadius: "8px", padding: "12px 16px", fontSize: "13px" }}>
-            ⚠ {genResult.error}
+          <div style={{ marginTop: "16px", background: "#fdecea", border: "1px solid #f3b3ac", color: "#b91c1c", borderRadius: 6, padding: "12px 16px", fontSize: "13px" }}>
+            {genResult.error}
           </div>
         )}
       </div>
@@ -348,12 +341,12 @@ function ExamSchedulePanel({ role, programId }) {
         <span style={{ flex: 1 }} />
         <button onClick={printPdf} disabled={downloading}
           title={isRegistrar ? "Prints the Gen Ed exam schedule" : "Prints the program-subject exam schedule (Gen Ed is not printed)"}
-          style={{ background: "#003366", color: "white", border: "none", padding: "9px 18px", borderRadius: "8px", fontSize: "13.5px", fontWeight: 600, cursor: "pointer" }}>
-          {downloading ? "Preparing PDF…" : "🖨 Preview / Print PDF"}
+          style={{ background: "#003366", color: "white", border: "none", padding: "9px 18px", borderRadius: 6, fontSize: "14px", fontWeight: 600, cursor: "pointer" }}>
+          {downloading ? "Preparing PDF…" : "Preview / Print PDF"}
         </button>
       </div>
       {!isRegistrar && (
-        <p style={{ fontSize: "12px", color: "#64748b", marginTop: "-6px" }}>
+        <p style={{ fontSize: "12px", color: "#6b7280", marginTop: "-6px" }}>
           The printed PDF contains the <b>program</b> subjects only{period ? ` for the ${period} period` : " (choose an exam period above to print one period)"}.
         </p>
       )}
@@ -374,25 +367,25 @@ function ExamSchedulePanel({ role, programId }) {
             </thead>
             <tbody>
               {byDate.length === 0 && (
-                <tr><td style={{ ...td, textAlign: "center", color: "#64748b", padding: "26px" }} colSpan={cols}>
+                <tr><td style={{ ...td, textAlign: "center", color: "#6b7280", padding: "26px" }} colSpan={cols}>
                   {exams.length === 0 ? "No exam schedule yet. Use Generate above." : "No exams match these filters."}
                 </td></tr>
               )}
               {byDate.map((g) => (
                 <React.Fragment key={g.date || "none"}>
                   <tr>
-                    <td colSpan={cols} style={{ background: "#e8eef6", color: "#003366", fontWeight: 700, fontSize: "13px", padding: "8px 12px", borderBottom: "1px solid #d5dfec" }}>
+                    <td colSpan={cols} style={{ background: "#e8eef6", color: "#003366", fontWeight: 600, fontSize: "13px", padding: "8px 12px", borderBottom: "1px solid #d5dfec" }}>
                       {niceDate(g.date)}
                     </td>
                   </tr>
                   {g.items.map((e, i) => (
                     <React.Fragment key={e.id}>
-                      <tr style={{ background: i % 2 ? "#f8fafc" : "white" }}>
+                      <tr style={{ background: i % 2 ? "#f9fafb" : "white" }}>
                         <td style={{ ...td, whiteSpace: "nowrap", fontWeight: 600 }}>{timeRange(e)}</td>
                         <td style={td}>{e.room_name}</td>
                         <td style={{ ...td, fontWeight: 600 }}>{e.subject_code}
                           {e.combined_with && e.combined_with.length > 0 && (
-                            <div style={{ fontWeight: 400, fontSize: "11px", color: "#5b6b7c" }}
+                            <div style={{ fontWeight: 400, fontSize: "12px", color: "#5b6b7c" }}
                                  title="Low-enrollment sections sitting this exam together in one room">
                               Combined with {e.combined_with.join(", ")}
                             </div>
@@ -408,9 +401,9 @@ function ExamSchedulePanel({ role, programId }) {
                           {canEdit(e) ? (
                             <>
                               <button style={smallBtn} onClick={() => { setEditError(""); startEdit(e); }}>Edit</button>
-                              <button style={{ ...smallBtn, color: "#a4231a" }} onClick={() => removeExam(e)}>Remove</button>
+                              <button style={{ ...smallBtn, color: "#b91c1c" }} onClick={() => removeExam(e)}>Remove</button>
                             </>
-                          ) : <span style={{ fontSize: "12px", color: "#94a3b8" }}>View only</span>}
+                          ) : <span style={{ fontSize: "12px", color: "#6b7280" }}>View only</span>}
                         </td>
                       </tr>
                       {editing && editing.id === e.id && (
@@ -424,12 +417,12 @@ function ExamSchedulePanel({ role, programId }) {
                               <div><label style={fieldLabel}>End</label>
                                 <input style={input} type="time" value={editing.end_time} onChange={(ev) => setEditing({ ...editing, end_time: ev.target.value })} /></div>
                               <button disabled={saving} onClick={saveEdit}
-                                style={{ background: "#003366", color: "white", border: "none", padding: "9px 18px", borderRadius: "7px", fontWeight: 600, cursor: "pointer" }}>
+                                style={{ background: "#003366", color: "white", border: "none", padding: "9px 18px", borderRadius: 4, fontWeight: 600, cursor: "pointer" }}>
                                 {saving ? "Saving…" : "Save"}
                               </button>
                               <button style={smallBtn} onClick={() => setEditing(null)}>Cancel</button>
                             </div>
-                            {editError && <p style={{ color: "#a4231a", fontSize: "13px", margin: "8px 0 0" }}>{editError}</p>}
+                            {editError && <p style={{ color: "#b91c1c", fontSize: "13px", margin: "8px 0 0" }}>{editError}</p>}
                           </td>
                         </tr>
                       )}
@@ -441,7 +434,7 @@ function ExamSchedulePanel({ role, programId }) {
           </table>
         </div>
       </div>
-      <p style={{ fontSize: "12px", color: "#64748b" }}>{filtered.length} exam row(s) shown{filtered.length !== exams.length ? ` of ${exams.length}` : ""}.</p>
+      <p style={{ fontSize: "12px", color: "#6b7280" }}>{filtered.length} exam row(s) shown{filtered.length !== exams.length ? ` of ${exams.length}` : ""}.</p>
 
       {/* ---------- manual add ---------- */}
       <div style={card}>

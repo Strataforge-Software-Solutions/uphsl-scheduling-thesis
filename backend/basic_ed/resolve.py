@@ -92,6 +92,8 @@ def _fix_entry(ctx, entry, kind, before):
     d0, s0, e0 = entry.day, entry.start_time, entry.end_time
 
     def save(**kw):
+        if "teacher" in kw and getattr(kw["teacher"], "id", None) != entry.teacher_id:
+            entry.qualification_override = None
         for k, v in kw.items():
             setattr(entry, k, v)
         entry.save()

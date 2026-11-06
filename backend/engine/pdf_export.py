@@ -7,7 +7,6 @@ Python, no system-level dependencies, safe to install on Windows.
 import io
 from datetime import datetime
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter, landscape
 from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, KeepTogether
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -126,129 +125,211 @@ def _dean_for(department):
     return "", department
 
 
-def _signature_blocks(departments, styles):
+def _signature_blocks(departments, styles, width, scale=1.0):
     """'Prepared by' (the dean) on the left, 'Approved by' (school director) on the right --
-    one row per department that appears in the schedule."""
+    one row per department that appears in the schedule. Printed ONCE, at the very end of the document."""
     plain = ParagraphStyle("SigPlain", parent=styles["Normal"], fontName="Times-Roman", fontSize=10.5, leading=14)
     bold = ParagraphStyle("SigBold", parent=plain, fontName="Times-Bold")
     rows = []
     for dept in (departments or [""]):
         name, dept_label = _dean_for(dept) if dept else ("", "")
-        left = [Paragraph("Prepared by:", plain), Spacer(1, 26),
+        left = [Paragraph("Prepared by:", plain), Spacer(1, 26 * max(scale, 0.75)),
                 Paragraph(name or "_______________________", bold),
                 Paragraph(f"Dean, {dept_label}" if dept_label else "Dean", plain)]
-        right = [Paragraph("Approved by:", plain), Spacer(1, 26),
+        right = [Paragraph("Approved by:", plain), Spacer(1, 26 * max(scale, 0.75)),
                  Paragraph(SCHOOL_DIRECTOR_NAME, bold), Paragraph(SCHOOL_DIRECTOR_TITLE, plain)]
         rows.append([left, right])
-    t = Table(rows, colWidths=[4.4*inch, 4.4*inch])
+    t = Table(rows, colWidths=[width / 2, width / 2])
     t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 4),
-                           ("BOTTOMPADDING", (0, 0), (-1, -1), 12)]))
+                           ("BOTTOMPADDING", (0, 0), (-1, -1), 12 * scale)]))
     return t
+
+
+# ---------------------------------------------------------------------------------------------------------
+# Layout (portrait A4).
+#   * ONE year level per page: "All year levels" prints page 1 = 1st Year, page 2 = 2nd Year, ... (a year level without classes is
+#     skipped, no blank page). Every page repeats the school header and has its own heading (program, year, semester, A.Y.).
+#   * ONE signatory block, directly below the table of the LAST page. A single year level is one page with its signatory.
+#   * Each page is MEASURED before the PDF is built: font and row padding are reduced step by step (text never under 8 pt) until the
+#     page fits. A table that still cannot fit continues on the next page (rows never split, column header repeated) and the
+#     signatory travels with its last rows, never alone; the year level and its row count are reported (build_schedule_pdf.fit_info).
+# ---------------------------------------------------------------------------------------------------------
+import logging
+
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfbase.pdfmetrics import stringWidth
+from reportlab.platypus import PageBreak
+
+log = logging.getLogger(__name__)
+
+PAGE = A4
+MARGIN = 0.5 * inch
+FRAME_PAD = 6                                   # SimpleDocTemplate's frame padding (each side)
+CONTENT_W = PAGE[0] - 2 * MARGIN
+AVAIL_W = CONTENT_W - 2 * FRAME_PAD
+AVAIL_H = PAGE[1] - 2 * MARGIN - 2 * FRAME_PAD
+# (body font pt, vertical row padding pt): the padding shrinks first, the text never goes under 8 pt
+FIT_STEPS = ((9, 7), (9, 5), (9, 3.5), (8.5, 3), (8.5, 2.2), (8, 2), (8, 1.5))
+TAIL_ROWS = 3                                   # rows kept with the signatory if a page cannot be fitted
+OTHER_COLS = (0.46, 0.13, 0.13, 0.28)           # Subject, Room, Section, Teacher share what Day & Time leaves
+
+
+def _group_tables(schedules):
+    """[(program name, year level, semester, academic year, [rows])] in program order, then 1st, 2nd, 3rd, 4th year."""
+    by = {}
+    for s in schedules:
+        key = (s.section.program.name if s.section.program_id else "", s.section.year_level or "")
+        by.setdefault(key, []).append(s)
+    out = []
+    for (prog, yl), rows in sorted(by.items(), key=lambda kv: (kv[0][0], _ordinal_key(kv[0][1]))):
+        sems = sorted({r.section.semester for r in rows if r.section.semester}, key=_ordinal_key)
+        ays = sorted({r.school_year for r in rows if r.school_year})
+        out.append((prog, yl, ", ".join(term_words(x) for x in sems), ", ".join(ays) or default_academic_year(), rows))
+    return out
+
+
+def _day_time(g):
+    return f"{g['day']} {_fmt_time(g['start'])}-{_fmt_time(g['end'])}"
+
+
+def _col_widths(all_groups, font):
+    """Day & Time wide enough for its longest text on ONE line ("Wed 10:00AM-12:00PM"); the rest is shared by the other columns."""
+    longest = max([stringWidth(_day_time(g), "Helvetica", font) for g in all_groups] + [stringWidth("Day & Time", "Helvetica-Bold", font + 0.5)])
+    dt = min(longest + 2 * 6 + 4, AVAIL_W * 0.32)
+    rest = AVAIL_W - dt
+    return [dt] + [f * rest for f in OTHER_COLS]
+
+
+def _rows(grouped, font, header_style, cell_style, note_style):
+    header = [Paragraph(h, header_style) for h in ("Day &amp; Time", "Subject", "Room", "Section", "Teacher")]
+    first = {}
+    for g in grouped:                     # already in week order, so the first one seen is the earliest meeting
+        first.setdefault((g["section_id"], g["code"]), g)
+    body = []
+    for g in grouped:
+        code = g["code"] or ""
+        is_lab = len(code) > 1 and code.endswith("L")
+        p = first.get((g["section_id"], code[:-1] if is_lab else code + "L"))
+        subject = [Paragraph(g["subject"], cell_style)]
+        if p is not None:                 # the small Lec / Lab note: its own tight line, no extra spacing
+            subject.append(Paragraph(f'{"Lab, after Lec " if is_lab else "Lec, then Lab "}{_day_time(p)}', note_style))
+        body.append([Paragraph(_day_time(g).replace(" ", "&nbsp;"), cell_style), subject,
+                     Paragraph(g["room"], cell_style), Paragraph(g["section"], cell_style), Paragraph(g["teacher"], cell_style)])
+    return header, body
+
+
+def _table(rows, widths, pad_v, pad_h, with_header=True, first_stripe=0):
+    t = Table(rows, repeatRows=1 if with_header else 0, colWidths=widths, splitByRow=1)
+    stripes = [colors.white, LIGHT_BLUE] if first_stripe % 2 == 0 else [LIGHT_BLUE, colors.white]
+    cmds = [("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), pad_h), ("RIGHTPADDING", (0, 0), (-1, -1), pad_h),
+            ("TOPPADDING", (0, 0), (-1, -1), pad_v), ("BOTTOMPADDING", (0, 0), (-1, -1), pad_v)]
+    if with_header:
+        cmds += [("BACKGROUND", (0, 0), (-1, 0), NAVY), ("ROWBACKGROUNDS", (0, 1), (-1, -1), stripes)]
+    else:
+        cmds += [("ROWBACKGROUNDS", (0, 0), (-1, -1), stripes)]
+    t.setStyle(TableStyle(cmds))
+    return t
+
+
+def _height(flowables):
+    total = 0
+    for f in flowables:
+        _w, h = f.wrap(AVAIL_W, AVAIL_H)
+        total += h + f.getSpaceBefore() + f.getSpaceAfter()
+    return total
 
 
 def build_schedule_pdf(schedules, title, subtitle="", workspace_label="REGISTRAR WORKSPACE", source_url="", departments=None,
                        year_level=None, semester=None):
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buffer, pagesize=landscape(letter),
-        topMargin=0.5 * inch, bottomMargin=0.5 * inch,
-        leftMargin=0.5 * inch, rightMargin=0.5 * inch,
-    )
     styles = getSampleStyleSheet()
     now_str = datetime.now().strftime("%m/%d/%y, %I:%M %p")
-
     meta_style = ParagraphStyle("Meta", parent=styles["Normal"], fontSize=8, textColor=colors.grey)
     eyebrow_style = ParagraphStyle("Eyebrow", parent=styles["Normal"], fontSize=9, textColor=GOLD, fontName="Helvetica-Bold")
     scope_style = ParagraphStyle("Scope", parent=styles["Normal"], fontSize=10.5, leading=14, textColor=colors.HexColor("#1f2937"), spaceBefore=2, spaceAfter=2)
-    title_style = ParagraphStyle("TitleNavy", parent=styles["Title"], textColor=NAVY, fontSize=22, alignment=0, spaceAfter=2, leading=26)
+    title_style = ParagraphStyle("TitleNavy", parent=styles["Title"], textColor=NAVY, fontSize=20, alignment=0, spaceAfter=2, leading=24)
     sub_style = ParagraphStyle("Sub", parent=styles["Normal"], fontSize=10, textColor=colors.HexColor("#64748b"), spaceBefore=4)
-
-    # Plain Python strings in a reportlab Table are NOT word-wrapped -- the
-    # table only auto-sizes row height for genuine Flowables (Paragraphs).
-    # Feeding it raw strings for long values (a full subject title, a two-word
-    # teacher name) let a too-long line get clipped and visually bleed into
-    # the next column/row, which is the "overlaying" / messy look being fixed
-    # here. Every body cell is now wrapped in its own Paragraph so each
-    # column wraps independently and the row grows to fit its tallest cell.
-    cell_style = ParagraphStyle(
-        "Cell", parent=styles["Normal"], fontSize=9, leading=12, textColor=colors.HexColor("#1f2937"),
-    )
-    header_style = ParagraphStyle(
-        "CellHeader", parent=styles["Normal"], fontSize=9.5, leading=12,
-        textColor=colors.white, fontName="Helvetica-Bold",
-    )
-
-    elements = [
-        Paragraph(f"{now_str} &nbsp;&nbsp;&nbsp; <font color='#003366'><b>U-FAST Academic Scheduling</b></font>", meta_style),
-        Spacer(1, 10),
-        Paragraph(workspace_label, eyebrow_style),
-        Paragraph(title, title_style),
-        Paragraph(scope_html(scope_parts(
-            [year_level] if year_level else [x.section.year_level for x in schedules],
-            [semester] if semester else [x.section.semester for x in schedules],
-            [x.school_year for x in schedules])), scope_style),
-    ]
-    if subtitle:
-        elements.append(Paragraph(subtitle, sub_style))
-    elements.append(Spacer(1, 18))
-
-    grouped = _merge_by_day(schedules)
-    # Chronological Mon->Sat, then by start time within each day -- NOT the
-    # alphabetical string sort this used to do (see DAY_SORT_ORDER above).
-    grouped.sort(key=lambda g: (DAY_SORT_ORDER.get(g["day"], 99), g["start"], g["section"]))
-
-    # Status column removed -- Manual-vs-Generated provenance isn't something
-    # the printed/exported copy needs to show. Column order is now Day & Time
-    # first, then Subject, Room, Section, Teacher, per request.
-    headers = ["Day & Time", "Subject", "Room", "Section", "Teacher"]
-    data = [[Paragraph(h, header_style) for h in headers]]
-    # Lec / Lab pairs (codes X and XL, same section): a small second line says which comes first, like the on-screen tag
-    first = {}
-    for g in grouped:                     # already in week order, so the first one seen is the earliest meeting
-        first.setdefault((g["section_id"], g["code"]), g)
-
-    def _pair_note(g):
-        code = g["code"] or ""
-        is_lab = len(code) > 1 and code.endswith("L")
-        p = first.get((g["section_id"], code[:-1] if is_lab else code + "L"))
-        if p is None:
-            return ""
-        when = f"{p['day']} {_fmt_time(p['start'])}-{_fmt_time(p['end'])}"
-        return f'<br/><font size="7" color="#475569">{"Lab, after Lec " if is_lab else "Lec, then Lab "}{when}</font>'
-
-    for g in grouped:
-        data.append([
-            Paragraph(f"{g['day']}&nbsp;&nbsp;{_fmt_time(g['start'])}-{_fmt_time(g['end'])}", cell_style),
-            Paragraph(g["subject"] + _pair_note(g), cell_style),
-            Paragraph(g["room"], cell_style),
-            Paragraph(g["section"], cell_style),
-            Paragraph(g["teacher"], cell_style),
-        ])
-
-    col_widths = [1.8*inch, 3.4*inch, 1.1*inch, 0.8*inch, 1.8*inch]
-    table = Table(data, repeatRows=1, colWidths=col_widths)
-
-    style_cmds = [
-        ("BACKGROUND", (0, 0), (-1, 0), NAVY),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, LIGHT_BLUE]),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 8),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
-        ("TOPPADDING", (0, 0), (-1, -1), 7),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
-    ]
-    table.setStyle(TableStyle(style_cmds))
-    elements.append(table)
-
+    heading_style = ParagraphStyle("TableHeading", parent=styles["Normal"], fontSize=11.5, leading=15, textColor=NAVY,
+                                   fontName="Helvetica-Bold", spaceBefore=2, spaceAfter=6)
     footer_text = f"{source_url}" if source_url else "U-FAST -- University - Faculty Academic Scheduling Tool"
-    elements.append(Spacer(1, 8))
-    elements.append(Paragraph(footer_text, meta_style))
 
-    # Signature block under the table: Prepared by (Dean) / Approved by (School Director).
-    elements.append(Spacer(1, 14))
-    elements.append(KeepTogether([_signature_blocks(departments, styles)]))
+    tables = _group_tables(schedules)
+    single = len(tables) <= 1
+    merged = {}
+    for t in tables:
+        g = _merge_by_day(t[4])
+        g.sort(key=lambda x: (DAY_SORT_ORDER.get(x["day"], 99), x["start"], x["section"]))     # Mon->Sat, then by start time
+        merged[(t[0], t[1])] = g
+    fit_info = {"pages": [], "overflow": []}
 
-    doc.build(elements)
-    buffer.seek(0)
-    return buffer
+    def school_header(scope_line):
+        out = [Paragraph(f"{now_str} &nbsp;&nbsp;&nbsp; <font color='#003366'><b>U-FAST Academic Scheduling</b></font>", meta_style),
+               Spacer(1, 6), Paragraph(workspace_label, eyebrow_style), Paragraph(title, title_style)]
+        if scope_line:
+            out.append(Paragraph(scope_line, scope_style))
+        if subtitle:
+            out.append(Paragraph(subtitle, sub_style))
+        out.append(Spacer(1, 8))
+        return out
+
+    def closing():
+        return [Spacer(1, 6), Paragraph(footer_text, meta_style), Spacer(1, 10), _signature_blocks(departments, styles, AVAIL_W)]
+
+    def page(t, last, font, pad_v):
+        prog, yl, sem, ay, _rows_ = t
+        cell = ParagraphStyle("Cell", parent=styles["Normal"], fontSize=font, leading=font * 1.2, textColor=colors.HexColor("#1f2937"))
+        head = ParagraphStyle("CellHeader", parent=styles["Normal"], fontSize=font + 0.5, leading=(font + 0.5) * 1.2,
+                              textColor=colors.white, fontName="Helvetica-Bold")
+        note = ParagraphStyle("CellNote", parent=cell, fontSize=font - 1, leading=(font - 1) * 1.1, textColor=colors.HexColor("#475569"))
+        widths = _col_widths([g for gs in merged.values() for g in gs], font)
+        header, body = _rows(merged[(prog, yl)], font, head, cell, note)
+        if single:
+            top = school_header(scope_html(scope_parts([year_level] if year_level else [yl], [semester] if semester else [sem], [ay])))
+        else:            # "BS Computer Science - 1st Year - 1st Semester, A.Y. 2026-2027"
+            top = school_header("") + [Paragraph(" - ".join(x for x in (prog, yl or "Year level not set", sem) if x) + f", A.Y. {ay}",
+                                                 heading_style)]
+        pad_h = 6 if font < 9 else 8
+        return top, header, body, widths, pad_h
+
+    story = []
+    for i, t in enumerate(tables):
+        last = i == len(tables) - 1
+        chosen = None
+        for font, pad_v in FIT_STEPS:
+            top, header, body, widths, pad_h = page(t, last, font, pad_v)
+            flow = top + [_table([header] + body, widths, pad_v, pad_h)] + (closing() if last else [])
+            if _height(flow) <= AVAIL_H:
+                chosen = (font, pad_v, flow)
+                break
+        if i:
+            story.append(PageBreak())                  # every year level starts on its own page
+        if chosen:
+            fit_info["pages"].append({"year_level": t[1], "program": t[0], "rows": len(merged[(t[0], t[1])]), "font": chosen[0]})
+            story += chosen[2]
+            continue
+        # cannot fit on one page even at 8 pt: rows continue on the next page (never split, header repeated); on the last page the
+        # signatory travels with the final rows so it is never alone
+        font, pad_v = FIT_STEPS[-1]
+        top, header, body, widths, pad_h = page(t, last, font, pad_v)
+        n = len(body)
+        fit_info["overflow"].append({"year_level": t[1], "program": t[0], "rows": n})
+        log.warning("Schedule PDF: %s %s has %d rows and does not fit on one page at 8 pt", t[0], t[1], n)
+        if not last:
+            story += top + [_table([header] + body, widths, pad_v, pad_h)]
+            continue
+        k = min(TAIL_ROWS, n)
+        story += top
+        if n > k:
+            story.append(_table([header] + body[:n - k], widths, pad_v, pad_h))
+        story.append(KeepTogether([_table([header] + body[n - k:], widths, pad_v, pad_h)] + closing()))
+    if not tables:
+        story += school_header(scope_html(scope_parts([year_level], [semester], []))) + closing()
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=PAGE, topMargin=MARGIN, bottomMargin=MARGIN, leftMargin=MARGIN, rightMargin=MARGIN)
+    doc.build(story)
+    fit_info["page_count"] = doc.page
+    buf.seek(0)
+    out = io.BytesIO(buf.getvalue())
+    out.fit_info = fit_info
+    return out

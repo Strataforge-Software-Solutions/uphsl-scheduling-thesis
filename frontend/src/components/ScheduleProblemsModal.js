@@ -1,14 +1,15 @@
 import React, { useEffect, useState } from "react";
 import API, { getCurrentUser } from "../services/api";
+import { formatTime } from "../utils/formatDateTime";
 
 /* One pop-up for everything the generator could not settle: classes that were not placed and clashes with existing classes.
    Each row shows the subject code and name, year level, section, why it is a problem, and the room and time it has now.
    Nothing is fixed automatically. For a class that was not placed, the room and Start / End Time chosen before generating are shown, and
    the free days and times in THAT room are looked up right away (inside the chosen time first). The Dean / Registrar picks one and
    confirms; the server checks it again before saving. If nothing is free the problem stays and the reason is shown. */
-const C = { navy: "#003366", line: "#e2e8f0", bad: "#a4231a", warn: "#7a4b00", ok: "#166534" };
+const C = { navy: "#003366", line: "#e5e7eb", bad: "#b91c1c", warn: "#7a4b00", ok: "#166534" };
 const btn = (bg, fg = "#fff") => ({ background: bg, color: fg, border: bg === "#fff" ? `1px solid ${C.navy}` : "none", borderRadius: 6, padding: "6px 14px", fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" });
-const t12 = (hhmm) => { if (!hhmm) return ""; const [h, m] = String(hhmm).split(":").map(Number); return `${((h + 11) % 12) + 1}:${String(m || 0).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`; };
+const t12 = (hhmm) => formatTime(hhmm);
 const split = (s) => { const t = String(s || ""); const i = t.indexOf(" "); return i < 0 ? [t, ""] : [t.slice(0, i), t.slice(i + 1)]; };
 
 // "BS Computer Science 3rd Year - A3" already carries the year level: show it once, as "BS Computer Science · 3rd Year · A3"
@@ -31,7 +32,7 @@ function Facts({ code, title, year, section, reason, room, when, tone, chosen })
   return (
     <div style={{ fontSize: 13, lineHeight: 1.5, minWidth: 0 }}>
       <div><strong>{code}</strong> {title}</div>
-      <div style={{ color: "#475569" }}>{sectionText(year, section)}</div>
+      <div style={{ color: "#4b5563" }}>{sectionText(year, section)}</div>
       {chosen ? (
         <div style={{ color: C.navy }}>
           <span>Your room: <strong>{chosen.room || "Automatic"}</strong></span>
@@ -121,7 +122,7 @@ export default function ScheduleProblemsModal({ clashes, unplaced, yearLevel, pi
           <div style={{ fontWeight: 600, fontSize: 13, color: C.navy, marginBottom: 4 }}>{day}</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {items.map((o) => (
-              <label key={o.key} style={{ border: `1px solid ${choice === o.key ? C.navy : C.line}`, background: choice === o.key ? "#e6f0fa" : "#fff", borderRadius: 8, padding: "6px 10px", fontSize: 13, cursor: "pointer" }}>
+              <label key={o.key} style={{ border: `1px solid ${choice === o.key ? C.navy : C.line}`, background: choice === o.key ? "#e6f0fa" : "#fff", borderRadius: 6, padding: "6px 10px", fontSize: 13, cursor: "pointer" }}>
                 <input type="radio" name="slot" checked={choice === o.key} onChange={() => setChoice(o.key)} style={{ marginRight: 6 }} />
                 {o.label.replace(/^[A-Za-z &]+? (?=\d)/, "")}{showRoom ? <> · <strong>{o.room}</strong></> : null}
               </label>
@@ -134,21 +135,21 @@ export default function ScheduleProblemsModal({ clashes, unplaced, yearLevel, pi
 
   return (
     <div role="dialog" aria-modal="true" aria-label="Scheduling problems" style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.5)", zIndex: 1100, display: "flex", alignItems: "center", justifyContent: "center", padding: 14 }}>
-      <div style={{ background: "#fff", borderRadius: 12, width: "100%", maxWidth: 760, maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "0 12px 40px rgba(0,0,0,.35)" }}>
+      <div style={{ background: "#fff", borderRadius: 6, width: "100%", maxWidth: 760, maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "var(--shadow-pop)" }}>
         <div style={{ padding: "14px 18px", borderBottom: `1px solid ${C.line}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
           <h3 style={{ margin: 0, color: C.navy }}>{target || startWith ? "Choose a day and time" : "Classes that need your decision"}</h3>
           <button onClick={onClose} style={btn("#fff", C.navy)}>Close</button>
         </div>
         <div style={{ padding: "14px 18px", overflowY: "auto" }}>
-          {note && <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", color: C.ok, borderRadius: 8, padding: "8px 12px", fontSize: 13, marginBottom: 10 }}>✓ {note}</div>}
+          {note && <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", color: C.ok, borderRadius: 6, padding: "8px 12px", fontSize: 13, marginBottom: 10 }}>{note}</div>}
 
           {!target && (
             <>
-              {!unplaced.length && !clashes.length && <p style={{ color: C.ok }}>✔ Nothing left to resolve.</p>}
+              {!unplaced.length && !clashes.length && <p style={{ color: C.ok }}>Nothing left to resolve.</p>}
               {unplaced.length > 0 && (
                 <>
                   <h4 style={{ margin: "0 0 4px" }}>Classes that need your choice ({unplaced.length})</h4>
-                  <p style={{ margin: "0 0 8px", fontSize: 12.5, color: "#475569" }}>
+                  <p style={{ margin: "0 0 8px", fontSize: 13, color: "#4b5563" }}>
                     These did not fit your room and time, so they were <strong>not</strong> placed and no other class was moved.
                     Click a suggested time (same room, inside your time first), check it, then confirm.
                   </p>
@@ -161,20 +162,20 @@ export default function ScheduleProblemsModal({ clashes, unplaced, yearLevel, pi
                 const done = () => onFixed && onFixed({ unplaced: u });
                 const quick = pv && !pv.error ? [...pv.options.map((o) => [o, "in"]), ...pv.outside.map((o) => [o, "out"])].slice(0, 6) : [];
                 return (
-                  <div key={`u${ukey(u)}`} style={{ border: `1px solid ${C.line}`, borderRadius: 8, padding: "10px 12px", marginBottom: 8 }}>
+                  <div key={`u${ukey(u)}`} style={{ border: `1px solid ${C.line}`, borderRadius: 6, padding: "10px 12px", marginBottom: 8 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start" }}>
                       <Facts code={code} title={title} year={u.year_level || yearLevel} section={u.section} reason={u.reason} tone="warn" chosen={chosen} />
                       <button style={btn("#0b6b3a")} onClick={() => open(reqFor(u), done, u.reason)}>See all free times</button>
                     </div>
-                    <div style={{ marginTop: 6, fontSize: 12.5 }}>
-                      {!pv && <span style={{ color: "#64748b" }}>Looking for free days and times…</span>}
+                    <div style={{ marginTop: 6, fontSize: 13 }}>
+                      {!pv && <span style={{ color: "#6b7280" }}>Looking for free days and times…</span>}
                       {pv?.error && <span style={{ color: C.bad }}>{pv.error}</span>}
                       {quick.length > 0 && (
                         <>
-                          <span style={{ color: "#334155", marginRight: 6 }}>Suggested:</span>
+                          <span style={{ color: "#374151", marginRight: 6 }}>Suggested:</span>
                           {quick.map(([o, where]) => (
                             <button key={o.key} onClick={() => open(reqFor(u), done, u.reason, o.key)} title={where === "out" ? "Outside your Start / End Time, same room" : "Inside your Start / End Time"}
-                              style={{ border: `1px solid ${where === "out" ? "#fde68a" : "#bbf7d0"}`, background: where === "out" ? "#fffbeb" : "#f0fdf4", color: "#1e293b", borderRadius: 14, padding: "2px 10px", margin: "2px 4px 2px 0", fontSize: 12, cursor: "pointer" }}>
+                              style={{ border: `1px solid ${where === "out" ? "#fde68a" : "#bbf7d0"}`, background: where === "out" ? "#fffbeb" : "#f0fdf4", color: "#111827", borderRadius: 6, padding: "2px 10px", margin: "2px 4px 2px 0", fontSize: 12, cursor: "pointer" }}>
                               {o.label}{o.room ? ` · ${o.room}` : ""}{where === "out" ? " (outside your time)" : ""}
                             </button>
                           ))}
@@ -190,24 +191,24 @@ export default function ScheduleProblemsModal({ clashes, unplaced, yearLevel, pi
               {clashes.length > 0 && (
                 <>
                   <h4 style={{ margin: unplaced.length ? "14px 0 4px" : "0 0 4px" }}>Conflicts ({clashes.length})</h4>
-                  <p style={{ margin: "0 0 8px", fontSize: 12.5, color: "#475569" }}>
+                  <p style={{ margin: "0 0 8px", fontSize: 13, color: "#4b5563" }}>
                     Two classes use the same teacher, room or students at the same time. Choose which of the two to move: you see only the
                     days and times that are really free for it (same room first). Nothing changes until you confirm.
                   </p>
                 </>
               )}
               {clashes.map((c, i) => (
-                <div key={`c${i}`} style={{ border: `1px solid ${C.line}`, borderRadius: 8, padding: "10px 12px", marginBottom: 8 }}>
-                  <div style={{ fontSize: 12.5, marginBottom: 6 }}><strong style={{ color: C.bad }}>{c.kind_label} conflict</strong> — {c.message}</div>
+                <div key={`c${i}`} style={{ border: `1px solid ${C.line}`, borderRadius: 6, padding: "10px 12px", marginBottom: 8 }}>
+                  <div style={{ fontSize: 13, marginBottom: 6 }}><strong style={{ color: C.bad }}>{c.kind_label} conflict</strong> — {c.message}</div>
                   {[c.a, c.b].map((x, j) => (
                     <div key={j} style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "flex-start", padding: "6px 0", borderTop: j ? `1px dashed ${C.line}` : "none" }}>
                       <Facts code={x.code} title={x.title} year={x.year_level} section={x.section} reason={`${c.kind_label} clash with ${j ? c.a.code : c.b.code}`} room={x.room} when={x.time} />
                       {!ownsClass(x)
-                        ? <span style={{ fontSize: 12, color: "#64748b", maxWidth: 170, textAlign: "right" }}>Owned by {ownerName(x)}. They move this side.</span>
+                        ? <span style={{ fontSize: 12, color: "#6b7280", maxWidth: 170, textAlign: "right" }}>Owned by {ownerName(x)}. They move this side.</span>
                         : (x.status && x.status !== "draft")
-                          ? <span style={{ fontSize: 12, color: "#64748b", maxWidth: 170, textAlign: "right" }}>{x.status === "published" ? "Published" : "Approved"}: never moved. Move it back to Draft first, or move the other class.</span>
+                          ? <span style={{ fontSize: 12, color: "#6b7280", maxWidth: 170, textAlign: "right" }}>{x.status === "published" ? "Published" : "Approved"}: never moved. Move it back to Draft first, or move the other class.</span>
                           : x.shared
-                            ? <span style={{ fontSize: 12, color: "#64748b", maxWidth: 170, textAlign: "right" }}>Shared class (several programs): not moved from here.</span>
+                            ? <span style={{ fontSize: 12, color: "#6b7280", maxWidth: 170, textAlign: "right" }}>Shared class (several programs): not moved from here.</span>
                             : <button style={btn("#0b6b3a")} onClick={() => open({ ids: x.ids }, () => onFixed && onFixed({ clash: i }), `${c.kind_label} clash with ${j ? c.a.code : c.b.code}`)}>Show free times</button>}
                     </div>
                   ))}
@@ -218,14 +219,14 @@ export default function ScheduleProblemsModal({ clashes, unplaced, yearLevel, pi
 
           {target && (
             <>
-              {!startWith && <button onClick={() => { setTarget(null); setData(null); setError(""); }} style={{ ...btn("#fff", C.navy), marginBottom: 10 }}>← Back to the list</button>}
+              {!startWith && <button onClick={() => { setTarget(null); setData(null); setError(""); }} style={{ ...btn("#fff", C.navy), marginBottom: 10 }}>Back to the list</button>}
               {busy === "load" && <p>Checking every day and time…</p>}
               {data && (
                 <>
-                  <div style={{ border: `1px solid ${C.line}`, borderRadius: 8, padding: "10px 12px", marginBottom: 10, background: "#f8fafc" }}>
+                  <div style={{ border: `1px solid ${C.line}`, borderRadius: 6, padding: "10px 12px", marginBottom: 10, background: "#f9fafb" }}>
                     <Facts code={data.class.code} title={data.class.title} year={data.class.year_level} section={data.class.section}
                       reason={why || (data.mode === "place" ? "No day and time yet" : "Needs a new day or time")} room={data.room.name} when={data.class.when} tone="warn" />
-                    <div style={{ fontSize: 12.5, color: "#334155", marginTop: 4 }}>
+                    <div style={{ fontSize: 13, color: "#374151", marginTop: 4 }}>
                       Room <strong>{data.room.name || "(none yet)"}</strong> stays the same. {data.room.note}
                       {data.class.teacher ? ` Teacher: ${data.class.teacher}.` : ""} Only times when the teacher is available and free, the room is free and the students have no other class are listed.
                     </div>
@@ -233,12 +234,12 @@ export default function ScheduleProblemsModal({ clashes, unplaced, yearLevel, pi
                                     {data.options.length > 0 && <><div style={{ fontWeight: 600, fontSize: 13, margin: "4px 0", color: C.ok }}>{data.room.name ? `1. Free in ${data.room.name}, inside your time (recommended)` : "Free times"}</div>{renderChips(data.options, !data.room.kept)}</>}
                   {(data.outside_options || []).length > 0 && <><div style={{ fontWeight: 600, fontSize: 13, margin: "8px 0 4px", color: C.warn }}>2. Same room {data.room.name}, outside your Start / End Time</div>{renderChips(data.outside_options, false)}</>}
                   {(data.room_options || []).length > 0 && <><div style={{ fontWeight: 600, fontSize: 13, margin: "8px 0 4px", color: C.warn }}>3. Other free rooms (allowed for this subject; the room changes only if you confirm)</div>{renderChips(data.room_options, true)}</>}
-                  {data.reason && <div style={{ background: anyOption ? "#fffbeb" : "#fef2f2", border: `1px solid ${anyOption ? "#fde68a" : "#fecaca"}`, color: anyOption ? "#7a4b00" : "#991b1b", borderRadius: 8, padding: "10px 12px", fontSize: 13, marginTop: 6 }}>{data.reason}</div>}
+                  {data.reason && <div style={{ background: anyOption ? "#fffbeb" : "#fef2f2", border: `1px solid ${anyOption ? "#fde68a" : "#fecaca"}`, color: anyOption ? "#7a4b00" : "#991b1b", borderRadius: 6, padding: "10px 12px", fontSize: 13, marginTop: 6 }}>{data.reason}</div>}
                 </>
               )}
               {error && <p style={{ color: C.bad, fontSize: 13 }}>{error}</p>}
               {extra?.replacements?.length > 0 && (
-                <div style={{ background: "#f8fafc", border: `1px solid ${C.line}`, borderRadius: 8, padding: "8px 12px", fontSize: 13 }}>
+                <div style={{ background: "#f9fafb", border: `1px solid ${C.line}`, borderRadius: 6, padding: "8px 12px", fontSize: 13 }}>
                   <strong>Possible replacements (related degree or training, not yet recorded as a specialization):</strong>
                   <ul style={{ margin: "4px 0 0 18px", padding: 0 }}>{extra.replacements.map((r) => <li key={r.faculty_id}>{r.name} — {r.fit}</li>)}</ul>
                 </div>

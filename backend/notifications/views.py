@@ -10,7 +10,16 @@ class NotificationViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return Notification.objects.filter(recipient=self.request.user)
+        qs = Notification.objects.filter(recipient=self.request.user)
+        # "My settings" > Notifications: a kind switched off is not shown (nothing is deleted; switching it on shows it again)
+        from accounts.models import UserPreference
+        pref = UserPreference.objects.filter(user=self.request.user).first()
+        if pref is not None:
+            off = [t for t, on in (("schedule_update", pref.notify_schedule), ("conflict_alert", pref.notify_conflict),
+                                   ("exam_assignment", pref.notify_exam), ("substitute_assignment", pref.notify_substitute)) if not on]
+            if off:
+                qs = qs.exclude(notif_type__in=off)
+        return qs
 
     @action(detail=False, methods=["get"])
     def unread_count(self, request):

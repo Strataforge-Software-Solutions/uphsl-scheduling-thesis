@@ -43,21 +43,21 @@ export default function UnplacedResolve({ items, semester, schoolYear, onDone, t
           </button>
         )}
       </div>
-      {error && <p style={{ color: "#a4231a", fontSize: "13px" }}>{error}</p>}
+      {error && <p style={{ color: "#b91c1c", fontSize: "13px" }}>{error}</p>}
       <ul style={{ listStyle: "none", padding: 0, margin: "8px 0 0" }}>
         {list.map((c) => {
           const r = done[keyOf(c)];
           const placed = r?.status === "placed";
           return (
-            <li key={keyOf(c)} style={{ border: "1px solid #e2e8f0", borderRadius: "8px", padding: "10px 12px", marginBottom: "8px", background: placed ? "#eef7ee" : "#fff" }}>
+            <li key={keyOf(c)} style={{ border: "1px solid #e5e7eb", borderRadius: 6, padding: "10px 12px", marginBottom: "8px", background: placed ? "#eef7ee" : "#fff" }}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", alignItems: "flex-start" }}>
-                <div style={{ fontSize: "13.5px" }}>
+                <div style={{ fontSize: "14px" }}>
                   <strong>{c.subject}</strong> — {c.section}
                   {placed
-                    ? <div style={{ color: "#1d5a1d", fontSize: "12.5px", marginTop: "3px" }}>✓ Placed and checked: no clash. ({r.method})</div>
-                    : <div style={{ color: "#7a4b00", fontSize: "12.5px", marginTop: "3px" }}>{r?.reason || c.reason}</div>}
+                    ? <div style={{ color: "#1d5a1d", fontSize: "13px", marginTop: "3px" }}>Placed and checked: no clash. ({r.method})</div>
+                    : <div style={{ color: "#7a4b00", fontSize: "13px", marginTop: "3px" }}>{r?.reason || c.reason}</div>}
                   {placed && r.moved?.length > 0 && (
-                    <details style={{ marginTop: "4px", fontSize: "12.5px", color: "#334155" }}>
+                    <details style={{ marginTop: "4px", fontSize: "13px", color: "#374151" }}>
                       <summary>{r.moved.length} other class{r.moved.length === 1 ? "" : "es"} moved to make room</summary>
                       <ul style={{ margin: "4px 0 0 16px", padding: 0 }}>
                         {r.moved.map((m, i) => <li key={i}>{m.subject} ({m.section}): {m.from} → {m.to}</li>)}

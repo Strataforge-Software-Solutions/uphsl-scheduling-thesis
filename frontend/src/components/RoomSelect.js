@@ -35,10 +35,15 @@ export default function RoomSelect({
 
   useEffect(() => {
     if (!open) return undefined;
-    const r = btn.current.getBoundingClientRect();
-    const below = window.innerHeight - r.bottom;
-    const w = Math.min(Math.max(r.width, 260), window.innerWidth - 16);          // the list stays on screen on a narrow window
-    setPos({ left: Math.max(8, Math.min(r.left, window.innerWidth - w - 8)), top: below > 280 ? r.bottom + 2 : undefined, bottom: below > 280 ? undefined : window.innerHeight - r.top + 2, width: w });
+    // My settings > Text size zooms the work area; positions from the screen are divided by that zoom
+    const zoomed = btn.current.closest(".app-shell, .settings-page");
+    const z = (zoomed && parseFloat(window.getComputedStyle(zoomed).zoom)) || 1;
+    const b = btn.current.getBoundingClientRect();
+    const r = { left: b.left / z, top: b.top / z, bottom: b.bottom / z, width: b.width / z };
+    const vw = window.innerWidth / z, vh = window.innerHeight / z;
+    const below = vh - r.bottom;
+    const w = Math.min(Math.max(r.width, 260), vw - 16);          // the list stays on screen on a narrow window
+    setPos({ left: Math.max(8, Math.min(r.left, vw - w - 8)), top: below > 280 ? r.bottom + 2 : undefined, bottom: below > 280 ? undefined : vh - r.top + 2, width: w });
     setTimeout(() => input.current?.focus(), 0);
     const away = (e) => { if (!panel.current?.contains(e.target) && !btn.current?.contains(e.target)) setOpen(false); };
     const close = (e) => { if (!panel.current?.contains(e.target)) setOpen(false); };
@@ -58,28 +63,28 @@ export default function RoomSelect({
 
   const pick = (id) => { onChange(String(id)); setOpen(false); setQ(""); };
   const text = current ? roomLabel(current) + (suffix ? suffix(current) : "") : (allowAuto ? autoLabel : "— Select room —");
-  const row = { display: "block", width: "100%", textAlign: "left", border: "none", background: "none", boxShadow: "none", margin: 0, borderRadius: 0, padding: "6px 10px", fontSize: 13, cursor: "pointer", color: "#1e293b" };
+  const row = { display: "block", width: "100%", textAlign: "left", border: "none", background: "none", boxShadow: "none", margin: 0, borderRadius: 0, padding: "6px 10px", fontSize: 13, cursor: "pointer", color: "#111827" };
 
   return (
     <>
       <button type="button" ref={btn} aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(!open)}
-        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, width, maxWidth: "100%", textAlign: "left", background: "white", border: "1px solid #cdd6e0",
-          borderRadius: 6, padding: "6px 8px", fontSize: 13, cursor: "pointer", boxSizing: "border-box", color: "#1e293b", fontWeight: 400, ...style }}>
-        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{text}</span><span aria-hidden="true" style={{ color: "#64748b", fontSize: 10 }}>▼</span>
+        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, width, maxWidth: "100%", textAlign: "left", background: "white", border: "1px solid #d1d5db",
+          borderRadius: 6, padding: "6px 8px", fontSize: 13, cursor: "pointer", boxSizing: "border-box", color: "#111827", fontWeight: 400, ...style }}>
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{text}</span><span aria-hidden="true" style={{ color: "#6b7280", fontSize: 10 }}>▼</span>
       </button>
       {open && pos && (
-        <div ref={panel} role="listbox" style={{ position: "fixed", zIndex: 3000, left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width, background: "white", border: "1px solid #cdd6e0",
-          borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,.18)" }}>
-          <div style={{ padding: 8, borderBottom: "1px solid #eef2f6" }}>
+        <div ref={panel} role="listbox" style={{ position: "fixed", zIndex: 3000, left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width, background: "white", border: "1px solid #d1d5db",
+          borderRadius: 6, boxShadow: "var(--shadow-pop)" }}>
+          <div style={{ padding: 8, borderBottom: "1px solid #f3f4f6" }}>
             <input ref={input} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search room name, building or number…" aria-label="Search rooms"
               onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); if (e.key === "Enter" && shown.length === 1) pick(shown[0].id); }}
-              style={{ width: "100%", boxSizing: "border-box", padding: "6px 8px", border: "1px solid #cdd6e0", borderRadius: 6, fontSize: 13 }} />
+              style={{ width: "100%", boxSizing: "border-box", padding: "6px 8px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 13 }} />
           </div>
           <div style={{ maxHeight: 250, overflowY: "auto", paddingBottom: 4 }}>
             {allowAuto && !q && <button type="button" role="option" aria-selected={!value} onClick={() => pick("")} style={{ ...row, fontWeight: !value ? 700 : 400 }}>{autoLabel}</button>}
             {groups.map(([g, list]) => (
               <div key={g || "all"}>
-                {g ? <div style={{ padding: "6px 10px 2px", fontSize: 11, textTransform: "uppercase", color: "#64748b", letterSpacing: ".04em" }}>{g}</div> : null}
+                {g ? <div style={{ padding: "6px 10px 2px", fontSize: 12, color: "#6b7280", letterSpacing: ".04em" }}>{g}</div> : null}
                 {list.map((r) => {
                   const off = isDisabled ? isDisabled(r) : false;
                   const on = String(r.id) === String(value);
@@ -92,7 +97,7 @@ export default function RoomSelect({
                 })}
               </div>
             ))}
-            {shown.length === 0 && <div style={{ padding: "10px", fontSize: 12.5, color: "#94a3b8" }}>No room matches “{q}”.</div>}
+            {shown.length === 0 && <div style={{ padding: "10px", fontSize: 13, color: "#6b7280" }}>No room matches “{q}”.</div>}
           </div>
         </div>
       )}

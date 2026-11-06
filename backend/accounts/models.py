@@ -77,3 +77,29 @@ class User(AbstractUser):
 
     def __str__(self):
         return f"{self.username} ({self.role})"
+
+
+class UserPreference(models.Model):
+    """Personal settings of one user (the "My settings" page). Display only: nothing here changes roles,
+    permissions, scheduling rules or schedule data. A user without a row simply gets the defaults
+    (the row is created the first time it is read)."""
+    user = models.OneToOneField("accounts.User", on_delete=models.CASCADE, related_name="preference")
+    phone = models.CharField(max_length=30, blank=True, default="")
+    picture = models.CharField(max_length=100, blank=True, default="",
+                               help_text="File name of the profile picture inside MEDIA_ROOT/profile_pictures (random, never the uploaded name).")
+    theme = models.CharField(max_length=10, default="light")
+    text_size = models.CharField(max_length=10, default="medium")
+    table_density = models.CharField(max_length=12, default="comfortable")
+    reduce_motion = models.CharField(max_length=10, default="system")
+    time_format = models.CharField(max_length=4, default="12h")
+    date_format = models.CharField(max_length=10, default="mdy_short")
+    week_start = models.CharField(max_length=3, default="mon")
+    landing_page = models.CharField(max_length=30, blank=True, default="")
+    notify_schedule = models.BooleanField(default=True)
+    notify_conflict = models.BooleanField(default=True)
+    notify_exam = models.BooleanField(default=True)
+    notify_substitute = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Preferences of {self.user_id}"

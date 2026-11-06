@@ -1,10 +1,11 @@
 """Faculty availability (faculty.Availability) for one generation run.
 
-The HARD rule is engine.views._build_availability_rules (blocked slots; no submission = unrestricted). This module adds, for the same
-rows:
-  * preferred slots -- a SOFT ordering only: among a teacher's allowed slots, those inside a "preferred" window are tried first. It
-    never removes a slot and never changes which subject the Greedy search places next;
-  * readable windows -- "Sat 7:00 AM-4:30 PM" -- so a class skipped for availability says exactly why (explain_unresolved).
+The HARD rule is engine.views._build_availability_rules: only times a teacher marked "unavailable" are blocked (no submission =
+unrestricted). Their "preferred" and "available" windows do NOT limit the day; this module turns them into a SOFT order:
+  * tier 0 = inside a "preferred" window (or the teacher submitted no preferred / available window), tier 1 = inside an "available"
+    window, tier 2 = any other open time. The Greedy search tries lower tiers first for a class; it never removes a slot and never
+    changes which subject is placed next;
+  * readable text of the unavailable windows -- "not available Mon 8:00 AM-12:00 PM" -- so a class skipped for that reason says why.
 Both are made visible to the scheduler through context variables, like the Dean's room / time choices (rooms.rules).
 """
 from contextvars import ContextVar
@@ -37,7 +38,7 @@ _ORDER = {d: i for i, d in enumerate(("mon", "tue", "wed", "thu", "fri", "sat", 
 
 
 def build(teachers, timeslots, school_year=None, semester=None):
-    """({teacher_id: set(slot ids inside a preferred window)}, {teacher_id: "available only ..." text}) for teachers WITH a submission."""
+    """({teacher_id: {slot_id: tier}} for teachers with preferred / available windows, {teacher_id: "not available ..." text})."""
     by = {}
     for w in rows([t.id for t in teachers], school_year, semester):
         by.setdefault(w.faculty_id, []).append(w)
@@ -47,15 +48,21 @@ def build(teachers, timeslots, school_year=None, semester=None):
         bad = sorted((w for w in ws if w.preference == "unavailable"), key=lambda w: (_ORDER.get(w.day[:3].lower(), 9), w.start_time))
         fmt = lambda w: f"{w.day[:3].title()} {_clock(w.start_time)}-{_clock(w.end_time)}" + (" (preferred)" if w.preference == "preferred" else "")
         parts = []
-        if good:
-            parts.append("available only " + ", ".join(fmt(w) for w in good))
         if bad:
             parts.append("not available " + ", ".join(f"{w.day[:3].title()} {_clock(w.start_time)}-{_clock(w.end_time)}" for w in bad))
         text[tid] = "; ".join(parts)
-        prefs = [w for w in good if w.preference == "preferred"]
-        if prefs:
-            pref[tid] = {s.id for s in timeslots if any(
-                w.day[:3].lower() == s.day[:3].lower() and w.start_time <= s.start_time and w.end_time >= s.end_time for w in prefs)}
+        if good:
+            _inside = lambda s, ws: any(w.day[:3].lower() == s.day[:3].lower() and w.start_time <= s.start_time and w.end_time >= s.end_time
+                                        for w in ws)
+            prefs = [w for w in good if w.preference == "preferred"]
+            others = [w for w in good if w.preference != "preferred"]
+            tiers = {}
+            for s in timeslots:
+                if _inside(s, prefs):
+                    tiers[s.id] = 0
+                elif _inside(s, others):
+                    tiers[s.id] = 1
+            pref[tid] = tiers
     return pref, text
 
 
@@ -69,12 +76,13 @@ def release(tokens):
 
 
 def outside_preferred(teacher_id, slot):
-    """0 when the slot lies in one of the teacher's preferred windows (or the teacher has none), else 1. Ordering only."""
-    pref = _PREF.get().get(teacher_id)
-    if not pref:
+    """Priority tier of a placement for this teacher: 0 = inside their preferred time (or nothing preferred / available submitted),
+    1 = inside their available time, 2 = outside both (still allowed). Ordering only: it never excludes a time."""
+    tiers = _PREF.get().get(teacher_id)
+    if not tiers:
         return 0
     ids = [s.id for s in getattr(slot, "slots", None) or [slot]]
-    return 0 if all(i in pref for i in ids) else 1
+    return max(tiers.get(i, 2) for i in ids) if ids else 0
 
 
 def text_for(teacher_id):

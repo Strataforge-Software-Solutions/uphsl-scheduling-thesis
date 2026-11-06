@@ -30,4 +30,7 @@ urlpatterns = [
 
     # Basic education: Senior High (SHS) and Junior High (JHS) scheduling modules
     path("api/basic-ed/", include("basic_ed.urls")),
+
+    # Audit logs (IT Admin, read only)
+    path("api/audit/", include("audit.urls")),
 ]

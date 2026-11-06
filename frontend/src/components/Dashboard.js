@@ -6,6 +6,7 @@ import BasicEdDashboard from "./BasicEdDashboard";
 import BasicEdTeacher from "./BasicEdTeacher";
 import React, { useState } from "react";
 import { refreshCurrentUser } from "../services/api";
+import { usePreferences } from "../services/preferences";
 
 /* IT admin: a clear school-level selector (College / SHS / JHS). Each level keeps its own data and dashboard. */
 function AdminWithLevelSelector() {
@@ -14,10 +15,10 @@ function AdminWithLevelSelector() {
   const opts = [["COLLEGE", "College"], ["SHS", "Senior High"], ["JHS", "Junior High"]];
   return (
     <>
-      <div style={{ position: "fixed", right: "16px", bottom: "16px", zIndex: 50, background: "white", border: "1px solid #cdd6e0", borderRadius: "999px", padding: "4px", boxShadow: "0 4px 14px rgba(0,0,0,0.15)", display: "flex", gap: "2px", alignItems: "center" }}>
-        <span style={{ fontSize: "11px", color: "#64748b", padding: "0 8px", fontWeight: 700, textTransform: "uppercase" }}>School level</span>
+      <div style={{ position: "fixed", right: "16px", bottom: "16px", zIndex: 50, background: "white", border: "1px solid #d1d5db", borderRadius: 4, padding: "4px", boxShadow: "0 4px 14px rgba(0,0,0,0.15)", display: "flex", gap: "2px", alignItems: "center" }}>
+        <span style={{ fontSize: "12px", color: "#6b7280", padding: "0 8px", fontWeight: 600 }}>School level</span>
         {opts.map(([k, l]) => (
-          <button key={k} onClick={() => pick(k)} style={{ border: "none", borderRadius: "999px", padding: "7px 14px", cursor: "pointer", fontSize: "13px", background: level === k ? "#003366" : "transparent", color: level === k ? "white" : "#334155" }}>{l}</button>))}
+          <button key={k} onClick={() => pick(k)} style={{ border: "none", borderRadius: 4, padding: "7px 14px", cursor: "pointer", fontSize: "13px", background: level === k ? "#003366" : "transparent", color: level === k ? "white" : "#374151" }}>{l}</button>))}
       </div>
       {level === "COLLEGE" ? <AdminDashboard /> : <BasicEdDashboard key={level} level={level} />}
     </>
@@ -30,11 +31,13 @@ function Dashboard({ user: signedInUser }) {
   React.useEffect(() => {
     refreshCurrentUser().then((fresh) => setUser((old) => (JSON.stringify(old) === JSON.stringify(fresh) ? old : fresh))).catch(() => {});
   }, []);
+  const { ready } = usePreferences();
   const { role, faculty_type: facultyType, username } = user;
   // A dean can head several departments (user.departments); everyone else has one.
   const departments = (user.departments && user.departments.length ? user.departments : [user.department]).filter(Boolean);
   const department = departments.join(" & ");
 
+  if (!ready) return <p style={{ padding: 24, color: "#6b7280", fontSize: 14 }}>Loading…</p>;
   switch (role) {
     case "registrar":
       return <RegistrarDashboard />;

@@ -2,8 +2,8 @@ import React from "react";
 import logo from "../assets/uphsl_logo.png";
 
 /**
- * Shared sidebar shell used by all three dashboards, matching the reference
- * design: brand header, icon-based nav items, user footer with avatar circle.
+ * Shared sidebar used by every dashboard: school logo and name, text navigation (the current page has a left bar),
+ * the signed-in user with role, and Sign out. Items' "icon" field is no longer shown (menus are text only).
  *
  * items: [{ key, label, icon }] and optional section headings { group: "Plan" }
  */
@@ -33,9 +33,9 @@ function Sidebar({ brandLabel, workspaceLabel, items, activeKey, onSelect, userN
           <li key={item.key}>
             <button
               className={activeKey === item.key ? "app-nav-item active" : "app-nav-item"}
+              aria-current={activeKey === item.key ? "page" : undefined}
               onClick={() => onSelect(item.key)}
             >
-              <span className="app-nav-icon">{item.icon}</span>
               {item.label}
             </button>
           </li>

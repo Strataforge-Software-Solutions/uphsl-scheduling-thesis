@@ -6,9 +6,9 @@ import { roomMatches } from "./RoomSelect";
    Deans and the Registrar choose from these records in every room dropdown. */
 const TYPE_LABEL = { lecture: "Lecture room", lab: "Laboratory", gym: "Gym", offsite: "Off-site / Online" };
 const BUILDING_LABEL = { M: "M – Main Building", D: "D – Alta Building", N: "N – New Building", A: "A – Alfredo Building" };
-const box = { padding: "8px 10px", borderRadius: 6, border: "1px solid #cdd6e0", fontSize: 13.5, background: "white", boxSizing: "border-box" };
-const card = { background: "white", border: "1px solid #e0e6ed", borderRadius: 10, padding: "16px 18px", marginBottom: 18 };
-const lbl = { fontSize: 12.5, fontWeight: 600, color: "#333" };
+const box = { padding: "8px 10px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: 14, background: "white", boxSizing: "border-box" };
+const card = { background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "16px 18px", marginBottom: 18 };
+const lbl = { fontSize: 13, fontWeight: 600, color: "#333" };
 
 export default function AdminRooms() {
   const [data, setData] = useState(null);
@@ -26,15 +26,15 @@ export default function AdminRooms() {
     try { await API.delete(`/rooms/admin/rooms/${r.id}/`); setNote(`Room ${r.name} deleted.`); load(); }
     catch (e) { setNote(e.response?.data?.detail || "Could not delete the room."); }
   };
-  if (error && !data) return <p style={{ color: "#a4231a" }}>{error}</p>;
-  if (!data) return <p style={{ color: "#64748b" }}>Loading…</p>;
+  if (error && !data) return <p style={{ color: "#b91c1c" }}>{error}</p>;
+  if (!data) return <p style={{ color: "#6b7280" }}>Loading…</p>;
   return (
     <div>
       <div style={card}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <div>
             <h3 style={{ margin: 0 }}>Room records</h3>
-            <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#64748b" }}>Deans and the Registrar pick from these rooms but cannot change them. A room with scheduled classes cannot be deleted.</p>
+            <p style={{ margin: "4px 0 0", fontSize: 13, color: "#6b7280" }}>Deans and the Registrar pick from these rooms but cannot change them. A room with scheduled classes cannot be deleted.</p>
           </div>
           <button onClick={() => setForm({})} style={{ background: "#003366", color: "white" }}>Add room</button>
         </div>
@@ -43,7 +43,7 @@ export default function AdminRooms() {
           <select style={box} value={type} onChange={(e) => setType(e.target.value)}>
             <option value="">All types</option>{data.types.map((t) => <option key={t} value={t}>{TYPE_LABEL[t] || t}</option>)}
           </select>
-          <span style={{ alignSelf: "center", fontSize: 12.5, color: "#64748b" }}>{shown.length} of {data.rooms.length} rooms</span>
+          <span style={{ alignSelf: "center", fontSize: 13, color: "#6b7280" }}>{shown.length} of {data.rooms.length} rooms</span>
         </div>
         {note && <p style={{ fontSize: 13, color: "#1e5f3a" }}>{note}</p>}
         <div style={{ overflowX: "auto" }}>
@@ -61,11 +61,11 @@ export default function AdminRooms() {
                   <td>{r.classes}</td>
                   <td style={{ whiteSpace: "nowrap" }}>
                     <button onClick={() => setForm(r)}>Edit</button>{" "}
-                    <button onClick={() => remove(r)} style={{ background: "white", color: "#a4231a", border: "1px solid #e7b4ae" }}>Delete</button>
+                    <button onClick={() => remove(r)} style={{ background: "white", color: "#b91c1c", border: "1px solid #e7b4ae" }}>Delete</button>
                   </td>
                 </tr>
               ))}
-              {shown.length === 0 && <tr><td colSpan={8} style={{ color: "#94a3b8" }}>No room matches.</td></tr>}
+              {shown.length === 0 && <tr><td colSpan={8} style={{ color: "#6b7280" }}>No room matches.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -94,7 +94,7 @@ function RoomForm({ room, data, onClose, onSaved }) {
   const w = { ...box, width: "100%", marginTop: 4 };
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
-      <div style={{ background: "white", borderRadius: 12, padding: 24, width: 460, maxWidth: "100%" }}>
+      <div style={{ background: "white", borderRadius: 6, padding: 24, width: 460, maxWidth: "100%" }}>
         <h3 style={{ margin: 0, color: "#003366" }}>{editing ? `Edit room ${room.name}` : "Add room"}</h3>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 14 }}>
           <div><label style={lbl}>Building</label>
@@ -108,9 +108,9 @@ function RoomForm({ room, data, onClose, onSaved }) {
             <select style={w} value={f.department} onChange={set("department")}><option value="">Shared (any college)</option>{data.departments.map((d) => <option key={d}>{d}</option>)}</select></div>
         </div>
         <div style={{ marginTop: 12 }}><label style={lbl}>Equipment</label><input style={w} value={f.equipment} onChange={set("equipment")} placeholder="e.g. Projector, Aircon, 30 PCs" /></div>
-        {err && <p style={{ color: "#a4231a", fontSize: 13 }}>{err}</p>}
+        {err && <p style={{ color: "#b91c1c", fontSize: 13 }}>{err}</p>}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
-          <button onClick={onClose} style={{ background: "white", color: "#1f2937", border: "1px solid #cdd6e0" }}>Cancel</button>
+          <button onClick={onClose} style={{ background: "white", color: "#111827", border: "1px solid #d1d5db" }}>Cancel</button>
           <button onClick={submit} disabled={busy}>{busy ? "Saving…" : "Save room"}</button>
         </div>
       </div>

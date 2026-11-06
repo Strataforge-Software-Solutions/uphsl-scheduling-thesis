@@ -1,40 +1,41 @@
 """
-Section naming: every program gets its own block letter so sections from
-different departments never look alike (CS 1st year is "A1", BA Comm 1st year
-is "C1", ...). The year level number is appended.
+Section naming: each program has its own code and the year level number is appended (CS1 = Computer Science 1st year).
 
-    Computer Science           A      (A1, A2, A3, A4)
-    Information Technology     A.b    (A.b1, A.b2, ...)
-    Allied Health / PT          B
-    Occupational Therapy        B.b
-    Respiratory Therapy (RT)    B.c
-    BA Communication            C
-    Radiologic Technology       D
-    BSBA Marketing Mgmt         E
-    BSBA Human Resource Dev.    F
-    BS Hospitality Mgmt         G
-    BS Tourism Mgmt             H
-    any other program           I, J, K ... (in the order the programs were created)
+    College of Computer Studies       Computer Science            CS   (CS1, CS2, CS3, CS4)
+                                      Information Technology      IT
+    College of Radiologic Technology  Radiologic Technology       RAD
+    College of Arts and Science       BA Communication            BAC
+    Tourism and Hospitality Mgmt      Tourism Management          TM
+                                      Hospitality Management      HM
+    College of Business Admin.        Human Resource Dev. Mgmt    HRDM
+                                      Marketing Management        MM
+    College of Nursing                Nursing                     N
+    College of Allied Health          Physical Therapy            PT
+                                      Occupational Therapy        OT
+                                      Respiratory Therapy         RT
+    any other program                 I, J, K ... (in the order the programs were created)
+
+When one program has more than one section in the same year level and semester, a letter is added: CS1A, CS1B
+(curriculum/management/commands/apply_section_codes.py).
 """
 import re
 
-# (keyword that must appear in the lower-cased program name, prefix) -- first match wins
+# (keyword that must appear in the lower-cased program name, code) -- first match wins
 KEYWORD_PREFIX = [
-    ("information technology", "A.b"),
-    ("computer science", "A"),
-    ("occupational therapy", "B.b"),
-    ("respiratory", "B.c"),
-    ("physical therapy", "B"),
-    ("medical technology", "B"),
-    ("allied", "B"),
-    ("communication", "C"),
-    ("radiologic", "D"),
-    ("marketing", "E"),
-    ("human resource", "F"),
-    ("hospitality", "G"),
-    ("tourism", "H"),
+    ("information technology", "IT"),
+    ("computer science", "CS"),
+    ("radiologic", "RAD"),
+    ("communication", "BAC"),
+    ("tourism", "TM"),
+    ("hospitality", "HM"),
+    ("human resource", "HRDM"),
+    ("marketing", "MM"),
+    ("nursing", "N"),
+    ("occupational therap", "OT"),
+    ("respiratory", "RT"),
+    ("physical therap", "PT"),
 ]
-EXTRA_LETTERS = "IJKLMNOPQRSTUVWXYZ"
+EXTRA_LETTERS = "IJKLQUVWXYZ"          # never a letter that starts one of the codes above (N, ...)
 
 
 def known_prefix(program_name):

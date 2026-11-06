@@ -24,7 +24,7 @@ export default function NotGeneratedList({ programId, yearLevel = "", semester =
   const notYet = items.filter((x) => x.placed_minutes === 0 && x.reason === "Not generated yet.").length;
   const withReason = items.length - notYet;
   return (
-    <div style={{ margin: "12px 0", border: "1px solid #f0d58a", background: "#fffbeb", borderRadius: 8, fontSize: 13, color: "#1e293b" }}>
+    <div style={{ margin: "12px 0", border: "1px solid #f0d58a", background: "#fffbeb", borderRadius: 6, fontSize: 13, color: "#111827" }}>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", justifyContent: "space-between", padding: "8px 12px" }}>
         <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}
           style={{ background: "none", border: "none", color: "#7a4b00", padding: 0, fontWeight: 600, fontSize: 13, cursor: "pointer", textAlign: "left", boxShadow: "none" }}>
@@ -33,20 +33,20 @@ export default function NotGeneratedList({ programId, yearLevel = "", semester =
         </button>
         {onRetry && (
           <button type="button" onClick={onRetry} disabled={retrying}
-            style={{ background: "#003366", color: "white", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 12.5, cursor: retrying ? "not-allowed" : "pointer" }}>
+            style={{ background: "#003366", color: "white", border: "none", borderRadius: 6, padding: "5px 12px", fontSize: 13, cursor: retrying ? "not-allowed" : "pointer" }}>
             {retrying ? "Generating…" : "Generate only the missing ones"}
           </button>
         )}
       </div>
       {open && (
         <div style={{ maxHeight: 260, overflow: "auto", borderTop: "1px solid #f3e3ad" }}>
-          <table style={{ margin: 0, boxShadow: "none", border: "none", borderRadius: 0, width: "100%", minWidth: 640, fontSize: 12.5 }}>
+          <table style={{ margin: 0, boxShadow: "none", border: "none", borderRadius: 0, width: "100%", minWidth: 640, fontSize: 13 }}>
             <thead><tr><th style={{ width: 90 }}>Code</th><th>Subject</th><th style={{ width: 90 }}>Section</th><th style={{ width: 120 }}>Year / Sem</th><th>Why</th></tr></thead>
             <tbody>
               {items.map((x) => (
                 <tr key={`${x.semester}-${x.section_id}-${x.subject_id}`}>
                   <td>{x.code}</td><td>{x.title}</td><td>{x.section_name}</td><td>{x.year_level}, {x.semester}</td>
-                  <td style={{ color: x.reason === "Not generated yet." ? "#64748b" : "#a4231a" }}>{x.reason}</td>
+                  <td style={{ color: x.reason === "Not generated yet." ? "#6b7280" : "#b91c1c" }}>{x.reason}</td>
                 </tr>
               ))}
             </tbody>

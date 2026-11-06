@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     "analytics",      # room utilization, workload distribution, efficiency
     "notifications",  # schedule updates, conflict alerts, Log
     "basic_ed",       # Senior High / Junior High scheduling -- separate from the college tables
+    "audit",          # audit logs: who changed what, when, before / after, from which IP (append-only)
 ]
 
 MIDDLEWARE = [
@@ -44,6 +45,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "audit.middleware.AuditContextMiddleware",       # who / which IP for the audit logs
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -141,4 +143,9 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
+
+# Uploaded files (profile pictures only). Not published under a public URL: a picture is sent only to its owner
+# through /api/accounts/me/picture/file/. Back this folder up together with the database.
+MEDIA_ROOT = os.environ.get("MEDIA_ROOT", str(BASE_DIR / "media"))
+DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

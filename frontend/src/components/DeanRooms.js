@@ -5,8 +5,8 @@ import RoomSelect from "./RoomSelect";
 /* Dean Dashboard -> Rooms. Rooms of the college, the building its program subjects prefer, and a preferred /
    alternative / fixed room for each major subject. The Generate Schedule function uses these first. */
 const BUILDING_LABEL = { M: "M – Main Building", D: "D – Alta Building", N: "N – New Building", A: "A – Alfredo Building" };
-const box = { padding: "8px 10px", borderRadius: "6px", border: "1px solid #cdd6e0", fontSize: "13.5px", background: "white", boxSizing: "border-box" };
-const card = { background: "white", border: "1px solid #e0e6ed", borderRadius: "10px", padding: "14px 16px", marginBottom: "18px" };
+const box = { padding: "8px 10px", borderRadius: "6px", border: "1px solid #d1d5db", fontSize: "14px", background: "white", boxSizing: "border-box" };
+const card = { background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "14px 16px", marginBottom: "18px" };
 
 /* "Comp Lab D (309D) · 40 seats · Lab": name and room number together, so labs and lecture rooms are told apart. */
 function roomText(r) {
@@ -69,26 +69,26 @@ export default function DeanRooms({ programs = [] }) {
     } catch (e) { setError(e.response?.data?.detail || "Could not save the building."); }
   };
 
-  if (error && !data) return <p style={{ color: "#a4231a" }}>{error}</p>;
-  if (!data) return <p style={{ color: "#64748b" }}>Loading…</p>;
+  if (error && !data) return <p style={{ color: "#b91c1c" }}>{error}</p>;
+  if (!data) return <p style={{ color: "#6b7280" }}>Loading…</p>;
 
   return (
     <div>
       {denied && (
         <div role="alertdialog" aria-label={denied.title} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div style={{ background: "white", borderRadius: 12, maxWidth: 520, width: "100%", padding: "18px 20px", boxShadow: "0 12px 40px rgba(0,0,0,.3)", borderTop: "5px solid #b91c1c" }}>
-            <h3 style={{ margin: "0 0 10px", color: "#b91c1c" }}>⚠ {denied.title}</h3>
+          <div style={{ background: "white", borderRadius: 6, maxWidth: 520, width: "100%", padding: "18px 20px", boxShadow: "var(--shadow-pop)", borderTop: "5px solid #b91c1c" }}>
+            <h3 style={{ margin: "0 0 10px", color: "#b91c1c" }}>{denied.title}</h3>
             <p style={{ margin: "0 0 8px", fontSize: 14 }}>{denied.detail}</p>
-            {denied.action && <p style={{ margin: 0, fontSize: 13.5, color: "#003366" }}><strong>What to do:</strong> {denied.action}</p>}
+            {denied.action && <p style={{ margin: 0, fontSize: 14, color: "#003366" }}><strong>What to do:</strong> {denied.action}</p>}
             <div style={{ textAlign: "right", marginTop: 12 }}><button onClick={() => setDenied(null)} style={{ background: "#fff", color: "#003366", border: "1px solid #003366", borderRadius: 6, padding: "5px 14px", cursor: "pointer" }}>Close</button></div>
           </div>
         </div>
       )}
-      {error && <p style={{ color: "#a4231a", fontSize: "13px" }}>{error}</p>}
+      {error && <p style={{ color: "#b91c1c", fontSize: "13px" }}>{error}</p>}
 
       <div style={card}>
         <h3 style={{ margin: "0 0 4px" }}>Building preference</h3>
-        <p style={{ margin: "0 0 10px", fontSize: "12.5px", color: "#64748b" }}>
+        <p style={{ margin: "0 0 10px", fontSize: "13px", color: "#6b7280" }}>
           Gen Ed subjects use the Main Building (M) by default. Your program subjects try the building chosen here first.
         </p>
         <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
@@ -108,7 +108,7 @@ export default function DeanRooms({ programs = [] }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
           <div>
             <h3 style={{ margin: 0 }}>Subject rooms{programName ? ` — ${programName}` : ""}</h3>
-            <p style={{ margin: "4px 0 0", fontSize: "12.5px", color: "#64748b" }}>
+            <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#6b7280" }}>
               Generate Schedule uses the preferred room first, then the alternatives, then any other suitable room. A <b>fixed</b> room is the only room the subject may use.
             </p>
           </div>
@@ -126,9 +126,9 @@ export default function DeanRooms({ programs = [] }) {
           </div>
         </div>
         {!programId ? (
-          <p style={{ color: "#64748b", fontSize: "13.5px" }}>Select a program to see and set the rooms of its subjects.</p>
+          <p style={{ color: "#6b7280", fontSize: "14px" }}>Select a program to see and set the rooms of its subjects.</p>
         ) : subjects.length === 0 ? (
-          <p style={{ color: "#64748b", fontSize: "13.5px" }}>{data.subjects ? "No program subjects found for this selection." : "Loading…"}</p>
+          <p style={{ color: "#6b7280", fontSize: "14px" }}>{data.subjects ? "No program subjects found for this selection." : "Loading…"}</p>
         ) : (
           <table style={{ marginTop: "10px" }}>
             <thead><tr><th>Subject</th><th>Year / Sem</th><th>Preferred room</th><th>Alternative rooms</th><th>Fixed</th><th></th></tr></thead>
@@ -140,8 +140,8 @@ export default function DeanRooms({ programs = [] }) {
                 const st = status[s.id];
                 return (
                   <tr key={s.id}>
-                    <td>{s.code} — {s.title}{s.needs_lab && <span style={{ color: "#7a4b00", fontSize: "11.5px" }}> · lab</span>}
-                      {s.students ? <div style={{ fontSize: "11.5px", color: "#94a3b8" }}>{s.students} students per section</div> : null}</td>
+                    <td>{s.code} — {s.title}{s.needs_lab && <span style={{ color: "#7a4b00", fontSize: "12px" }}> · lab</span>}
+                      {s.students ? <div style={{ fontSize: "12px", color: "#6b7280" }}>{s.students} students per section</div> : null}</td>
                     <td style={{ whiteSpace: "nowrap" }}>{s.year_level} · {s.semester}</td>
                     <td>
                       <RoomSelect rooms={opts} value={c.preferred || ""} width={200}
@@ -153,7 +153,7 @@ export default function DeanRooms({ programs = [] }) {
                         <summary style={{ ...box, cursor: "pointer", minWidth: "150px", listStyle: "none" }}>
                           {c.alts.length ? c.alts.map((i) => roomById[i]?.text || roomById[i]?.name).filter(Boolean).join(", ") : "None"}
                         </summary>
-                        <div style={{ position: "absolute", zIndex: 5, background: "white", border: "1px solid #cdd6e0", borderRadius: "8px", padding: "8px", maxHeight: "200px", overflowY: "auto", minWidth: "220px", boxShadow: "0 6px 20px rgba(0,0,0,0.12)" }}>
+                        <div style={{ position: "absolute", zIndex: 5, background: "white", border: "1px solid #d1d5db", borderRadius: 6, padding: "8px", maxHeight: "200px", overflowY: "auto", minWidth: "220px", boxShadow: "0 6px 20px rgba(0,0,0,0.12)" }}>
                           {opts.filter((r) => String(r.id) !== String(c.preferred)).map((r) => (
                             <label key={r.id} style={{ display: "flex", gap: "6px", fontSize: "13px", padding: "2px 0" }}>
                               <input type="checkbox" checked={c.alts.includes(r.id)}
@@ -161,7 +161,7 @@ export default function DeanRooms({ programs = [] }) {
                               {roomText(r)}
                             </label>
                           ))}
-                          {opts.length === 0 && <span style={{ fontSize: "12.5px", color: "#94a3b8" }}>No suitable rooms.</span>}
+                          {opts.length === 0 && <span style={{ fontSize: "13px", color: "#6b7280" }}>No suitable rooms.</span>}
                         </div>
                       </details>
                     </td>
@@ -171,7 +171,7 @@ export default function DeanRooms({ programs = [] }) {
                     </td>
                     <td style={{ whiteSpace: "nowrap" }}>
                       <button onClick={() => save(s)} disabled={!dirty}>Save</button>
-                      {st && <span style={{ marginLeft: "8px", fontSize: "12px", color: st.err ? "#a4231a" : "#1e5f3a" }}>{st.text}</span>}
+                      {st && <span style={{ marginLeft: "8px", fontSize: "12px", color: st.err ? "#b91c1c" : "#1e5f3a" }}>{st.text}</span>}
                     </td>
                   </tr>
                 );
@@ -208,12 +208,12 @@ function EnrollmentCard() {
   return (
     <div style={card}>
       <h3 style={{ margin: "0 0 4px" }}>Students per year level</h3>
-      <p style={{ margin: "0 0 10px", fontSize: "12.5px", color: "#64748b" }}>
+      <p style={{ margin: "0 0 10px", fontSize: "13px", color: "#6b7280" }}>
         Enter how many students each year level has. <b>Update section sizes</b> divides them over the sections, and rooms are only given to a class if they seat the whole section.
       </p>
       {data.departments.map((d) => (
         <div key={d.department} style={{ marginBottom: "10px" }}>
-          <div style={{ fontWeight: 600, fontSize: "13.5px" }}>{d.department} <span style={{ color: "#64748b", fontWeight: 400 }}>· {d.total_students} students entered · largest lecture room seats {d.largest_lecture_room}</span></div>
+          <div style={{ fontWeight: 600, fontSize: "14px" }}>{d.department} <span style={{ color: "#6b7280", fontWeight: 400 }}>· {d.total_students} students entered · largest lecture room seats {d.largest_lecture_room}</span></div>
           <table style={{ marginTop: "6px" }}>
             <thead><tr><th>Year level</th><th>Students</th><th>Sections</th><th>Section size</th><th>Rooms that fit</th><th></th></tr></thead>
             <tbody>
@@ -224,8 +224,8 @@ function EnrollmentCard() {
                     <td>{y.year_level}</td>
                     <td><input type="number" min="0" style={{ ...box, width: "90px" }} value={draft[k] ?? (y.students ?? "")} onChange={(e) => setDraft({ ...draft, [k]: e.target.value })} /></td>
                     <td>{y.sections}</td>
-                    <td>{y.per_section ?? y.current_section_size}{y.per_section && y.per_section !== y.current_section_size ? <span style={{ color: "#b45309", fontSize: "11.5px" }}> (now {y.current_section_size})</span> : null}</td>
-                    <td style={{ color: y.fits ? "#1e5f3a" : "#a4231a" }}>{y.fits ? (y.rooms_that_fit ?? "—") : "No room is big enough"}</td>
+                    <td>{y.per_section ?? y.current_section_size}{y.per_section && y.per_section !== y.current_section_size ? <span style={{ color: "#b45309", fontSize: "12px" }}> (now {y.current_section_size})</span> : null}</td>
+                    <td style={{ color: y.fits ? "#1e5f3a" : "#b91c1c" }}>{y.fits ? (y.rooms_that_fit ?? "—") : "No room is big enough"}</td>
                     <td style={{ whiteSpace: "nowrap" }}>
                       <button onClick={() => save(d.department, y, false)}>Save</button>{" "}
                       <button onClick={() => save(d.department, y, true)} style={{ background: "#003366", color: "white" }}>Update section sizes</button>
@@ -237,9 +237,9 @@ function EnrollmentCard() {
           </table>
         </div>
       ))}
-      {msg && <p style={{ fontSize: "12.5px", color: "#1e5f3a", margin: "4px 0" }}>{msg}</p>}
+      {msg && <p style={{ fontSize: "13px", color: "#1e5f3a", margin: "4px 0" }}>{msg}</p>}
       {data.too_small_count > 0 && (
-        <p style={{ fontSize: "12.5px", color: "#a4231a", margin: "6px 0 0" }}>
+        <p style={{ fontSize: "13px", color: "#b91c1c", margin: "6px 0 0" }}>
           {data.too_small_count} scheduled class(es) are in a room smaller than the section (for example {data.too_small[0].subject} in {data.too_small[0].room}: {data.too_small[0].capacity} seats, {data.too_small[0].students} students). Generate the schedule again to fix them.
         </p>)}
     </div>

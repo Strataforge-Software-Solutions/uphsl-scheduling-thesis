@@ -13,6 +13,15 @@ export const HOWTO = {
         "Every table on these cards has 'Export CSV' (all rows).",
       ],
     },
+    audit: {
+      summary: "Every change to the school's data, every sign-in and every Generate: who, when, what changed (before and after) and the IP address.",
+      steps: [
+        "Filter by user, action (Create, Update, Delete, Login, Generate) and date, or type part of a record (CS101, CS1, a name), then press Apply.",
+        "Press Details to see the values before and after.",
+        "To answer 'why did my schedule change?': filter by the class or section and look for Update and Generate entries.",
+        "Logs cannot be changed or deleted by anyone, the IT Admin included.",
+      ],
+    },
     activity: {
       summary: "The latest schedule log entries, and the Audit trail card: who approved, published, removed or generated what, and when.",
       steps: [
@@ -34,16 +43,15 @@ export const HOWTO = {
         "Generate follows each teacher's submitted availability (preferred times first). A class that cannot be placed without breaking a rule is skipped, never forced: one pop-up, 'Some classes were not placed', tells you why for each (e.g. the teacher is available only Sat 7:00 AM-4:30 PM). Press OK; everything else stays saved as Draft.",
         "The Professor list shows 'Suggested' teachers first: qualified, within their weekly limit, and free for the whole class inside your Start-End time (e.g. 'Free Tue 8:00 AM-12:00 PM · 11 of 24 hrs'). 'Other qualified' teachers can still be chosen; if they cannot take the class, it is skipped with the reason.",
         "Lunch is not a fixed period: 12:00-1:00 PM is a normal class time, and any free time between classes is lunch. Optional: Workload settings > 'Reserve lunch gap' makes Generate prefer leaving a free hour between 10:30 AM and 2:30 PM; it never skips a class, it only warns.",
-        "Gen Ed subjects are taught by College of Arts and Science faculty of the subject's area (e.g. Literature, FCL, PE). A teacher of another college is offered a Gen Ed subject only if their profile has a specialization for it (e.g. STS). If nobody qualifies, the reason says which specialization is missing.",
+        "Need a Gen Ed class out of the way of a major subject? Press Request move on that Gen Ed row, pick a free time and send it: the Registrar approves or rejects. When approved, only that Gen Ed class moves; no other class (yours or another college's) is ever overwritten.", "Gen Ed subjects are taught by College of Arts and Science faculty of the subject's area (e.g. Literature, FCL, PE). A teacher of another college is offered a Gen Ed subject only if their profile has a specialization for it (e.g. STS). If nobody qualifies, the reason says which specialization is missing.",
         "Teacher lists (Professor column, Edit, overload suggestions) have a search box: type part of a name or the employee ID. For your program subjects they show only qualified faculty of your own department, with their load, e.g. 'Santos, J. - 11 of 24 hrs'; 'Suggested' are free then and within their limit. If nobody fits, the list says 'No available faculty in your department' and why for each teacher.",
-        "Press the ⓘ next to a Professor dropdown to see that teacher's week as a table, one row per day (Monday-Saturday) with their submitted time, the classes they already teach and the suggested free time (★ = preferred): when they prefer / are available / are unavailable, the classes they already teach, and their weekly load.",
+        "Assign a professor's time by hand: press ⓘ next to the Professor, click one of their free times (a Best time, or an Also possible one to override their preference), choose the start and press 'Assign to this time'. The row then shows the Professor, Day and Start / End; Generate places the class there if the room and students are free too (otherwise it says why). Clear the Day with the Clear button.", "Faculty availability is a preference: Generate uses each teacher's preferred, then available time first, and other open times when needed (never a time they marked Unavailable). You can still move a class by hand to any time where nothing clashes; such times are marked 'outside their availability'.", "Press the ⓘ next to a Professor dropdown to see that teacher's week as a table, one row per day (Monday-Saturday) with their submitted time, the classes they already teach and the suggested free time (marked 'preferred'): when they prefer / are available / are unavailable, the classes they already teach, and their weekly load.",
         "The Generate dialog and the Schedules tab list the classes not generated yet, with the reason. Change what blocks them (teacher, room, time, availability), then press 'Generate only the missing ones': classes already placed, edited by hand, approved, published or shared are not moved.",
         "Tick classes in the table (the top box selects every program class shown by the filter). A bar appears: Approve, Publish, Back to draft, Change day / time, Remove, Clear. It acts on the ticked classes only.",
         "Approve checks each class against the whole schedule first: you see 'X ready, Y blocked' with the reason for each blocked class. Ready classes are approved (your name and the time are recorded); blocked ones stay Draft until you fix them in the Conflicts tab.",
-        "Edit (drafts only): change the teacher or room and press Save, or press 'Choose a new day and time' to pick from the free times only. You see what changed, e.g. 'Mon 8:00 AM → Tue 9:30 AM, room stays 307D'. Edited classes get a 🔒 Edited tag and Generate keeps them where you put them (untick 'Keep the classes I edited by hand' to place them again).",
+        "Edit (drafts only): change the teacher or room and press Save, or press 'Choose a new day and time' to pick from the free times only. You see what changed, e.g. 'Mon 8:00 AM → Tue 9:30 AM, room stays 307D'. Edited classes get an 'Edited' tag and Generate keeps them where you put them (untick 'Keep the classes I edited by hand' to place them again).",
         "Remove (drafts only) shows exactly which subjects and periods go, and warns about shared classes. You can Undo for 5 minutes. Approved or published classes must go Back to draft first (published classes cannot).",
         "Each row shows Approve (or Publish) and Edit; Back to draft, Remove and History are in the row's ⋯ menu. While classes are ticked, the row's Approve and Remove are greyed out: use the bar at the bottom. History shows when a class was created, changed, approved or removed, and by whom.",
-        "Gen Ed (minor) subjects of your program are listed under the preview for your information only. The Registrar schedules them and decides which programs share a class.",
         "Under the table, 'Room assignments' lets you pick a program and set a preferred, alternative or fixed room per subject. Room records themselves are kept by the IT Admin.",
       ],
     },
@@ -92,7 +100,7 @@ export const HOWTO = {
     },
     schedules: {
       summary: "Browse, edit and approve schedules across every college.",
-      steps: ["Use the filters (search, college, status, year, semester).", "Open a class to change its teacher, room, day or time; the system warns about workload and conflicts.", "Tick Gen Ed classes (or the top box for all shown). The bar acts on the ticked classes only: Approve (conflicts checked first: 'X ready, Y blocked' with reasons), Publish, Back to draft, Remove, Clear.", "Remove lists exactly what goes and allows Undo for 5 minutes; approved or published classes must go Back to draft first.", "Edit (drafts only) picks a new day and time from the free times only and shows what changed; edited classes are kept by Generate (🔒 Edited). Per row: Approve / Publish and Edit are buttons; Back to draft, Remove and History are in the ⋯ menu (Approve and Remove are greyed out while classes are ticked). Program subjects are view only."],
+      steps: ["Use the filters (search, college, status, year, semester).", "A shared class (Shared with ...) can be edited: Edit changes the teacher, room or day/time of ALL its sections together, so it stays shared (the room must seat everyone).", "Print / Preview opens the classes shown by the filters as a PDF (college, program, year, semester, status, Gen Ed / program subjects; the search box is not used). A table with conflicts is not printed until you fix them or choose Print anyway (marked NOT FINAL).", "Open a class to change its teacher, room, day or time; the system warns about workload and conflicts.", "Tick Gen Ed classes (or the top box for all shown). The bar acts on the ticked classes only: Approve (conflicts checked first: 'X ready, Y blocked' with reasons), Publish, Back to draft, Remove, Clear.", "Remove lists exactly what goes and allows Undo for 5 minutes; approved or published classes must go Back to draft first.", "Edit (drafts only) picks a new day and time from the free times only and shows what changed; edited classes are kept by Generate (they show 'Edited'). Per row: Approve / Publish and Edit are buttons; Back to draft, Remove and History are in the ⋯ menu (Approve and Remove are greyed out while classes are ticked). Program subjects are view only."],
     },
     exams: {
       summary: "Create Gen Ed exam schedules, checked against every other schedule.",
@@ -164,4 +172,63 @@ export const HOME_INTRO = {
   dean: "U-FAST builds conflict-free class schedules for your college using the university's scheduling rules. From here you can generate and approve schedules, resolve conflicts and faculty overloads, and review workloads.",
   registrar: "U-FAST builds conflict-free schedules for the whole university. As Registrar you generate Gen Ed (minor) schedules, merge classes across departments, approve schedules and resolve conflicts.",
   principal: "U-FAST builds conflict-free timetables for your school level using DepEd learning hours and your teaching limits. From here you generate, review, approve and publish timetables and check teacher workloads.",
+};
+
+/* "My settings" > Help: a short start guide per role (5 to 8 steps). */
+export const HELP_STEPS = {
+  registrar: [
+    "Home lists what needs your attention first.",
+    "Generate Schedule: pick the college, program, year level and semester, check the preview, then press Generate.",
+    "Schedules: use the filters, tick the Gen Ed classes, then Approve and Publish them. Edit changes the teacher, room or time of a draft.",
+    "Gen Ed move requests from the Deans appear at the top of Schedules. Approve or reject each one.",
+    "Conflicts lists teacher, room and student clashes. Fix them before you publish.",
+    "Exam Schedule: generate the exam schedule and print it.",
+    "Print / Preview makes a PDF that follows the filters you set.",
+  ],
+  dean: [
+    "Home lists the pending tasks of your college.",
+    "Schedules: generate the schedule of your program, review it and approve it.",
+    "Edit a draft class to change its teacher, room or time. Only free times are offered.",
+    "Gen Ed classes belong to the Registrar. Use Request move to ask for a change.",
+    "Faculty: check the availability and workload of your teachers, and add faculty accounts.",
+    "Conflicts and Faculty Coverage show what still needs fixing.",
+    "Exam Schedule: set the exams of your program's major subjects.",
+  ],
+  faculty: [
+    "My Schedule lists your classes after they are published.",
+    "Availability: mark the times you prefer, the times you are available and the times you are unavailable, then submit.",
+    "Unavailable times are never used. Other times can still be used when the schedule needs them.",
+    "The bell at the top shows changes to your schedule and new assignments.",
+    "My settings (your picture or initials at the top right) changes your name, picture and display options.",
+  ],
+  admin: [
+    "Overview shows the setup checks, errors first.",
+    "Accounts: add accounts, turn accounts on or off, and reset a password to the default.",
+    "Rooms: keep the room records up to date.",
+    "Data Tools: maintenance tools such as clearing generated schedules.",
+    "Activity lists the recent changes and who made them.",
+    "The School level switch at the bottom right changes between College, Senior High and Junior High.",
+  ],
+  principal: [
+    "Home shows the status of your school level.",
+    "Sections, Curriculum and Faculty hold the data the timetable needs. Check them first.",
+    "Schedules: generate a timetable, review it, then approve and publish it.",
+    "Calendar: terms and school events.",
+    "Settings: school day times and teaching limits for your school level.",
+    "Analytics shows the teaching load of each teacher.",
+  ],
+  teacher: [
+    "My Schedule shows your weekly timetable.",
+    "My Profile shows your details and your availability.",
+    "Your timetable is made and published by the Principal.",
+    "The bell at the top shows changes to your timetable.",
+    "My settings (your picture or initials at the top right) changes your name, picture and display options.",
+  ],
+  student: [
+    "My Timetable shows your classes after they are published.",
+    "Each class shows its day, time, room and teacher.",
+    "The bell at the top shows changes to your timetable.",
+    "My settings (your picture or initials at the top right) changes your name, picture and display options.",
+    "If something looks wrong, contact the Registrar's office.",
+  ],
 };

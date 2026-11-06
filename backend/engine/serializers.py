@@ -30,7 +30,8 @@ class TimeSlotSerializer(serializers.ModelSerializer):
 class ScheduleSerializer(serializers.ModelSerializer):
     subject_code = serializers.CharField(source="subject.code", read_only=True)
     subject_title = serializers.CharField(source="subject.title", read_only=True)
-    teacher_name = serializers.CharField(source="teacher.user.username", read_only=True)
+    # the teacher's NAME (never the login / school ID, which is private)
+    teacher_name = serializers.SerializerMethodField()
     room_name = serializers.CharField(source="room.name", read_only=True)
     section_name = serializers.CharField(source="section.name", read_only=True)
     program = serializers.IntegerField(source="section.program.id", read_only=True)
@@ -84,9 +85,13 @@ class ScheduleSerializer(serializers.ModelSerializer):
             "is_substitution", "original_teacher",
             "is_manual_override", "school_year", "generated_at",
             "status", "approved_by", "approved_by_name", "approved_at",
-            "merge_key", "merged_with", "merged_students",
+            "merge_key", "merged_with", "merged_students", "qualification_override",
         ]
-        read_only_fields = ["status", "approved_by", "approved_at", "merge_key"]
+        read_only_fields = ["status", "approved_by", "approved_at", "merge_key", "qualification_override"]
+
+    def get_teacher_name(self, obj):
+        u = obj.teacher.user if obj.teacher_id else None
+        return (u.get_full_name().strip() or "Unnamed teacher") if u else ""
 
 
 class ConstraintSerializer(serializers.ModelSerializer):

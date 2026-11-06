@@ -1,3 +1,4 @@
+import { formatTime } from "./formatDateTime";
 /* Start / End time chosen for a subject in the Generate preview. The server is the source of truth (engine/views.py
    _preview_choices with engine.scheduler.window_need_minutes); this only shows the same rule in the row before Generate. */
 
@@ -25,7 +26,7 @@ export function timeWindowProblem(subject, start, end) {
 export const DAY_START = 7 * 60;
 export const DAY_END = 20 * 60;
 export const toHHMM = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-export const clock = (m) => { const h = Math.floor(m / 60); return `${((h + 11) % 12) + 1}:${String(m % 60).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`; };
+export const clock = (m) => formatTime(m);
 const GRID = Array.from({ length: (DAY_END - DAY_START) / 30 + 1 }, (_x, i) => DAY_START + i * 30);
 
 // Start times that leave room for the class: at least needMinutes before the chosen End (or before the end of the day).

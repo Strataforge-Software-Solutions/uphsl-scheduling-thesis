@@ -192,14 +192,71 @@ class AssignmentViewSet(LevelViewSet):
     def get_queryset(self):
         return super().get_queryset().filter(section__level=self.level())
 
-    def perform_create(self, ser):
+    def _checked(self, ser, instance=None):
+        """Same level; an eligible teacher, or a manual Assign anyway (override_qualification + override_reason) by the Principal,
+        re-checked against the three groups computed now (teacher_groups.check_override). Returns the override note or None."""
+        from . import teacher_groups as tg
         d = ser.validated_data
+        fac = d.get("faculty", getattr(instance, "faculty", None))
+        sec = d.get("section", getattr(instance, "section", None))
+        sub = d.get("subject", getattr(instance, "subject", None))
         lv = self.level()
-        if d["faculty"].level != lv or d["section"].level != lv or d["subject"].level != lv:
+        if fac.level != lv or sec.level != lv or sub.level != lv:
             raise ValidationError({"detail": "Teacher, section and subject must all belong to the same school level."})
-        if not eligible(d["faculty"], d["subject"]):
-            raise ValidationError({"detail": f"{d['faculty'].full_name} is not qualified for {d['subject'].code}."})
-        ser.save()
+        if eligible(fac, sub):
+            return None
+        if str(self.request.data.get("override_qualification", "")).lower() not in ("1", "true", "yes"):
+            raise ValidationError({"detail": f"{fac.full_name} is not qualified for {sub.code}."})
+        try:
+            reason = tg.check_override(self.request.user, sec, sub, fac, self.request.data.get("override_reason"))
+        except tg.OverrideError as e:
+            raise ValidationError({"detail": str(e)})
+        return tg.override_meta(self.request.user, reason)
+
+    def _audit(self, pin, meta):
+        """Assign anyway: one event on this grade's current timetable(s), if there is one (the pin itself keeps who / when / why)."""
+        if not meta:
+            return
+        for run in m.ScheduleRun.objects.filter(level=pin.section.level, academic_year=pin.section.academic_year,
+                                                grade_level=pin.section.grade_level).exclude(status="superseded"):
+            log(run, "assigned_anyway", self.request.user,
+                f"{pin.faculty.full_name} pinned to {pin.subject.code} ({pin.section.name}), not connected. Reason: {meta['reason']}")
+
+    def perform_create(self, ser):
+        meta = self._checked(ser)
+        pin = ser.save(qualification_override=meta)
+        self._audit(pin, meta)
+
+    def perform_update(self, ser):
+        meta = self._checked(ser, ser.instance)
+        pin = ser.save(qualification_override=meta)
+        self._audit(pin, meta)
+
+    @action(detail=False, methods=["get"])
+    def options(self, request):
+        """READ-ONLY. ?section=<id>: every subject of the section with its current pin and the three teacher groups."""
+        from . import teacher_groups as tg
+        from .engine import Problem
+        lv = self.level()
+        sec = m.Section.objects.filter(pk=request.query_params.get("section"), level=lv).select_related("adviser", "strand").first()
+        if sec is None:
+            raise ValidationError({"detail": "Choose a section of this school level."})
+        subs = [x for x in m.CurriculumSubject.objects.filter(level=lv, academic_year=sec.academic_year, grade_level=sec.grade_level,
+                                                               is_active=True).select_related("strand").order_by("grading_period", "code")
+                if x.strand_id in (None, sec.strand_id)]
+        pins = {t.subject_id: t for t in m.TeachingAssignment.objects.filter(section=sec).select_related("faculty__user")}
+        problems, out = {}, []
+        for sub in subs:
+            period = tg.grading_period_for(lv, sec.academic_year, sub)
+            if period not in problems:
+                problems[period] = Problem(lv, sec.academic_year, period, sec.grade_level)
+            pin = pins.get(sub.id)
+            out.append({"subject_id": sub.id, "code": sub.code, "name": sub.name, "grading_period": sub.grading_period,
+                        "sessions_per_week": sub.sessions_per_week, "needs": sub.specialization or sub.learning_area,
+                        "pin": {"id": pin.id, "faculty": pin.faculty_id, "faculty_name": pin.faculty.full_name,
+                                "override": pin.qualification_override, "badge": tg.badge_text(pin.qualification_override)} if pin else None,
+                        "groups": tg.build(request.user, sec, sub, problems[period])})
+        return Response({"section": {"id": sec.id, "name": sec.name, "grade_level": sec.grade_level}, "subjects": out})
 
 
 class CalendarEventViewSet(LevelViewSet):
@@ -513,6 +570,8 @@ def entry_edit(request, pk):
         t = m.Faculty.objects.filter(pk=d["teacher"], level=lv).first()
         if not t:
             raise ValidationError({"teacher": "Pick a teacher from this school level."})
+        if t.id != entry.teacher_id:
+            entry.qualification_override = None
         entry.teacher = t
     if "room" in d and d["room"]:
         r = m.Room.objects.filter(pk=d["room"], level=lv).first()

@@ -14,13 +14,13 @@ const EVENT = "workload-changed";
 export const notifyWorkloadChanged = () => window.dispatchEvent(new Event(EVENT));
 export const onWorkloadChanged = (fn) => { window.addEventListener(EVENT, fn); return () => window.removeEventListener(EVENT, fn); };
 
-const btn = { background: "white", color: "#003366", border: "1px solid #cdd6e0", borderRadius: "6px", padding: "6px 12px", fontSize: "12.5px", cursor: "pointer" };
+const btn = { background: "white", color: "#003366", border: "1px solid #d1d5db", borderRadius: "6px", padding: "6px 12px", fontSize: "13px", cursor: "pointer" };
 const btnPrimary = { ...btn, background: "#003366", color: "white", border: "1px solid #003366", fontWeight: 600 };
 
 function Bar({ value, max, after }) {
   const pct = (v) => (max > 0 ? Math.min(100, (v / max) * 100) : 0);
   return (
-    <div style={{ background: "#e8eef7", borderRadius: 999, height: 8, overflow: "hidden", position: "relative", minWidth: 120 }}>
+    <div style={{ background: "#e8eef7", borderRadius: 4, height: 8, overflow: "hidden", position: "relative", minWidth: 120 }}>
       <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${pct(after)}%`, background: "#9db8dc" }} />
       <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${pct(value)}%`, background: "#2e7d52" }} />
     </div>
@@ -30,26 +30,26 @@ function Bar({ value, max, after }) {
 function Candidate({ s, picked, onPick, hours }) {
   const spec = (s.specializations || []).join(", ");
   return (
-    <label style={{ display: "flex", gap: 10, alignItems: "flex-start", border: `1px solid ${picked ? "#003366" : "#dbe3ec"}`, background: picked ? "#f2f7fd" : "white", borderRadius: 8, padding: "10px 12px", marginBottom: 8, cursor: "pointer" }}>
+    <label style={{ display: "flex", gap: 10, alignItems: "flex-start", border: `1px solid ${picked ? "#003366" : "#e5e7eb"}`, background: picked ? "#f2f7fd" : "white", borderRadius: 6, padding: "10px 12px", marginBottom: 8, cursor: "pointer" }}>
       <input type="radio" checked={picked} onChange={onPick} style={{ marginTop: 3 }} />
       <div style={{ flex: 1, minWidth: 0, fontSize: 13 }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
           <b>{s.full_name}</b>
           <Badge tone="neutral">{TYPE_LABEL[s.faculty_type] || s.faculty_type}</Badge>
           <Badge tone={s.fit === "Specialization match" ? "success" : "warning"}>{s.fit}</Badge>
-          {s.same_department && <span style={{ fontSize: 11.5, color: "#64748b" }}>same college</span>}
+          {s.same_department && <span style={{ fontSize: 12, color: "#6b7280" }}>same college</span>}
         </div>
-        <div style={{ color: "#475569", marginTop: 4, overflowWrap: "anywhere" }}>
-          {s.degree ? <>Degree: <b>{s.degree}</b></> : <span style={{ color: "#94a3b8" }}>No degree on file</span>}
+        <div style={{ color: "#4b5563", marginTop: 4, overflowWrap: "anywhere" }}>
+          {s.degree ? <>Degree: <b>{s.degree}</b></> : <span style={{ color: "#6b7280" }}>No degree on file</span>}
           {spec && <> · Specialization: <b>{spec}</b></>}
         </div>
-        {s.qualifications && <div style={{ color: "#475569", overflowWrap: "anywhere" }}>Qualifications: {s.qualifications}</div>}
-        <div style={{ color: "#475569", overflowWrap: "anywhere" }}>Availability: {s.availability || "No availability limits submitted (open)"}{" "}<span style={{ color: "#166534" }}>· free at the class time</span></div>
+        {s.qualifications && <div style={{ color: "#4b5563", overflowWrap: "anywhere" }}>Qualifications: {s.qualifications}</div>}
+        <div style={{ color: "#4b5563", overflowWrap: "anywhere" }}>Availability: {s.availability || "No availability limits submitted (open)"}{" "}<span style={{ color: "#166534" }}>· free at the class time</span></div>
         <div style={{ marginTop: 6, display: "grid", gridTemplateColumns: "minmax(120px, 200px) 1fr", gap: 10, alignItems: "center" }}>
           <Bar value={s.current_hours} max={s.max_hours} after={s.current_hours + hours} />
-          <span style={{ fontSize: 12, color: "#334155" }}>{fmt(s.current_hours)} → <b>{fmt(s.current_hours + hours)}</b> / {fmt(s.max_hours)} h · {fmt(Math.max(0, s.remaining_after))} h to spare after</span>
+          <span style={{ fontSize: 12, color: "#374151" }}>{fmt(s.current_hours)} → <b>{fmt(s.current_hours + hours)}</b> / {fmt(s.max_hours)} h · {fmt(Math.max(0, s.remaining_after))} h to spare after</span>
         </div>
-        <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 3 }}>{(s.reasons || []).join(" · ")}</div>
+        <div style={{ fontSize: 12, color: "#6b7280", marginTop: 3 }}>{(s.reasons || []).join(" · ")}</div>
       </div>
     </label>
   );
@@ -91,18 +91,18 @@ function ClassBlock({ teacher, cls, onDone }) {
   };
 
   return (
-    <div style={{ border: "1px solid #dbe3ec", borderRadius: 10, padding: "12px 14px", marginBottom: 12, background: "#fff" }}>
+    <div style={{ border: "1px solid #e5e7eb", borderRadius: 6, padding: "12px 14px", marginBottom: 12, background: "#fff" }}>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "baseline" }}>
         <b style={{ overflowWrap: "anywhere" }}>{cls.code} — {cls.subject}</b>
-        <span style={{ color: "#475569", fontSize: 12.5 }}>{cls.section}</span>
+        <span style={{ color: "#4b5563", fontSize: 13 }}>{cls.section}</span>
         {cls.recommended && <Badge tone="warning">Move this to fix the overload</Badge>}
       </div>
-      <div style={{ fontSize: 12.5, color: "#64748b", margin: "3px 0 8px" }}>{cls.when} · {fmt(cls.hours)} h / week{cls.required_field ? ` · needs ${cls.required_field}` : ""}</div>
+      <div style={{ fontSize: 13, color: "#6b7280", margin: "3px 0 8px" }}>{cls.when} · {fmt(cls.hours)} h / week{cls.required_field ? ` · needs ${cls.required_field}` : ""}</div>
       {msg && msg.ok && (
-        <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "#166534" }}>
+        <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 6, padding: "10px 12px", fontSize: 13, color: "#166534" }}>
           <b>Assigned.</b> {msg.data.subject} ({msg.data.section}) now belongs to {msg.data.to.name}. The schedule was updated.
           <ul style={{ margin: "6px 0 0 18px", padding: 0 }}>
-            {msg.data.checks.map((c, i) => <li key={i} style={{ color: c.ok ? "#166534" : "#92400e" }}>{c.ok ? "✓" : "!"} {c.label}{c.detail ? ` — ${c.detail}` : ""}</li>)}
+            {msg.data.checks.map((c, i) => <li key={i} style={{ color: c.ok ? "#166534" : "#92400e" }}>{c.ok ? "Passed:" : "Check:"} {c.label}{c.detail ? ` — ${c.detail}` : ""}</li>)}
           </ul>
         </div>
       )}
@@ -111,7 +111,7 @@ function ClassBlock({ teacher, cls, onDone }) {
           {sugg === null && <button style={btn} onClick={find} disabled={loading}>{loading ? "Looking…" : "Find qualified faculty"}</button>}
           {sugg && sugg.length > 0 && (
             <>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.3, marginBottom: 6 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>
                 Qualified, available and free ({sugg.length})
               </div>
               {/* one searchable list (TeacherPicker, the same as the Edit and Generate dialogs); the server sends only teachers the rules
@@ -129,7 +129,7 @@ function ClassBlock({ teacher, cls, onDone }) {
                 const c = sugg.find((x) => x.faculty_id === pick);
                 if (!c) return null;
                 return (
-                  <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "#1e3a8a" }}>
+                  <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 6, padding: "10px 12px", fontSize: 13, color: "#1e3a8a" }}>
                     <b>Confirm reassignment</b>
                     <div style={{ marginTop: 4 }}>Move <b>{cls.code} {cls.subject}</b> ({cls.section}) from <b>{teacher.full_name}</b> ({fmt(teacher.hours)} → <b>{fmt(Math.max(0, teacher.hours - cls.hours))}</b> / {fmt(teacher.max_hours)} h)
                       to <b>{c.full_name}</b> ({fmt(c.current_hours)} → <b>{fmt(c.current_hours + cls.hours)}</b> / {fmt(c.max_hours)} h)? This changes the actual schedule.</div>
@@ -142,12 +142,12 @@ function ClassBlock({ teacher, cls, onDone }) {
             </>
           )}
           {sugg && sugg.length === 0 && (
-            <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "#92400e" }}>
+            <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 6, padding: "10px 12px", fontSize: 13, color: "#92400e" }}>
               <b>This cannot be resolved automatically.</b> {reason}
             </div>
           )}
           {msg && !msg.ok && (
-            <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "#991b1b", marginTop: 8 }}>
+            <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 6, padding: "10px 12px", fontSize: 13, color: "#991b1b", marginTop: 8 }}>
               Nothing was changed. {msg.text}
               {msg.conflicts && msg.conflicts.length > 0 && <ul style={{ margin: "6px 0 0 18px", padding: 0 }}>{msg.conflicts.slice(0, 3).map((c, i) => <li key={i}>{c.message || c.kind}</li>)}</ul>}
             </div>
@@ -173,48 +173,48 @@ export function ResolverWindow({ onClose, focusId = null }) {
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", zIndex: 80, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
       <div onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Overload suggestions"
-        style={{ background: "#f8fafc", borderRadius: 14, width: "100%", maxWidth: 860, maxHeight: "92vh", overflowY: "auto", padding: "20px 22px" }}>
+        style={{ background: "#f9fafb", borderRadius: 6, width: "100%", maxWidth: 860, maxHeight: "92vh", overflowY: "auto", padding: "20px 22px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
           <h3 style={{ margin: 0, color: "#003366" }}>Faculty overload — suggestions</h3>
           <button style={btn} onClick={onClose}>Close</button>
         </div>
-        <p style={{ margin: "0 0 14px", fontSize: 12.5, color: "#64748b" }}>
+        <p style={{ margin: "0 0 14px", fontSize: 13, color: "#6b7280" }}>
           Only faculty with a matching specialization, degree or qualification are listed, and only if they are available, free at that time and stay within their weekly limit.
           Assign changes the real schedule; it is checked again before it is saved.
         </p>
         {done.map((d, i) => (
-          <div key={i} style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: "12px 14px", marginBottom: 12, fontSize: 13, color: "#166534" }}>
+          <div key={i} style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 6, padding: "12px 14px", marginBottom: 12, fontSize: 13, color: "#166534" }}>
             <b>Resolved:</b> {d.subject} ({d.section}) moved from {d.from.name} ({fmt(d.from.hours)}/{fmt(d.from.max_hours)} h) to {d.to.name} ({fmt(d.to.hours)}/{fmt(d.to.max_hours)} h). The schedule was updated.
-            <ul style={{ margin: "6px 0 0 18px", padding: 0 }}>{d.checks.map((c, j) => <li key={j} style={{ color: c.ok ? "#166534" : "#92400e" }}>{c.ok ? "✓" : "!"} {c.label}{c.detail ? ` — ${c.detail}` : ""}</li>)}</ul>
+            <ul style={{ margin: "6px 0 0 18px", padding: 0 }}>{d.checks.map((c, j) => <li key={j} style={{ color: c.ok ? "#166534" : "#92400e" }}>{c.ok ? "Passed:" : "Check:"} {c.label}{c.detail ? ` — ${c.detail}` : ""}</li>)}</ul>
           </div>))}
-        {error && <p style={{ color: "#a4231a" }}>{error} <button style={btn} onClick={load}>Retry</button></p>}
+        {error && <p style={{ color: "#b91c1c" }}>{error} <button style={btn} onClick={load}>Retry</button></p>}
         {!plan && !error && <p>Loading suggestions…</p>}
         {plan && plan.items.length === 0 && (
-          <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: "14px 16px", color: "#166534" }}>
+          <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 6, padding: "14px 16px", color: "#166534" }}>
             <b>No faculty member is overloaded now.</b> Every teacher is within their weekly limit.
           </div>
         )}
         {plan && focusId && plan.items.length > 0 && !plan.items.some((i) => i.faculty_id === focusId) && (
-          <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: "12px 14px", color: "#166534", marginBottom: 12 }}>
+          <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 6, padding: "12px 14px", color: "#166534", marginBottom: 12 }}>
             This teacher is no longer overloaded.
           </div>)}
         {plan && plan.items.filter((i) => !focusId || i.faculty_id === focusId).map((it) => {
           const extra = it.classes.filter((c) => !c.recommended);
           return (
-            <div key={`${it.faculty_id}-${it.term}`} style={{ background: "white", border: "1px solid #e0e6ed", borderRadius: 12, padding: "14px 16px", marginBottom: 16 }}>
+            <div key={`${it.faculty_id}-${it.term}`} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "14px 16px", marginBottom: 16 }}>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 6 }}>
-                <b style={{ fontSize: 15, color: "#7a1b14" }}>{it.full_name}</b>
+                <b style={{ fontSize: 16, color: "#7a1b14" }}>{it.full_name}</b>
                 <Badge tone="neutral">{TYPE_LABEL[it.faculty_type] || it.faculty_type}</Badge>
-                <span style={{ fontSize: 13, color: "#a4231a", fontWeight: 600 }}>{fmt(it.hours)} h / {fmt(it.max_hours)} h — over by {fmt(it.overload_hours)} h ({it.term})</span>
+                <span style={{ fontSize: 13, color: "#b91c1c", fontWeight: 600 }}>{fmt(it.hours)} h / {fmt(it.max_hours)} h — over by {fmt(it.overload_hours)} h ({it.term})</span>
               </div>
-              <div style={{ fontSize: 12.5, color: "#475569", margin: "2px 0 8px" }}>
+              <div style={{ fontSize: 13, color: "#4b5563", margin: "2px 0 8px" }}>
                 <b>Assigned subjects ({it.term}):</b>{" "}
                 {it.subjects.map((x, i) => (
                   <span key={i} title={`${x.section} · ${x.when}`}>{i ? "; " : ""}{x.code} ({fmt(x.hours)} h){!x.editable && <span style={{ color: "#92400e" }}> [locked: {x.locked_reason}]</span>}</span>))}
               </div>
-              {it.notes.map((n, i) => <div key={i} style={{ fontSize: 12.5, color: "#92400e", marginBottom: 6 }}>{n}</div>)}
+              {it.notes.map((n, i) => <div key={i} style={{ fontSize: 13, color: "#92400e", marginBottom: 6 }}>{n}</div>)}
               {it.classes.length === 0 && (
-                <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "10px 12px", fontSize: 13, color: "#92400e" }}>
+                <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 6, padding: "10px 12px", fontSize: 13, color: "#92400e" }}>
                   <b>This cannot be resolved automatically.</b> Every class of this teacher is locked, so no replacement can be applied here. The warning stays until the load is within the limit: ask the owner of those classes (the Registrar for Gen Ed) to reassign them, or move the approved classes back to draft.
                 </div>)}
               {it.classes.filter((c) => c.recommended).map((c) => <ClassBlock key={c.schedule_ids.join("-")} teacher={it} cls={c} onDone={applied} />)}
@@ -253,9 +253,9 @@ export default function OverloadBanner() {
   return (
     <>
       {items.length > 0 && (
-        <div style={{ background: "#fdecea", border: "1px solid #f3b3ac", borderRadius: 10, padding: "12px 16px", margin: "0 0 16px" }}>
+        <div style={{ background: "#fdecea", border: "1px solid #f3b3ac", borderRadius: 6, padding: "12px 16px", margin: "0 0 16px" }}>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", justifyContent: "space-between" }}>
-            <strong style={{ color: "#a4231a" }}>⚠ Faculty workload warning — {items.length} faculty member{items.length === 1 ? " is" : "s are"} overloaded</strong>
+            <strong style={{ color: "#b91c1c" }}>Faculty workload warning — {items.length} faculty member{items.length === 1 ? " is" : "s are"} overloaded</strong>
             {items.length > 1 && <button style={btnPrimary} onClick={() => setOpen(0)}>View Suggestions (all)</button>}
           </div>
           {items.map((f) => (

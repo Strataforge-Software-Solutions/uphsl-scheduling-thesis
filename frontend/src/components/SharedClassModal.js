@@ -51,37 +51,37 @@ export default function SharedClassModal({ item, program, onClose, onChanged }) 
 
   return (
     <div role="dialog" aria-modal="true" aria-label="Shared class" style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.5)", zIndex: 1100, display: "flex", alignItems: "center", justifyContent: "center", padding: 14 }}>
-      <div style={{ background: "#fff", borderRadius: 12, width: "100%", maxWidth: 680, maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "0 12px 40px rgba(0,0,0,.35)" }}>
-        <div style={{ padding: "14px 18px", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
+      <div style={{ background: "#fff", borderRadius: 6, width: "100%", maxWidth: 680, maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "var(--shadow-pop)" }}>
+        <div style={{ padding: "14px 18px", borderBottom: "1px solid #e5e7eb", display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
           <div>
             <h3 style={{ margin: 0, color: NAVY }}>Shared class — {item.code}</h3>
-            <div style={{ fontSize: 13, color: "#475569" }}>{item.title} · {item.lec_units} lec / {item.lab_units} lab units · {program.name}, {program.year_level}, {program.semester}</div>
+            <div style={{ fontSize: 13, color: "#4b5563" }}>{item.title} · {item.lec_units} lec / {item.lab_units} lab units · {program.name}, {program.year_level}, {program.semester}</div>
           </div>
           <button onClick={onClose} style={btn("#fff", NAVY)}>Close</button>
         </div>
-        <div style={{ padding: "14px 18px", overflowY: "auto", fontSize: 13.5 }}>
+        <div style={{ padding: "14px 18px", overflowY: "auto", fontSize: 14 }}>
           {!item.shareable ? <p>{item.why_not}</p> : (
             <>
               {[["auto", "Automatic", "The generator may join an equal class of another program when it fits (the original behaviour)."],
                 ["exclusive", `Exclusive to ${program.name}`, "This program always keeps its own class for this subject."],
                 ["shared", "Shared with other programs", "Choose 1 or 2 other programs (2 or 3 programs in total) that attend ONE class."]].map(([v, t, d]) => (
-                <label key={v} style={{ display: "block", border: `1px solid ${mode === v ? NAVY : "#e2e8f0"}`, background: mode === v ? "#e6f0fa" : "#fff", borderRadius: 8, padding: "8px 12px", marginBottom: 8, cursor: "pointer" }}>
+                <label key={v} style={{ display: "block", border: `1px solid ${mode === v ? NAVY : "#e5e7eb"}`, background: mode === v ? "#e6f0fa" : "#fff", borderRadius: 6, padding: "8px 12px", marginBottom: 8, cursor: "pointer" }}>
                   <input type="radio" name="mode" checked={mode === v} onChange={() => setMode(v)} style={{ marginRight: 8 }} />
-                  <strong>{t}</strong><div style={{ color: "#64748b", fontSize: 12.5, marginLeft: 24 }}>{d}</div>
+                  <strong>{t}</strong><div style={{ color: "#6b7280", fontSize: 13, marginLeft: 24 }}>{d}</div>
                 </label>
               ))}
               {mode === "shared" && (
                 <div style={{ margin: "6px 0 10px" }}>
-                  {!item.candidates.length && <p style={{ color: "#a4231a" }}>No other program has this same subject (same code, title and units) in {program.year_level}, {program.semester}, so it cannot be shared.</p>}
+                  {!item.candidates.length && <p style={{ color: "#b91c1c" }}>No other program has this same subject (same code, title and units) in {program.year_level}, {program.semester}, so it cannot be shared.</p>}
                   {item.candidates.map((c) => (
-                    <label key={c.id} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "6px 8px", borderBottom: "1px solid #f1f5f9", cursor: "pointer" }}>
+                    <label key={c.id} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "6px 8px", borderBottom: "1px solid #f3f4f6", cursor: "pointer" }}>
                       <input type="checkbox" checked={chosen.includes(c.id)} disabled={!chosen.includes(c.id) && chosen.length >= 2} onChange={() => toggle(c.id)} />
-                      <span><strong>{c.name}</strong> — {c.department}<br /><span style={{ color: "#64748b", fontSize: 12.5 }}>{c.year_level} · {c.semester} · {c.sections} section(s) · {c.students} students</span></span>
+                      <span><strong>{c.name}</strong> — {c.department}<br /><span style={{ color: "#6b7280", fontSize: 13 }}>{c.year_level} · {c.semester} · {c.sections} section(s) · {c.students} students</span></span>
                     </label>
                   ))}
                   {check && (
-                    <div style={{ marginTop: 10, border: `1px solid ${check.ok ? "#a7f3d0" : "#fecaca"}`, background: check.ok ? "#ecfdf5" : "#fef2f2", borderRadius: 8, padding: "10px 12px" }}>
-                      <strong style={{ color: check.ok ? "#166534" : "#991b1b" }}>{check.ok ? "✔ These programs can share this class" : "✖ They cannot share this class"}</strong>
+                    <div style={{ marginTop: 10, border: `1px solid ${check.ok ? "#a7f3d0" : "#fecaca"}`, background: check.ok ? "#ecfdf5" : "#fef2f2", borderRadius: 6, padding: "10px 12px" }}>
+                      <strong style={{ color: check.ok ? "#166534" : "#991b1b" }}>{check.ok ? "These programs can share this class" : "They cannot share this class"}</strong>
                       {check.programs?.length > 0 && (
                         <ul style={{ margin: "6px 0 0 18px", padding: 0 }}>
                           {check.programs.map((p) => <li key={p.id}>{p.name} ({p.department}) — {p.year_level}, {p.semester}: {p.students} students in {p.sections} section(s)</li>)}
@@ -97,11 +97,11 @@ export default function SharedClassModal({ item, program, onClose, onChanged }) 
               )}
             </>
           )}
-          {note && <p style={{ color: "#166534" }}>✓ {note}</p>}
-          {error && <p style={{ color: "#a4231a" }}>{error}</p>}
+          {note && <p style={{ color: "#166534" }}>{note}</p>}
+          {error && <p style={{ color: "#b91c1c" }}>{error}</p>}
         </div>
         {item.shareable && (
-          <div style={{ padding: "12px 18px", borderTop: "1px solid #e2e8f0", display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ padding: "12px 18px", borderTop: "1px solid #e5e7eb", display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
             {item.group && !item.group.confirmed && (
               <button disabled={busy} onClick={() => act("confirm", { group_id: item.group.id }, "Confirmed.")} style={btn("#0b6b3a")}>Confirm (Registrar)</button>
             )}

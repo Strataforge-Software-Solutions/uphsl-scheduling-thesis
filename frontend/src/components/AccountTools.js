@@ -64,67 +64,67 @@ export function AddStaffModal({ onClose, onCreated }) {
       position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)",
       display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
     }}>
-      <div style={{ background: "white", borderRadius: "12px", padding: "28px", width: "440px", maxWidth: "90vw" }}>
+      <div style={{ background: "white", borderRadius: 6, padding: "28px", width: "440px", maxWidth: "90vw" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
             <h3 style={{ margin: 0, color: "#003366" }}>Add Staff Account</h3>
-            <p style={{ margin: "4px 0 0", fontSize: "12.5px", color: "#64748b" }}>
+            <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#6b7280" }}>
               A default password (the School ID) is set; they'll be asked to change it on first login.
             </p>
           </div>
-          <button onClick={onClose} style={{ border: "none", background: "none", fontSize: "18px", cursor: "pointer", color: "#64748b" }}>Close</button>
+          <button onClick={onClose} style={{ border: "1px solid #d1d5db", background: "white", color: "#374151", fontSize: "13px", fontWeight: 600, padding: "6px 12px", borderRadius: 4, cursor: "pointer" }}>Close</button>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginTop: "18px" }}>
           <div>
-            <label style={{ fontSize: "12.5px", fontWeight: 600, color: "#333" }}>First Name</label>
+            <label style={{ fontSize: "13px", fontWeight: 600, color: "#333" }}>First Name</label>
             <input value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-                   style={{ width: "100%", padding: "9px", borderRadius: "6px", border: "1px solid #cdd6e0", marginTop: "4px", boxSizing: "border-box" }} />
+                   style={{ width: "100%", padding: "9px", borderRadius: "6px", border: "1px solid #d1d5db", marginTop: "4px", boxSizing: "border-box" }} />
           </div>
           <div>
-            <label style={{ fontSize: "12.5px", fontWeight: 600, color: "#333" }}>Last Name</label>
+            <label style={{ fontSize: "13px", fontWeight: 600, color: "#333" }}>Last Name</label>
             <input value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })}
-                   style={{ width: "100%", padding: "9px", borderRadius: "6px", border: "1px solid #cdd6e0", marginTop: "4px", boxSizing: "border-box" }} />
+                   style={{ width: "100%", padding: "9px", borderRadius: "6px", border: "1px solid #d1d5db", marginTop: "4px", boxSizing: "border-box" }} />
           </div>
         </div>
 
         <div style={{ marginTop: "12px" }}>
-          <label style={{ fontSize: "12.5px", fontWeight: 600, color: "#333" }}>School ID</label>
+          <label style={{ fontSize: "13px", fontWeight: 600, color: "#333" }}>School ID</label>
           <input placeholder={autoId ? `Generated automatically (next free ${selected.idPrefix}####)` : `e.g. ${selected.idPrefix}1003`}
                  value={autoId ? "" : form.schoolId} disabled={autoId} onChange={(e) => setForm({ ...form, schoolId: e.target.value })}
-                 style={{ width: "100%", padding: "9px", borderRadius: "6px", border: "1px solid #cdd6e0", marginTop: "4px", boxSizing: "border-box" }} />
+                 style={{ width: "100%", padding: "9px", borderRadius: "6px", border: "1px solid #d1d5db", marginTop: "4px", boxSizing: "border-box" }} />
         </div>
 
         <div style={{ marginTop: "12px" }}>
-          <label style={{ fontSize: "12.5px", fontWeight: 600, color: "#333" }}>Role</label>
+          <label style={{ fontSize: "13px", fontWeight: 600, color: "#333" }}>Role</label>
           <select value={form.roleIndex} onChange={(e) => setForm({ ...form, roleIndex: e.target.value })}
-                  style={{ width: "100%", padding: "9px", borderRadius: "6px", border: "1px solid #cdd6e0", marginTop: "4px", boxSizing: "border-box" }}>
+                  style={{ width: "100%", padding: "9px", borderRadius: "6px", border: "1px solid #d1d5db", marginTop: "4px", boxSizing: "border-box" }}>
             {STAFF_ROLE_OPTIONS.map((opt, i) => <option key={opt.label} value={i}>{opt.label}</option>)}
           </select>
         </div>
 
         <div style={{ marginTop: "12px" }}>
-          <label style={{ fontSize: "12.5px", fontWeight: 600, color: "#333" }}>Department</label>
+          <label style={{ fontSize: "13px", fontWeight: 600, color: "#333" }}>Department</label>
           <input placeholder="College or department" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })}
-                 style={{ width: "100%", padding: "9px", borderRadius: "6px", border: "1px solid #cdd6e0", marginTop: "4px", boxSizing: "border-box" }} />
+                 style={{ width: "100%", padding: "9px", borderRadius: "6px", border: "1px solid #d1d5db", marginTop: "4px", boxSizing: "border-box" }} />
         </div>
 
         {isFaculty && (
           <div style={{ marginTop: "12px" }}>
-            <label style={{ fontSize: "12.5px", fontWeight: 600, color: "#333" }}>Specialization / Degree(s)</label>
+            <label style={{ fontSize: "13px", fontWeight: 600, color: "#333" }}>Specialization / Degree(s)</label>
             <input placeholder="e.g. BA in Filipino, FCL (comma-separated if more than one)"
                    value={form.specializations} onChange={(e) => setForm({ ...form, specializations: e.target.value })}
-                   style={{ width: "100%", padding: "9px", borderRadius: "6px", border: "1px solid #cdd6e0", marginTop: "4px", boxSizing: "border-box" }} />
+                   style={{ width: "100%", padding: "9px", borderRadius: "6px", border: "1px solid #d1d5db", marginTop: "4px", boxSizing: "border-box" }} />
           </div>
         )}
 
         {result && (
-          <p style={{ marginTop: "12px", fontSize: "13px", color: result.ok ? "#1e7a45" : "#a4231a" }}>{result.text}</p>
+          <p style={{ marginTop: "12px", fontSize: "13px", color: result.ok ? "#1e7a45" : "#b91c1c" }}>{result.text}</p>
         )}
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "20px" }}>
           <button onClick={onClose} style={{
-            background: "white", color: "#1f2937", border: "1px solid #cdd6e0", padding: "9px 18px", borderRadius: "6px", cursor: "pointer",
+            background: "white", color: "#111827", border: "1px solid #d1d5db", padding: "9px 18px", borderRadius: "6px", cursor: "pointer",
           }}>Cancel</button>
           <button
             onClick={submit}
@@ -189,11 +189,11 @@ export function BulkCreateAccounts({ onCreated }) {
 
   const cardStyle = {
     background: "white",
-    borderRadius: "10px",
+    borderRadius: 6,
     padding: "24px",
     maxWidth: "720px",
-    boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
-    border: "1px solid #e0e6ed",
+    boxShadow: "none",
+    border: "1px solid #e5e7eb",
   };
 
   return (
@@ -206,7 +206,7 @@ export function BulkCreateAccounts({ onCreated }) {
         </p>
         <code style={{
           display: "inline-block", background: "#f0f4f8", color: "#003366",
-          padding: "6px 10px", borderRadius: "6px", fontSize: "12.5px", marginBottom: "14px",
+          padding: "6px 10px", borderRadius: "6px", fontSize: "13px", marginBottom: "14px",
         }}>
           school_id, first_name, last_name, role, faculty_type, department
         </code>
@@ -219,8 +219,8 @@ export function BulkCreateAccounts({ onCreated }) {
           style={{
             width: "100%",
             padding: "14px",
-            borderRadius: "8px",
-            border: "1px solid #cdd6e0",
+            borderRadius: 6,
+            border: "1px solid #d1d5db",
             fontFamily: "monospace",
             fontSize: "13px",
             lineHeight: "1.6",
@@ -229,7 +229,7 @@ export function BulkCreateAccounts({ onCreated }) {
             outline: "none",
           }}
           onFocus={(e) => (e.target.style.border = "1px solid #003366")}
-          onBlur={(e) => (e.target.style.border = "1px solid #cdd6e0")}
+          onBlur={(e) => (e.target.style.border = "1px solid #d1d5db")}
         />
 
         <div style={{
@@ -241,7 +241,7 @@ export function BulkCreateAccounts({ onCreated }) {
 
         <div style={{
           marginTop: "16px", padding: "12px 14px", background: "#f0f4f8",
-          borderRadius: "8px", fontSize: "12.5px", color: "#333", lineHeight: "1.6",
+          borderRadius: 6, fontSize: "13px", color: "#333", lineHeight: "1.6",
         }}>
           <div>• Username is generated automatically as <strong>UPHM-&lt;school_id&gt;</strong>.</div>
           <div>• Default password is the <strong>school ID</strong> itself.</div>
@@ -258,10 +258,10 @@ export function BulkCreateAccounts({ onCreated }) {
             style={{
               background: submitting ? "#6b8bb3" : "#003366",
               color: "white", border: "none", padding: "10px 22px",
-              borderRadius: "8px", fontSize: "14px", fontWeight: 600,
-              cursor: submitting ? "default" : "pointer", transition: "background 0.15s",
+              borderRadius: 6, fontSize: "14px", fontWeight: 600,
+              cursor: submitting ? "default" : "pointer",
             }}
-            onMouseEnter={(e) => { if (!submitting) e.target.style.background = "#0055aa"; }}
+            onMouseEnter={(e) => { if (!submitting) e.target.style.background = "#003366"; }}
             onMouseLeave={(e) => { if (!submitting) e.target.style.background = "#003366"; }}
           >
             {submitting ? "Creating…" : "Create Accounts"}
@@ -269,8 +269,8 @@ export function BulkCreateAccounts({ onCreated }) {
 
           <label style={{
             display: "inline-flex", alignItems: "center", gap: "6px",
-            padding: "10px 18px", borderRadius: "8px", border: "1px dashed #9fb3c8",
-            fontSize: "13px", color: "#003366", cursor: "pointer", background: "#f8fafc",
+            padding: "10px 18px", borderRadius: 6, border: "1px dashed #9fb3c8",
+            fontSize: "13px", color: "#003366", cursor: "pointer", background: "#f9fafb",
           }}>
             {fileName || "Upload CSV instead"}
             <input type="file" accept=".csv,text/csv" onChange={handleFileUpload} style={{ display: "none" }} />
@@ -283,17 +283,17 @@ export function BulkCreateAccounts({ onCreated }) {
           {feedback.created.length > 0 && (
             <div style={{
               background: "#eafaf0", border: "1px solid #b7e4c7", color: "#1e7a45",
-              borderRadius: "8px", padding: "12px 16px", marginBottom: "8px", fontSize: "13px",
+              borderRadius: 6, padding: "12px 16px", marginBottom: "8px", fontSize: "13px",
             }}>
-              ✓ Created {feedback.created.length} account{feedback.created.length > 1 ? "s" : ""}: {feedback.created.join(", ")}
+              Created {feedback.created.length} account{feedback.created.length > 1 ? "s" : ""}: {feedback.created.join(", ")}
             </div>
           )}
           {feedback.errors.length > 0 && (
             <div style={{
-              background: "#fdecea", border: "1px solid #f3b3ac", color: "#a4231a",
-              borderRadius: "8px", padding: "12px 16px", fontSize: "13px",
+              background: "#fdecea", border: "1px solid #f3b3ac", color: "#b91c1c",
+              borderRadius: 6, padding: "12px 16px", fontSize: "13px",
             }}>
-              ⚠ {feedback.errors.length} row{feedback.errors.length > 1 ? "s" : ""} failed — check the format and try again.
+              {feedback.errors.length} row{feedback.errors.length > 1 ? "s" : ""} failed — check the format and try again.
             </div>
           )}
         </div>

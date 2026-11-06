@@ -272,6 +272,9 @@ class TeachingAssignment(models.Model):
     faculty = models.ForeignKey(Faculty, on_delete=models.CASCADE, related_name="assignments")
     section = models.ForeignKey(Section, on_delete=models.CASCADE, related_name="assignments")
     subject = models.ForeignKey(CurriculumSubject, on_delete=models.CASCADE, related_name="assignments")
+    # "Assign anyway": the Principal pinned a teacher who is NOT qualified for the subject (specialization), by hand and with a reason.
+    # Null for every normal pin. {"reason", "by_id", "by_name", "role", "at"}. The engine never sets this.
+    qualification_override = models.JSONField(null=True, blank=True)
 
     class Meta:
         unique_together = ("section", "subject")
@@ -312,6 +315,8 @@ class ScheduleEntry(models.Model):
     start_time = models.TimeField()
     end_time = models.TimeField()
     is_manual = models.BooleanField(default=False)
+    # copied from the TeachingAssignment when the timetable is generated, so the badge needs no lookup
+    qualification_override = models.JSONField(null=True, blank=True)
 
     class Meta:
         ordering = ["day", "start_time"]
