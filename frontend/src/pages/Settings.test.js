@@ -75,10 +75,11 @@ test("Appearance saves, applies at once, is cached, and resets to defaults", asy
   expect(API.patch).toHaveBeenLastCalledWith("/accounts/me/preferences/", { theme: "light", text_size: "medium", table_density: "comfortable", reduce_motion: "system" });
   expect(document.documentElement.getAttribute("data-text-size")).toBe("medium");
   expect(box.textContent).toContain("Reset to defaults and saved.");
-  await pickOption("Dark");
+  expect(byText(".settings-option", "Dark")).toBeUndefined();          // Dark was replaced by Royal
+  await pickOption("Royal");
   await press("Save");
-  expect(document.documentElement.getAttribute("data-theme")).toBe("dark");      // applied at once, no reload
-  expect(JSON.parse(window.localStorage.getItem("ufast_display")).theme).toBe("dark");
+  expect(document.documentElement.getAttribute("data-theme")).toBe("royal");     // applied at once, no reload
+  expect(JSON.parse(window.localStorage.getItem("ufast_display")).theme).toBe("royal");
   await press("Reset to defaults");
   expect(document.documentElement.getAttribute("data-theme")).toBe("light");
 });

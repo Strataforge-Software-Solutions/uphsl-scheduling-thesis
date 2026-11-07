@@ -6,6 +6,8 @@ and STS each have at least one FULL-TIME and one PART-TIME teacher who qualifies
     python manage.py add_cas_gened_faculty --apply    # saves it
     python manage.py add_cas_gened_faculty --one-per-area           # DRY RUN: 1 full-time + 1 part-time NEW account per area (5 + 5)
     python manage.py add_cas_gened_faculty --one-per-area --apply   # saves those (re-running skips the ones that exist)
+    python manage.py add_cas_gened_faculty --social-humanities           # DRY RUN: 4 NEW CAS accounts (2 full-time + 2 part-time)
+    python manage.py add_cas_gened_faculty --social-humanities --apply   #   specialized in Social Studies and Humanities; saves them
 
 * Only what is missing is added: an area that already has a qualified CAS full-timer (or part-timer) gets no new one.
 * STS: one full-time and one part-time EXISTING teacher of a related (science) department gets the STS specialization added to their
@@ -35,6 +37,9 @@ AREAS = {
     "pe": (["Physical Education", "BA in Physical Education"], "Ricardo Robles", "Janine Ocampo"),
     "sts": ([STS_FIELD, "Science"], "Dr. Rosalind Tan", "Victor Manansala"),
 }
+# --social-humanities: 4 demo CAS teachers (made-up names) with a Social Studies and Humanities background
+SOCIAL_HUMANITIES = (["Social Studies", "Humanities"],
+                     [("full_time", "Teresita Valdez"), ("full_time", "Ramon Aquino"), ("part_time", "Liza Mercado"), ("part_time", "Carlo Domingo")])
 # STS samples: existing teachers of a related department whose specializations are science / physics
 STS_RELATED = re.compile(r"physics|biochemistry|chemistry|biology|^science$", re.I)
 
@@ -85,6 +90,8 @@ class Command(BaseCommand):
 
         parser.add_argument("--one-per-area", action="store_true",
                             help="Create one full-time + one part-time demo CAS account for EACH area (5 + 5), even if covered.")
+        parser.add_argument("--social-humanities", action="store_true",
+                            help="Create 4 demo CAS accounts (2 full-time + 2 part-time) specialized in Social Studies and Humanities.")
 
     @staticmethod
     def _sts_sample(ftype):
@@ -96,16 +103,25 @@ class Command(BaseCommand):
 
     def handle(self, *args, **o):
         if o["apply"]:
-            return self._run(True, o["one_per_area"])
+            return self._run(True, o["one_per_area"], o["social_humanities"])
         from django.db import connection
         from engine.management.commands.audit_gened_teachers import _read_only
         with connection.execute_wrapper(_read_only):        # a dry run cannot write, whatever happens
-            return self._run(False, o["one_per_area"])
+            return self._run(False, o["one_per_area"], o["social_humanities"])
 
-    def _run(self, apply, one_per_area=False):
+    def _run(self, apply, one_per_area=False, social_humanities=False):
         self.stdout.write(("APPLY" if apply else "DRY RUN (nothing is saved; add --apply to save)") + "\n")
         plan_new, plan_tag, ok = [], [], []
-        for area, (specs, ft_name, pt_name) in AREAS.items():
+        if social_humanities:
+            specs, people = SOCIAL_HUMANITIES
+            for ftype, name in people:
+                first, last = name.rsplit(" ", 1)
+                ex = User.objects.filter(department=CAS, first_name=first, last_name=last).first()
+                if ex:
+                    ok.append(f"Social Studies / Humanities, {ftype.replace('_', '-')}: {name} already exists ({ex.school_id})")
+                else:
+                    plan_new.append(("social_humanities", ftype, name, specs))
+        for area, (specs, ft_name, pt_name) in (AREAS.items() if not social_humanities else []):
             label = GEN_ED_AREAS[area][0]
             for ftype, name in (("full_time", ft_name), ("part_time", pt_name)):
                 if one_per_area:

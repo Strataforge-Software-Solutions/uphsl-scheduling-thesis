@@ -80,19 +80,71 @@ html[data-reduce-motion="on"] *, html[data-reduce-motion="on"] *::before, html[d
   .app-shell, .settings-page { zoom: 1 !important; height: auto !important; min-height: 0 !important; }
 }
 
-/* My settings > Appearance > Theme: Dark (screen only; printing always uses the light print layout).
-   Most colors are written inside the components, so dark mode turns the whole page around with one filter on <html> (lightness
-   inverted, hues kept) instead of rewriting every color. Things that must keep their real colors are turned back: pictures, the
-   navy sidebar and the navy table headers. The root element is exempt from the "filter makes a containing block" rule, so
-   fixed dialogs and dropdown lists stay where they are. */
+/* My settings > Appearance > Theme: Royal -- royal navy, gold and warm cream (screen only; printing always uses the fixed print layout).
+   The shared color tokens change; panels, light-gray areas and thin borders written inside a component follow the cream and gold too.
+   Contrast on the cream backgrounds stays above 4.5:1 for text (navy #172b62 about 11:1, warm gray #5c5442 about 5.9:1) and above 3:1
+   for the focus ring (#8a6a12). */
 @media screen {
-  html[data-theme="dark"] { filter: invert(0.9) hue-rotate(180deg); background: #ffffff; }
-  html[data-theme="dark"] body { background: #ffffff; }
-  html[data-theme="dark"] img, html[data-theme="dark"] video, html[data-theme="dark"] canvas,
-  html[data-theme="dark"] .app-sidebar, html[data-theme="dark"] thead {
-    filter: invert(1) hue-rotate(180deg);
+  html[data-theme="royal"] {
+    --c-primary: #172b62;          /* royal navy */
+    --c-primary-hover: #0f1f4a;
+    --c-primary-soft: #f0e2b6;     /* gold-cream: selected rows, active tabs */
+    --c-text: #1b2550;
+    --c-text-2: #353d63;
+    --c-text-3: #5c5442;           /* warm gray helper text */
+    --c-border: #c9b27a;           /* gold-tinted input and button borders */
+    --c-line: #e3d19c;             /* gold-tinted panel and table lines */
+    --c-subtle: #f3e8c9;
+    --c-page: #efe5cc;             /* warm cream page */
+    --c-surface: #faf4e4;          /* light cream panels */
+    --c-gold: #d4ae3b;             /* gold */
+    background: #efe5cc;
   }
-  html[data-theme="dark"] .app-sidebar img { filter: none; }      /* already inside the turned-back sidebar */
+  html[data-theme="royal"] body, html[data-theme="royal"] .app-main, html[data-theme="royal"] .main-content { background: #efe5cc; }
+
+  /* backgrounds and borders written inside components: white -> light cream, light gray -> cream, gray lines -> gold-tinted */
+  html[data-theme="royal"] [style*="background: white"], html[data-theme="royal"] [style*="background: rgb(255, 255, 255)"],
+  html[data-theme="royal"] [style*="background-color: white"], html[data-theme="royal"] [style*="background-color: rgb(255, 255, 255)"] {
+    background-color: #faf4e4 !important;
+  }
+  html[data-theme="royal"] [style*="background: rgb(249, 250, 251)"], html[data-theme="royal"] [style*="background: rgb(243, 244, 246)"],
+  html[data-theme="royal"] [style*="background-color: rgb(249, 250, 251)"], html[data-theme="royal"] [style*="background-color: rgb(243, 244, 246)"] {
+    background-color: #f3e8c9 !important;
+  }
+  html[data-theme="royal"] [style*="solid rgb(229, 231, 235)"], html[data-theme="royal"] [style*="solid rgb(209, 213, 219)"],
+  html[data-theme="royal"] [style*="solid rgb(243, 244, 246)"] {
+    border-color: #e3d19c !important;
+  }
+
+  /* sidebar: royal navy with gold */
+  html[data-theme="royal"] .app-sidebar { background: #172b62; border-right: 4px solid #d4ae3b; }
+  html[data-theme="royal"] .app-sidebar-brand { border-bottom: 1px solid rgba(212, 174, 59, 0.55); padding-bottom: 12px; }
+  html[data-theme="royal"] .app-sidebar-brand-sub, html[data-theme="royal"] .app-sidebar-user-role,
+  html[data-theme="royal"] .app-sidebar-nav li.app-nav-group { color: #e9c96b; }
+  html[data-theme="royal"] .app-nav-item:hover { background: rgba(212, 174, 59, 0.14); }
+  html[data-theme="royal"] .app-nav-item.active { background: rgba(212, 174, 59, 0.24); border-left-color: #d4ae3b; color: #fbe7a8; }
+  html[data-theme="royal"] .app-sidebar-user { border-top-color: rgba(212, 174, 59, 0.55); }
+  html[data-theme="royal"] .app-sidebar .app-avatar-circle { background: #d4ae3b; color: #172b62; }
+  html[data-theme="royal"] .app-sidebar-signout { border-color: rgba(212, 174, 59, 0.7); }
+
+  /* top bar, page header and tables */
+  html[data-theme="royal"] .app-topbar { background: #faf4e4; border-bottom: 3px solid #d4ae3b; }
+  html[data-theme="royal"] .app-avatar-circle { background: #f0e2b6; color: #172b62; }
+  html[data-theme="royal"] .app-page-header { border-bottom: 2px solid #d4ae3b; }
+  html[data-theme="royal"] .app-page-title { color: #172b62; }
+  html[data-theme="royal"] table { border-color: #e3d19c; }
+  html[data-theme="royal"] thead th { border-bottom: 3px solid #d4ae3b; }
+  html[data-theme="royal"] tbody tr:nth-child(even) td { background-color: #f6edd4; }
+  html[data-theme="royal"] tbody tr:hover td { background-color: #f0e2b6; }
+
+  /* buttons, fields and focus */
+  html[data-theme="royal"] .ui-btn:not(.secondary):not(.danger) { border-color: #d4ae3b; }
+  html[data-theme="royal"] .ui-btn.secondary { background: #faf4e4; border-color: #c9b27a; }
+  html[data-theme="royal"] input, html[data-theme="royal"] select, html[data-theme="royal"] textarea {
+    background-color: #fffaf0; border-color: #c9b27a;
+  }
+  html[data-theme="royal"] :focus-visible { outline-color: #8a6a12; }
+  html[data-theme="royal"] .settings-nav-item.active { background: #f0e2b6; border-left-color: #d4ae3b; color: #172b62; }
 }
 
 /* ---- shared building blocks (used as each area is cleaned up) ---- */

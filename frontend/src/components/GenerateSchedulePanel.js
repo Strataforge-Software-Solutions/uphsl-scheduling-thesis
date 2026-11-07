@@ -92,7 +92,7 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
   const [profOpts, setProfOpts] = useState(null);
   useEffect(() => {
     setProfOpts(null);
-    if (isRegistrar || !programId || !yearLevel || !semester) return;
+    if (!programId || !yearLevel || !semester) return;
     API.get("/engine/generate/professor-options/", { params: { program_id: programId, year_level: yearLevel, semester } })
       .then((res) => setProfOpts(res.data)).catch(() => setProfOpts({ subjects: [], teachers: {}, error: true }));
   }, [isRegistrar, programId, yearLevel, semester]);
@@ -103,7 +103,7 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
   const winKey = (p) => (p && (p.start || p.end || p.day) ? `${p.day || ""}|${p.start || ""}|${p.end || ""}` : "");
   useEffect(() => { setRowGroups({}); }, [profOpts]);
   useEffect(() => {
-    if (isRegistrar || !profOpts || profOpts.error) return;
+    if (!profOpts || profOpts.error) return;
     Object.entries(picks).forEach(([sid, p]) => {
       const k = winKey(p);
       if (!k || rowGroups[sid]?.key === k || !profRow(Number(sid))?.groups) return;
@@ -213,7 +213,7 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
         }
       });
       const res = await API.post("/engine/generate-schedule/", {
-        program_id: programId, year_level: yearLevel, semester, merge_minors: mergeMinors, room_choices, time_windows, keep_edited: keepEdited, only_missing: onlyMissing === true, ...(isRegistrar ? {} : { teacher_choices }),
+        program_id: programId, year_level: yearLevel, semester, merge_minors: mergeMinors, room_choices, time_windows, keep_edited: keepEdited, only_missing: onlyMissing === true, teacher_choices,
       }, { timeout: 180000 });   // generation can take a while over a remote database
       setResult(res.data);
       const d = res.data, items = [];
@@ -309,8 +309,8 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
               </p>
             ) : (
               <div style={{ maxHeight: "min(460px, 60vh)", overflow: "auto" }}>
-                <table style={{ margin: 0, boxShadow: "none", border: "none", borderRadius: 0, width: "100%", minWidth: isRegistrar ? 1194 : 1204, tableLayout: "fixed" }}>
-                  <thead><tr><th style={{ width: 110 }}>Code</th><th style={{ width: isRegistrar ? 200 : 180 }}>Subject</th><th style={{ width: 118 }}>Needs</th>{!isRegistrar && <th style={{ width: 230 }}>Professor</th>}<th style={{ width: 310 }}>Room</th><th style={{ width: 128 }}>Start Time</th><th style={{ width: 128 }}>End Time</th>{isRegistrar && <th style={{ width: 190 }}>Shared Class / Programs</th>}</tr></thead>
+                <table style={{ margin: 0, boxShadow: "none", border: "none", borderRadius: 0, width: "100%", minWidth: isRegistrar ? 1424 : 1204, tableLayout: "fixed" }}>
+                  <thead><tr><th style={{ width: 110 }}>Code</th><th style={{ width: isRegistrar ? 200 : 180 }}>Subject</th><th style={{ width: 118 }}>Needs</th><th style={{ width: 230 }}>Professor</th><th style={{ width: 310 }}>Room</th><th style={{ width: 128 }}>Start Time</th><th style={{ width: 128 }}>End Time</th>{isRegistrar && <th style={{ width: 190 }}>Shared Class / Programs</th>}</tr></thead>
                   <tbody>
                     {shown.map((s) => {
                       const p = picks[s.id] || {};
@@ -328,7 +328,7 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
                       const sel = { fontSize: 12, padding: "3px 4px", width: "100%", maxWidth: "100%", boxSizing: "border-box" };
                       const timeProblem = timeWindowProblem(s, p.start, p.end);
                       // the chosen professor's free time (availability minus their classes): times outside it are marked, still selectable
-                      const prof = !isRegistrar && p.teacher ? profOpts?.teachers?.[p.teacher] : null;
+                      const prof = p.teacher ? profOpts?.teachers?.[p.teacher] : null;
                       const need = needMinutes(s);
                       const outside = (a, b) => (prof && prof.submitted ? !professorFits(prof.free, need, a, b) : false);
                       const mark = (bad) => (bad ? " (outside professor's time)" : "");
@@ -342,7 +342,7 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
                           <td style={{ verticalAlign: "middle", fontSize: 12, lineHeight: 1.35, color: "#374151" }}>
                             <div><strong>{hrs(perWeek)} hrs/wk</strong></div><div>{kindText}</div><div>{nSec} section{nSec === 1 ? "" : "s"}</div>
                           </td>
-                          {!isRegistrar && (() => {
+                          {(() => {
                             const pr = profRow(s.id);
                             const opts = pr ? pr.qualified.map((id) => profOpts.teachers[id]).filter(Boolean) : [];
                             const chosen = p.teacher ? profOpts?.teachers?.[p.teacher] : null;
@@ -577,7 +577,7 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
       {timeFor && (
         <FacultyTimePopover teachers={timeFor.teachers} initialId={timeFor.initialId} subjectCode={timeFor.code} semester={semester}
           programId={programId} yearLevel={yearLevel} onClose={() => setTimeFor(null)} needMinutes={timeFor.need}
-          onAssign={isRegistrar ? undefined : (tid, day, start, end) => {
+          onAssign={(tid, day, start, end) => {
             // the Dean's manual assignment from the Faculty time window: Professor + Day + Start / End of this subject's row.
             // Nothing is saved here; Generate places it there (or skips it with the reason) and checks every rule again.
             setProfessor(timeFor.sid, String(tid));
@@ -602,7 +602,7 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
                   <div style={{ fontWeight: 600, color: "#111827" }}>{c.code || String(c.subject).split(" - ")[0]} — {c.title || String(c.subject).split(" - ").slice(1).join(" - ")}</div>
                   <div style={{ color: "#6b7280", fontSize: 12 }}>Section {String(c.section)} · {c.year_level}</div>
                   <div style={{ color: "#b91c1c", marginTop: 3 }}>{c.reason || "No reason was recorded."}</div>
-                  {!isRegistrar && /qualified/i.test(c.reason || "") && c.section_id && c.subject_id && (
+                  {/qualified/i.test(c.reason || "") && c.section_id && c.subject_id && (
                     <button type="button" onClick={() => setFacultyFor(c)}
                       style={{ marginTop: 6, background: "white", color: "#003366", border: "1px solid #003366", borderRadius: 4, padding: "4px 10px", fontSize: 12 }}>
                       See other available faculty

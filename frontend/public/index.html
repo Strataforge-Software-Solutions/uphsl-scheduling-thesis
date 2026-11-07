@@ -11,10 +11,9 @@
         try { p = JSON.parse(window.localStorage.getItem("ufast_display") || "null"); } catch (e) { p = null; }
         p = p || {};
         var size = { small: 0.9, medium: 1, large: 1.125 }[p.text_size] ? p.text_size : "medium";
-        var pref = p.theme === "dark" || p.theme === "system" ? p.theme : "light", dark = pref === "dark";
-        if (pref === "system") { try { dark = window.matchMedia("(prefers-color-scheme: dark)").matches; } catch (e) { dark = false; } }
+        var pref = p.theme === "royal" ? "royal" : "light";          /* Default or Royal */
         d.setAttribute("data-theme-pref", pref);
-        d.setAttribute("data-theme", dark ? "dark" : "light");
+        d.setAttribute("data-theme", pref);
         d.setAttribute("data-text-size", size);
         d.setAttribute("data-density", p.table_density === "compact" ? "compact" : "comfortable");
         d.setAttribute("data-reduce-motion", p.reduce_motion === "on" || p.reduce_motion === "off" ? p.reduce_motion : "system");

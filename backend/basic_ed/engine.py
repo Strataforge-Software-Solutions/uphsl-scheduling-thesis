@@ -118,10 +118,14 @@ class Problem:
                                                 grade_level=grade_level, grading_period__in=[0, grading_period])
         self.subjects = list(subs.select_related("strand"))
         # availability windows per faculty/day
-        self.avail = defaultdict(lambda: defaultdict(list))
-        self.unavail = defaultdict(lambda: defaultdict(list))
+        self.avail = defaultdict(lambda: defaultdict(list))       # submitted Preferred + Available windows
+        self.unavail = defaultdict(lambda: defaultdict(list))     # submitted Unavailable windows
+        self.pref = defaultdict(lambda: defaultdict(list))        # submitted Preferred windows (tried first)
         for a in Availability.objects.filter(faculty__in=self.faculty):
-            (self.avail if a.available else self.unavail)[a.faculty_id][a.day].append((to_min(a.start_time), to_min(a.end_time)))
+            w = (to_min(a.start_time), to_min(a.end_time))
+            (self.avail if a.available else self.unavail)[a.faculty_id][a.day].append(w)
+            if a.available and getattr(a, "preference", "") == "preferred":
+                self.pref[a.faculty_id][a.day].append(w)
         # what the OTHER grade levels' active timetables already use (a teacher is shared across grades)
         self.busy_teacher = defaultdict(set)     # (faculty_id) -> {(day, start_min)}
         self.busy_room = defaultdict(set)
@@ -161,25 +165,58 @@ class Problem:
         return list(by_code.values())
 
 
+# SHS / JHS: whether the time outside a teacher's submitted Available / Preferred windows may be used. True = today's rule (a hard
+# limit). The comparison of the soft variant (like the college) is measured in the tests only; the setting is not changed here.
+SUBMITTED_WINDOWS_ARE_HARD = True
+
+TIER_PREFERRED, TIER_AVAILABLE, TIER_OUTSIDE = 0, 1, 2
+
+
+def teacher_time_rule(P, fac, day, slot):
+    """THE availability rule of the SHS / JHS generator, in one place (change it here only).
+    Returns None when the teacher may NOT teach at this time, otherwise a tier used to order the choices (lower = tried first):
+      * a time inside a window the teacher marked Unavailable                 -> None (always a hard block)
+      * a teacher who submitted Available / Preferred windows, outside them   -> None (today's hard rule; TIER_OUTSIDE when
+                                                                                 SUBMITTED_WINDOWS_ARE_HARD is False)
+      * outside the teacher's preferred start / end on their profile          -> None (unchanged hard limit, set by the school)
+      * inside a Preferred window -> TIER_PREFERRED; any other allowed time   -> TIER_AVAILABLE
+    A teacher who has submitted nothing is free at any time not blocked otherwise. "Returned for correction" changes nothing here: the
+    last submitted windows stay in use until the teacher submits again."""
+    s, e = slot
+    for us, ue in P.unavail[fac.id].get(day, []):
+        if s < ue and e > us:
+            return None
+    if fac.preferred_start and fac.preferred_end:
+        if s < to_min(fac.preferred_start) or e > to_min(fac.preferred_end):
+            return None
+    tier = TIER_AVAILABLE
+    if P.avail.get(fac.id):
+        if not any(s >= ws and e <= we for ws, we in P.avail[fac.id].get(day, [])):
+            if SUBMITTED_WINDOWS_ARE_HARD:
+                return None
+            tier = TIER_OUTSIDE
+    if any(s >= ws and e <= we for ws, we in P.pref[fac.id].get(day, [])):
+        tier = TIER_PREFERRED
+    return tier
+
+
 def _free_for_teacher(P, fac, day, slot, taken_teacher):
     s, e = slot
     if (day, s) in taken_teacher[fac.id] or (day, s) in P.busy_teacher[fac.id]:
         return False
-    for us, ue in P.unavail[fac.id].get(day, []):
-        if s < ue and e > us:
-            return False
-    if P.avail.get(fac.id):
-        wins = P.avail[fac.id].get(day, [])
-        if not any(s >= ws and e <= we for ws, we in wins):
-            return False
-    if fac.preferred_start and fac.preferred_end:
-        if s < to_min(fac.preferred_start) or e > to_min(fac.preferred_end):
-            return False
-    return True
+    return teacher_time_rule(P, fac, day, slot) is not None
 
 
-def solve(P, seed=0, attempt_limit=3):
-    """Returns (assignments, unresolved). assignment = dict(section, subject, teacher, room, day, start, end)."""
+def solve(P, seed=0, stats=None):
+    """The generator: backtracking search with MRV and forward checking (basic_ed/search.py). Returns (assignments, unresolved)."""
+    from .search import solve as _search
+    return _search(P, seed=seed, stats=stats)
+
+
+def solve_greedy(P, seed=0, attempt_limit=3):
+    """The OLD generator (greedy, up to 3 shuffled restarts), kept only to measure the new search against it
+    (tests and `manage.py compare_basic_ed_solvers`). Generate does not use it.
+    Returns (assignments, unresolved). assignment = dict(section, subject, teacher, room, day, start, end)."""
     best = None
     for attempt in range(attempt_limit):
         rng = random.Random(seed + attempt)

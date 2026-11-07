@@ -45,7 +45,27 @@ def snapshot(obj):
             out[f.name] = {"id": rid, "name": name[:120]}
         else:
             out[f.name] = recorder.jsonable(getattr(obj, f.attname))
+    lv = school_level(obj)
+    if lv:
+        out["level"] = lv
     return out
+
+
+def school_level(obj):
+    """SHS / JHS records: their school level (on the record, or on its section / teacher / timetable), so each level's admin view
+    lists only its own records. None for college records."""
+    if obj._meta.app_label != "basic_ed":
+        return None
+    for path in ("level", "section.level", "faculty.level", "run.level"):
+        cur = obj
+        try:
+            for part in path.split("."):
+                cur = getattr(cur, part)
+        except Exception:
+            continue
+        if cur in ("SHS", "JHS"):
+            return cur
+    return None
 
 
 def _label(obj):
@@ -75,8 +95,9 @@ def _saved(sender, instance, created, raw=False, **kw):
     changed = [k for k in new if old.get(k) != new.get(k)]
     instance._audit_old = new
     if changed:
+        keep = changed + (["level"] if "level" in new and "level" not in changed else [])     # the level stays on SHS/JHS entries
         recorder.record("update", entity_name(sender), instance.pk, summary=_label(instance),
-                        old={k: old.get(k) for k in changed}, new={k: new.get(k) for k in changed})
+                        old={k: old.get(k) for k in keep}, new={k: new.get(k) for k in keep})
 
 
 @receiver(post_delete)

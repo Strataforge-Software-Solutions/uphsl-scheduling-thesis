@@ -312,7 +312,8 @@ def generate(level, academic_year, grading_period, grade_level, actor, note=""):
     locks.require("basic_ed")   # one JHS/SHS generation at a time (see engine/locks.py)
     problem = Problem(level, academic_year, grading_period, grade_level)
     problem.anchor = core_anchor(level, academic_year, grading_period, grade_level)
-    assignments, unresolved = solve(problem, seed=grade_level * 7 + grading_period)
+    search_stats = {}
+    assignments, unresolved = solve(problem, seed=grade_level * 7 + grading_period, stats=search_stats)
     previous = list(ScheduleRun.objects.filter(level=level, academic_year=academic_year, grading_period=grading_period,
                                                grade_level=grade_level).exclude(status="superseded"))
     version = (ScheduleRun.objects.filter(level=level, academic_year=academic_year, grading_period=grading_period,
@@ -338,7 +339,7 @@ def generate(level, academic_year, grading_period, grade_level, actor, note=""):
     _audit.record("generate", "SHS/JHS timetable", run.id, user=actor,
                   summary=f"{level} Grade {grade_level} period {grading_period}: version {version}, {len(assignments)} periods placed",
                   old={"replaced_runs": [p.id for p in previous]},
-                  new={"run": run.id, "version": version, "placed": len(assignments), "not_placed": len(unresolved)})
+                  new={"run": run.id, "level": level, "version": version, "placed": len(assignments), "not_placed": len(unresolved)})
     for t in _ov.values():
         log(run, "assigned_anyway", actor, f"{t.faculty.full_name} teaches {t.subject.code} ({t.section.name}) by the Principal's choice "
             f"(not connected). Reason: {t.qualification_override.get('reason', '')}")
@@ -349,7 +350,7 @@ def generate(level, academic_year, grading_period, grade_level, actor, note=""):
     errors = run.conflicts.filter(severity="error").count()
     run.validation = {"errors": errors, "warnings": run.conflicts.filter(severity="warning").count(), "valid": errors == 0,
                       "unresolved": len(unresolved)}
-    run.stats = {"placed": len(assignments), "unresolved": len(unresolved), "sections": len(problem.sections)}
+    run.stats = {"placed": len(assignments), "unresolved": len(unresolved), "sections": len(problem.sections), "search": search_stats}
     run.save(update_fields=["validation", "stats"])
     return run, unresolved
 

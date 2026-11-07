@@ -155,6 +155,15 @@ class MySettingsTests(TestCase):
             self.assertEqual(r.status_code, 400, body)
             self.assertTrue(r.data["detail"])
 
+    def test_themes_are_default_and_royal(self):
+        from accounts.models import UserPreference
+        r = self.c.patch("/api/accounts/me/preferences/", {"theme": "royal"}, format="json")
+        self.assertEqual((r.status_code, r.data["preferences"]["theme"]), (200, "royal"))
+        self.assertEqual(dict(r.data["choices"]["theme"]), {"light": "Default", "royal": "Royal"})
+        self.assertEqual(self.c.patch("/api/accounts/me/preferences/", {"theme": "dark"}, format="json").status_code, 400)
+        UserPreference.objects.filter(user=self.fac).update(theme="dark")          # saved before Dark was replaced
+        self.assertEqual(self.c.get("/api/accounts/me/preferences/").data["preferences"]["theme"], "light")
+
     def test_role_school_id_and_department_cannot_be_changed(self):
         for body in ({"role": "registrar"}, {"school_id": "X1"}, {"department": "Nursing"}, {"username": "x"}):
             r = self.c.patch("/api/accounts/me/preferences/", body, format="json")
@@ -238,3 +247,22 @@ class MySettingsTests(TestCase):
         self.assertFalse(r.data["profile"]["has_picture"])
         self.assertEqual(self._files(), [])
         self.assertEqual(self.c.get("/api/accounts/me/picture/file/").status_code, 404)
+
+
+class SocialHumanitiesFacultyTests(TestCase):
+    def test_dry_run_saves_nothing_apply_creates_four_once(self):
+        from io import StringIO
+        from django.core.management import call_command
+        from faculty.models import FacultyProfile
+        call_command("add_cas_gened_faculty", "--social-humanities", stdout=StringIO())
+        self.assertFalse(User.objects.filter(last_name__in=["Valdez", "Aquino", "Mercado", "Domingo"]).exists())
+        call_command("add_cas_gened_faculty", "--social-humanities", "--apply", stdout=StringIO())
+        made = User.objects.filter(department="College of Arts and Science", last_name__in=["Valdez", "Aquino", "Mercado", "Domingo"])
+        self.assertEqual(made.count(), 4)
+        self.assertEqual(sorted(made.values_list("faculty_type", flat=True)), ["full_time", "full_time", "part_time", "part_time"])
+        for u in made:
+            self.assertTrue(u.must_change_password and u.check_password(u.school_id))
+            specs = sorted(FacultyProfile.objects.get(user=u).specializations.values_list("name", flat=True))
+            self.assertEqual(specs, ["Humanities", "Social Studies"])
+        call_command("add_cas_gened_faculty", "--social-humanities", "--apply", stdout=StringIO())   # re-run: nothing new
+        self.assertEqual(User.objects.filter(last_name__in=["Valdez", "Aquino", "Mercado", "Domingo"]).count(), 4)

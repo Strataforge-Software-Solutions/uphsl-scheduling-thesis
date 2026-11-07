@@ -96,12 +96,24 @@ test("a failed Professor list leaves every row usable and says so", async () => 
   expect(container.textContent).toContain("The professor list could not be loaded");
 });
 
-test("the Registrar's Gen Ed view renders (no Professor column)", async () => {
-  professorList = () => Promise.resolve({ data: OPTIONS });
+test("the Registrar's Gen Ed view has a Professor column for its Gen Ed subjects", async () => {
+  const GEN_ED = { ...OPTIONS, subjects: [{ subject_id: 14, code: "GEC105", qualified: [1], partner_id: null, blocks: [180], sections: 1, total_hours: 3,
+    no_qualified_reason: "", groups: { suggested: [{ id: 1, label: "Ang, V.", full_name: "Ang, V.", load_text: "11/24 hrs", after_generate_hours: null,
+      selectable: true, not_connected: false, tag: "Lowest load" }], qualified: [], other: [], other_shown: false, full_line: [], full_text: "",
+      approval_text: "", empty_text: "" } }] };
+  professorList = () => Promise.resolve({ data: GEN_ED });
+  API.post.mockResolvedValue({ data: { created_schedule_ids: [1], clashes: { total: 0, conflicts: [] }, workload_warnings: [], conflicts: [] } });
   await mount({ role: "registrar" });
   expect(rowText().some((t) => t.includes("GEC105"))).toBe(true);
-  expect(profSelect("GEC105")).toBeNull();
-  expect(API.get.mock.calls.some(([u]) => u === "/engine/generate/professor-options/")).toBe(false);
+  expect(API.get.mock.calls.some(([u]) => u === "/engine/generate/professor-options/")).toBe(true);
+  await pickProf("GEC105", 1);
+  expect(profSelect("GEC105").textContent).toContain("Ang, V.");
+  const gen = [...container.querySelectorAll("button")].find((b) => b.textContent === "Generate");
+  await act(async () => { gen.click(); });
+  await flush();
+  const body = API.post.mock.calls.find(([u]) => u === "/engine/generate-schedule/")[1];
+  expect(body.teacher_choices).toEqual({ 14: 1 });
+  expect(container.textContent).not.toContain("Not connected to this subject");      // no Assign anyway for Gen Ed
 });
 
 test("Generate: a skipped class opens the pop-up (no fix by itself; a skip for lack of qualified faculty offers the list)", async () => {

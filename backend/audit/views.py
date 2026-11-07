@@ -1,6 +1,6 @@
 """GET /api/audit/logs/ -- READ-ONLY list for the IT Admin. There is no endpoint that creates, changes or deletes a log.
 
-Filters: ?user=<id> (or "system"), ?action=create|update|delete|login|generate, ?date_from=YYYY-MM-DD, ?date_to=YYYY-MM-DD (Asia/Manila
+Filters: ?level=SHS|JHS (that school level's admin view), ?user=<id> (or "system"), ?action=create|update|delete|login|generate, ?date_from=YYYY-MM-DD, ?date_to=YYYY-MM-DD (Asia/Manila
 days, both included), ?entity=..., ?q=<text in the record / summary>, ?page=1 (50 per page).
 """
 import datetime
@@ -32,6 +32,17 @@ def audit_logs(request):
         return Response({"detail": "Only the IT Admin can see the audit logs."}, status=status.HTTP_403_FORBIDDEN)
     q = request.query_params
     qs = AuditLog.objects.all()
+    level = (q.get("level") or "").upper()
+    if level:
+        # one school level's admin view: its SHS/JHS records, and everything done by its own people (principal, teachers)
+        if level not in ("SHS", "JHS"):
+            return Response({"detail": "level must be SHS or JHS."}, status=status.HTTP_400_BAD_REQUEST)
+        from django.db.models import Q
+        from accounts.models import User
+        people = list(User.objects.filter(school_level=level).values_list("id", flat=True))
+        qs = qs.filter((Q(entity__startswith="SHS/JHS") & (Q(new_values__level=level) | Q(old_values__level=level)))
+                       | Q(user_id__in=people))
+    scoped = qs
     if q.get("user") == "system":
         qs = qs.filter(user__isnull=True)
     elif q.get("user"):
@@ -63,7 +74,7 @@ def audit_logs(request):
     total = qs.count()
     rows = qs[(page - 1) * PAGE_SIZE: page * PAGE_SIZE]
     users = [{"id": uid, "label": label or f"User #{uid}"} for uid, label in
-             AuditLog.objects.filter(user__isnull=False).order_by("user_label").values_list("user_id", "user_label").distinct()]
+             scoped.filter(user__isnull=False).order_by("user_label").values_list("user_id", "user_label").distinct()]
     seen, user_list = set(), []
     for u in users:                         # one entry per account (the newest name is enough for the filter)
         if u["id"] not in seen:
@@ -75,5 +86,5 @@ def audit_logs(request):
                      "action": r.action, "entity": r.entity, "entity_id": r.entity_id, "summary": r.summary,
                      "old_values": r.old_values, "new_values": r.new_values, "ip_address": r.ip_address} for r in rows],
         "users": user_list, "actions": [{"value": k, "label": v} for k, v in AuditLog.ACTIONS],
-        "entities": sorted(set(AuditLog.objects.values_list("entity", flat=True).distinct())),
+        "entities": sorted(set(scoped.values_list("entity", flat=True).distinct())),
     })

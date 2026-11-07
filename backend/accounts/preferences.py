@@ -27,7 +27,7 @@ from .models import UserPreference
 User = get_user_model()
 
 # ---------------------------------------------------------------- allowed values
-THEMES = [("light", "Light"), ("dark", "Dark"), ("system", "Follow device")]
+THEMES = [("light", "Default"), ("royal", "Royal")]          # "light" is the stored value of the Default theme
 TEXT_SIZES = [("small", "Small"), ("medium", "Medium"), ("large", "Large")]
 DENSITIES = [("comfortable", "Comfortable"), ("compact", "Compact")]
 MOTION = [("system", "Follow device"), ("on", "On"), ("off", "Off")]
@@ -133,6 +133,8 @@ def _out(user, pref):
     landing = pref.landing_page if pref.landing_page in [k for k, _ in allowed] else ""   # a page the role lost -> normal home
     data = {f: getattr(pref, f) for f in PREF_FIELDS}
     data["landing_page"] = landing
+    if data["theme"] not in dict(THEMES):
+        data["theme"] = "light"                  # a theme that is no longer offered (Dark, Follow device) reads as Default
     return {
         "profile": {
             "first_name": user.first_name, "last_name": user.last_name, "email": user.email or "", "phone": pref.phone,

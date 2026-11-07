@@ -226,8 +226,8 @@ function AppearanceSection({ headingRef }) {
     <Section id="appearance" title="Appearance" headingRef={headingRef}
       intro="How the pages look on this screen. Printing and the PDF files always use the fixed print layout.">
       <Choice legend="Theme" name="theme" value={s.form.theme} onChange={(v) => s.set("theme", v)}
-        options={ch.theme || [["light", "Light"], ["dark", "Dark"], ["system", "Follow device"]]}
-        help="Follow device uses your computer or phone's light / dark setting. Printing always uses the light layout." />
+        options={ch.theme || [["light", "Default"], ["royal", "Royal"]]}
+        help="Default: UPHSL navy and white. Royal: royal navy, gold and cream. Printing always uses the standard print layout." />
       <Choice legend="Text size" name="text_size" value={s.form.text_size} onChange={(v) => s.set("text_size", v)}
         options={ch.text_size || [["small", "Small"], ["medium", "Medium"], ["large", "Large"]]} />
       <Choice legend="Table density" name="table_density" value={s.form.table_density} onChange={(v) => s.set("table_density", v)}

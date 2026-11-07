@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { statusText } from "./BasicEdAvailability";
 import API from "../services/api";
 import { reportLoadError } from "../services/loadError";
 import Badge from "./Badge";
@@ -166,7 +167,6 @@ export function FacultyTab({ level }) {
   const faculty = useList(level, "faculty/");
   const [strands, setStrands] = useState([]);
   const [edit, setEdit] = useState(null);
-  const [avail, setAvail] = useState(null);
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
   const [q, setQ] = useState("");
@@ -207,57 +207,19 @@ export function FacultyTab({ level }) {
             <td style={TD}>{f.employee_id}</td><td style={TD}>{f.department || "—"}</td>
             <td style={TD}>{f.specializations || "—"}</td>
             <td style={TD}>{f.weekly_hours} / {f.max_weekly_hours} h</td>
-            <td style={TD}>{f.availability.length ? `${f.availability.length} rule(s)` : "Anytime"}</td>
+            <td style={TD}>{statusText({ status: f.availability_status, submitted_at: f.availability_submitted_at })}</td>
             <td style={TD}>{f.is_active ? <Badge tone="success">Active</Badge> : <Badge>Inactive</Badge>}</td>
             <td style={TD}><button style={btn} onClick={() => { setErr(""); setEdit({ ...f, strand: f.strand || "" }); }}>Edit</button>{" "}
-              <button style={btn} onClick={() => setAvail(f)}>Availability</button></td>
+</td>
           </tr>
         ))}
       </Table>
       {edit && <FormModal title={edit.id ? "Edit teacher" : "Add teacher"} fields={fields} initial={edit} onSave={save} onClose={() => setEdit(null)} saving={saving} error={err} />}
-      {avail && <AvailabilityModal level={level} faculty={avail} onClose={() => { setAvail(null); faculty.load(); }} />}
     </div>
   );
 }
 
-export function AvailabilityModal({ level, faculty, onClose, selfService }) {
-  const [rows, setRows] = useState(faculty.availability.map((a) => ({ day: a.day, start_time: hhmm(a.start_time), end_time: hhmm(a.end_time), available: a.available })));
-  const [err, setErr] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [done, setDone] = useState("");
-  const add = () => setRows([...rows, { day: "Mon", start_time: "07:00", end_time: "12:00", available: false }]);
-  const save = async () => {
-    setErr("");
-    for (const r of rows) if (r.end_time <= r.start_time) return setErr("Each window must end after it starts.");
-    const keys = rows.map((r) => `${r.day}|${r.start_time}|${r.end_time}|${r.available}`);
-    if (new Set(keys).size !== keys.length) return setErr("The same availability window is listed twice. Remove the duplicate.");
-    setSaving(true);
-    try {
-      if (selfService) await API.post("/basic-ed/my/availability/", { rows }); else await be.post(level, `faculty/${faculty.id}/availability/`, { rows });
-      setDone("Saved."); if (!selfService) setTimeout(onClose, 500);
-    } catch (e) { setErr(errText(e)); } finally { setSaving(false); }
-  };
-  return (
-    <Modal title={`Availability${faculty.full_name ? " — " + faculty.full_name : ""}`} onClose={onClose} width={640}>
-      <Notice>No rows = available at any time. <b>Not available</b> rows block that window. If you add <b>Available only</b> rows, the teacher is scheduled only inside them.</Notice>
-      {err && <Notice tone="error">{err}</Notice>}{done && <Notice tone="ok">{done}</Notice>}
-      {rows.map((r, i) => (
-        <div key={i} style={{ display: "flex", gap: "8px", marginBottom: "8px", flexWrap: "wrap" }}>
-          <select style={inputStyle} value={r.available ? "yes" : "no"} onChange={(e) => setRows(rows.map((x, j) => j === i ? { ...x, available: e.target.value === "yes" } : x))}>
-            <option value="no">Not available</option><option value="yes">Available only</option></select>
-          <select style={inputStyle} value={r.day} onChange={(e) => setRows(rows.map((x, j) => j === i ? { ...x, day: e.target.value } : x))}>{DAYS.map((d) => <option key={d[0]} value={d[0]}>{d[1]}</option>)}</select>
-          <input style={inputStyle} type="time" value={r.start_time} onChange={(e) => setRows(rows.map((x, j) => j === i ? { ...x, start_time: e.target.value } : x))} />
-          <input style={inputStyle} type="time" value={r.end_time} onChange={(e) => setRows(rows.map((x, j) => j === i ? { ...x, end_time: e.target.value } : x))} />
-          <button style={btn} onClick={() => setRows(rows.filter((_, j) => j !== i))}>Remove</button>
-        </div>
-      ))}
-      <div style={{ display: "flex", justifyContent: "space-between", marginTop: "14px" }}>
-        <button style={btn} onClick={add}>Add window</button>
-        <button style={btnPrimary} disabled={saving} onClick={save}>{saving ? "Saving…" : "Save availability"}</button>
-      </div>
-    </Modal>
-  );
-}
+/* (The old availability editor was removed: teachers submit availability themselves -- see BasicEdAvailability.js.) */
 
 /* ---------- Curriculum ---------- */
 const CATS = [["core", "Core"], ["applied", "Applied"], ["specialized", "Specialized"], ["elective", "Elective"], ["learning_area", "Learning area"], ["guidance", "Homeroom / guidance"]];

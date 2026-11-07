@@ -35,5 +35,9 @@ urlpatterns = [
     path("entries/<int:pk>/", v.entry_edit),
     path("my/schedule/", v.my_schedule),
     path("my/availability/", v.my_availability),
+    path("availability/", v.availability_overview),
+    path("availability/remind/", v.availability_remind),
+    path("availability/<int:fid>/", v.availability_detail),
+    path("availability/<int:fid>/return/", v.availability_return),
     path("", include(router.urls)),
 ]

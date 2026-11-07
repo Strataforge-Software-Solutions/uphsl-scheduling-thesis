@@ -71,7 +71,12 @@ def subject_groups(user, subject, sections, semester, replaced, window=None, day
                     exclude_ids=replaced, need_hours=weekly_hours(subject) * n, after_label=True)
 
 
-def options(program, year_level, semester, user=None):
+def _all_teachers():
+    from faculty.models import FacultyProfile
+    return list(FacultyProfile.objects.filter(user__is_active=True).select_related("user").prefetch_related("specializations"))
+
+
+def options(program, year_level, semester, user=None, kind="major"):
     """Read-only. Qualified teachers of the program's college per major subject, with current load (the Workload page number, plus
     the hours left after Generate replaces this scope's drafts) and the three Professor groups per subject (engine.faculty_groups)."""
     from curriculum.models import Subject
@@ -80,12 +85,14 @@ def options(program, year_level, semester, user=None):
 
     dept = program.department
     sections = list(Section.objects.filter(program=program, year_level=year_level, semester=semester).select_related("program"))
-    subjects = list(Subject.objects.filter(program=program, year_level=year_level, semester=semester, classification="major")
+    subjects = list(Subject.objects.filter(program=program, year_level=year_level, semester=semester, classification=kind)
                     .select_related("field", "program").order_by("code"))
-    scope = Schedule.objects.filter(section__in=sections, subject__classification="major")
+    scope = Schedule.objects.filter(section__in=sections, subject__classification=kind)
     replaced = list(scope.filter(status="draft", is_manual_override=False).values_list("pk", flat=True))
     locked = set(scope.filter(is_manual_override=True).values_list("section_id", "subject_id"))
-    teachers = _college_teachers(dept)
+    # program subjects: the college's own faculty; Gen Ed: every active teacher (the Gen Ed rule decides who qualifies: CAS faculty of the
+    # subject's area, or a teacher of another department with an explicit specialization for it)
+    teachers = _college_teachers(dept) if kind == "major" else _all_teachers()
     spec = {t.id: {f.id for f in t.specializations.all()} for t in teachers}
     lim = limits_readonly()
     hrs = hours_by_teacher_term([t.id for t in teachers], exclude_schedule_ids=replaced)
@@ -146,8 +153,9 @@ def validate(user, subjects_by_section, raw, school_year, semester, windows=None
     if not picked:
         return "", {}, {}
     is_dean = getattr(user, "role", "") == "faculty" and getattr(user, "faculty_type", "") == "dean"
-    if not is_dean:
-        return ("Only a Dean chooses professors here (for the program subjects of their own college). "
+    is_registrar = getattr(user, "role", "") == "registrar"
+    if not (is_dean or is_registrar):
+        return ("Only a Dean (program subjects of their own college) or the Registrar (Gen Ed subjects) chooses professors here. "
                 "Leave the Professor on Automatic."), {}, {}
     from faculty.models import FacultyProfile
     from .models import TimeSlot
@@ -162,8 +170,11 @@ def validate(user, subjects_by_section, raw, school_year, semester, windows=None
         sub = subs.get(sid)
         if sub is None:
             continue                                   # not part of this run (e.g. locked by hand): nothing to apply
-        if sub.classification == "minor":
+        if sub.classification == "minor" and not is_registrar:
             return (f"{sub.code} is a Gen Ed (minor) subject: its professor is chosen by the Registrar's generation, not here. "
+                    "Leave it on Automatic."), {}, {}
+        if sub.classification != "minor" and not is_dean:
+            return (f"{sub.code} is a program subject: its professor is chosen by the Dean of the college. "
                     "Leave it on Automatic."), {}, {}
         sec = secs[sid]
         dept = sec.program.department
@@ -171,11 +182,11 @@ def validate(user, subjects_by_section, raw, school_year, semester, windows=None
         if p is None or not p.user.is_active:
             return f"The professor chosen for {sub.code} does not exist or is not active.", {}, {}
         name = p.user.get_full_name().strip() or p.user.username
-        if dept not in (user.departments or []):
+        if is_dean and dept not in (user.departments or []):
             return (f"{sub.code} belongs to {dept}, which is not your department. Leave it on Automatic."), {}, {}
         from .teacher_scope import teacher_allowed           # the one department + qualification rule (also used by Edit -> Save)
         _why = teacher_allowed(user, p, sub, sec)
-        if _why and str(sid) in wants_override:
+        if _why and str(sid) in wants_override and is_dean:          # Assign anyway: program subjects only, never Gen Ed
             # a manual Assign anyway: only the qualification check is skipped, and only after every other rule is re-checked now
             from . import faculty_groups as fg
             secs_of = [s_ for s_, lst in subjects_by_section.items() if sub in lst]

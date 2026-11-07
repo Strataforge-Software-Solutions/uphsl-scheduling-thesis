@@ -5,8 +5,8 @@ import TopBar from "./TopBar";
 import PageHeader from "./PageHeader";
 import Badge from "./Badge";
 import { StatTile } from "./Charts";
-import { errText, cardStyle, btn, Notice, DAYS, hhmm, ampm } from "./basicEdUi";
-import { AvailabilityModal } from "./BasicEdData";
+import { errText, cardStyle, Notice, DAYS, hhmm, ampm } from "./basicEdUi";
+import { MyAvailability } from "./BasicEdAvailability";
 import "./DashboardTheme.css";
 import { OverrideBadge } from "./AssignAnywayDialog";
 import { useLandingTab } from "../services/preferences";
@@ -16,7 +16,6 @@ function BasicEdTeacher() {
   const user = getCurrentUser();
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
-  const [avail, setAvail] = useState(false);
   const landing = useLandingTab([{ key: "schedule" }, { key: "profile" }], "schedule");
   const [tab, setTab] = useState(landing);
   const load = () => API.get("/basic-ed/my/schedule/").then((r) => setData(r.data)).catch((e) => setError(errText(e)));
@@ -62,14 +61,12 @@ function BasicEdTeacher() {
               <p style={{ fontSize: "14px", lineHeight: 1.8 }}>Employee ID: <b>{p.employee_id}</b><br />Department: <b>{p.department || "—"}</b><br />Specializations: <b>{p.specializations || "—"}</b><br />
                 Qualifications: <b>{p.qualifications || "—"}</b><br />Maximum teaching load: <b>{p.max_weekly_hours} hours / week</b><br />Advisory section(s): <b>{data.advised.join(", ") || "—"}</b><br />
                 Status: {p.is_active ? <Badge tone="success">Active</Badge> : <Badge>Inactive</Badge>}</p>
-              <p style={{ fontSize: "13px", color: "#6b7280" }}>{p.availability.length ? "Your availability rules:" : "You are marked available at any time."}</p>
-              <ul style={{ fontSize: "13px" }}>{p.availability.map((a) => <li key={a.id}>{a.available ? "Available only" : "Not available"}: {a.day} {ampm(hhmm(a.start_time))}–{ampm(hhmm(a.end_time))}</li>)}</ul>
-              <button style={btn} onClick={() => setAvail(true)}>Update my availability</button>
+
               <p style={{ fontSize: "12px", color: "#6b7280", marginTop: "14px" }}>You can't edit approved schedules. Ask the principal for a change.</p>
             </div>)}
+          {p && tab === "profile" && <MyAvailability />}
         </div>
       </div>
-      {avail && <AvailabilityModal selfService faculty={p} onClose={() => { setAvail(false); load(); }} />}
     </div>
   );
 }

@@ -134,7 +134,8 @@ class CurriculumSubjectSerializer(serializers.ModelSerializer):
 class AvailabilitySerializer(serializers.ModelSerializer):
     class Meta:
         model = m.Availability
-        fields = ("id", "day", "start_time", "end_time", "available")
+        fields = ("id", "day", "start_time", "end_time", "available", "preference")
+        read_only_fields = ("available",)
 
     def validate(self, data):
         if data["end_time"] <= data["start_time"]:
@@ -159,8 +160,8 @@ class FacultySerializer(serializers.ModelSerializer):
         model = m.Faculty
         fields = ("id", "level", "employee_id", "first_name", "last_name", "username", "full_name", "department", "strand", "strand_code",
                   "specializations", "qualifications", "max_weekly_hours", "preferred_start", "preferred_end", "is_active",
-                  "account_active", "availability", "weekly_hours")
-        read_only_fields = ("level",)
+                  "account_active", "availability", "weekly_hours", "availability_status", "availability_submitted_at")
+        read_only_fields = ("level", "availability_status", "availability_submitted_at")
 
     def create(self, validated):
         u = validated.pop("user")

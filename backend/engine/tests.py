@@ -1786,14 +1786,16 @@ class ProfessorChoiceTests(Base):
         self.assertEqual(d["teachers"][t0.id]["max_hours"], 24)
         self.assertEqual(next(x for x in d["subjects"] if x["code"] == "TST101")["sections"], 1)   # A is locked for TST101
 
-    def test_options_endpoint_writes_nothing_and_is_dean_only(self):
+    def test_options_endpoint_writes_nothing_and_is_dean_or_registrar_only(self):
         from django.db import connection
         from django.test.utils import CaptureQueriesContext
         with CaptureQueriesContext(connection) as ctx:
             self.assertEqual(self.opts().status_code, 200)
         writes = [q["sql"] for q in ctx.captured_queries if q["sql"].split()[0].upper() in ("INSERT", "UPDATE", "DELETE")]
         self.assertEqual(writes, [])
-        self.assertEqual(self.opts(self.registrar).status_code, 403)
+        reg = self.opts(self.registrar)                                      # the Registrar: Gen Ed subjects only (none here)
+        self.assertEqual(reg.status_code, 200)
+        self.assertFalse([x for x in reg.data["subjects"] if x["code"].startswith("TST")])
         self.assertEqual(self.opts(self.teachers[0].user).status_code, 403)
         nurse_dean = User.objects.create(username="DN", school_id="DN", role="faculty", faculty_type="dean", department="Nursing")
         self.assertEqual(self.opts(nurse_dean).status_code, 403)
@@ -1859,12 +1861,12 @@ class ProfessorChoiceTests(Base):
         self.assertEqual(r.status_code, 400, r.data)
         self.assertIn("no available teaching time", r.data["detail"])
 
-    def test_registrar_cannot_choose_professors(self):
+    def test_registrar_cannot_choose_an_unqualified_gen_ed_professor(self):
         gsub = Subject.objects.create(code="GE9", title="Gen Ed", program=self.prog, lec_units=3, lab_units=0,
                                       year_level="1st Year", semester="1st Sem", classification="minor")
         r = self.gen(user=self.registrar, teacher_choices={str(gsub.id): self.teachers[0].id})
-        self.assertEqual(r.status_code, 400, r.data)
-        self.assertIn("Only a Dean", r.data["detail"])
+        self.assertEqual(r.status_code, 400, r.data)                         # a computing teacher is not qualified for this Gen Ed
+        self.assertIn("not qualified", r.data["detail"])
 
     def test_lecture_and_lab_keep_one_professor(self):
         lec = Subject.objects.create(code="LL1", title="Programming", program=self.prog, lec_units=2, lab_units=0,
@@ -3774,3 +3776,61 @@ class TeacherNameIsShownNotTheIdTests(Base):
         self.assertTrue(mine)
         self.assertEqual(mine[0]["teacher_name"], "Teach Er1")
         self.assertNotIn(t.user.username, mine[0]["teacher_name"])
+
+
+class RegistrarGenEdProfessorTests(Base):
+    """The Registrar chooses a professor for each Gen Ed subject in the Generate dialog (the Gen Ed rule decides who qualifies)."""
+
+    def setUp(self):
+        self.ges = Subject.objects.create(code="GE950", title="Understanding the Self", program=self.prog, lec_units=3, lab_units=0,
+                                          year_level="1st Year", semester="1st Sem", classification="minor")
+        self.psy = make_cas_teacher(70)
+        self.soc = make_cas_teacher(71)
+        self.soc.specializations.set([AcademicField.objects.get_or_create(name=n)[0] for n in ("Filipino", "Mathematics", "Social Science")])
+        self.eng = make_cas_teacher(72)
+        self.eng.specializations.set([AcademicField.objects.get_or_create(name="English")[0]])
+
+    def _opts(self, user):
+        self.client.force_authenticate(user)
+        return self.client.get("/api/engine/generate/professor-options/",
+                               {"program_id": self.prog.id, "year_level": "1st Year", "semester": "1st Sem"})
+
+    def test_registrar_gets_gen_ed_subjects_with_groups_and_dean_still_gets_majors(self):
+        r = self._opts(self.registrar)
+        self.assertEqual(r.status_code, 200, r.data)
+        codes = [x["code"] for x in r.data["subjects"]]
+        self.assertEqual(codes, ["GE950"])                                    # Gen Ed only
+        row = r.data["subjects"][0]
+        listed = {o["id"] for o in row["groups"]["suggested"] + row["groups"]["qualified"]}
+        self.assertTrue({self.psy.id, self.soc.id} <= listed)                  # Psychology and Social Science both qualify
+        self.assertNotIn(self.eng.id, listed)                                  # English only: not for Understanding the Self
+        self.assertFalse(row["groups"]["other_shown"])                         # no Assign anyway for Gen Ed
+        d = self._opts(self.dean)
+        self.assertNotIn("GE950", [x["code"] for x in d.data["subjects"]])     # the Dean: program subjects only
+
+    def test_registrar_generate_uses_the_chosen_professor_and_refuses_an_unqualified_one(self):
+        r = self.gen(self.registrar, teacher_choices={str(self.ges.id): self.eng.id})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("not qualified", r.data["detail"])
+        r = self.gen(self.registrar, teacher_choices={str(self.ges.id): self.soc.id})
+        self.assertIn(r.status_code, (200, 201), r.data)
+        rows = Schedule.objects.filter(subject=self.ges)
+        self.assertTrue(rows.exists())
+        self.assertEqual({x.teacher_id for x in rows}, {self.soc.id})
+        # a Dean's Generate covers program subjects only: a choice for a Gen Ed subject is ignored and the Gen Ed classes stay as they are
+        before = sorted(Schedule.objects.filter(subject=self.ges).values_list("id", "teacher_id"))
+        r = self.gen(teacher_choices={str(self.ges.id): self.psy.id})
+        self.assertIn(r.status_code, (200, 201), r.data)
+        self.assertEqual(sorted(Schedule.objects.filter(subject=self.ges).values_list("id", "teacher_id")), before)
+        # and the Registrar's Generate covers Gen Ed only: a choice for a program subject places nothing there
+        major = Subject.objects.get(code="TST100")
+        majors_before = Schedule.objects.filter(subject=major).count()
+        r = self.gen(self.registrar, teacher_choices={str(major.id): self.teachers[0].id})
+        self.assertIn(r.status_code, (200, 201), r.data)
+        self.assertEqual(Schedule.objects.filter(subject=major).count(), majors_before)
+
+    def test_social_science_qualifies_for_understanding_the_self(self):
+        from engine.qualification import is_qualified
+        spec = {f.id for f in self.soc.specializations.all()}
+        self.assertTrue(is_qualified(self.soc, self.ges, self.sec[0], spec))
+        self.assertFalse(is_qualified(self.eng, self.ges, self.sec[0], {f.id for f in self.eng.specializations.all()}))

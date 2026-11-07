@@ -479,3 +479,319 @@ class PrincipalAssignAnywayTests(TestCase):
         self.assertTrue(run.events.filter(action="assigned_anyway").exists())
         others = run.entries.exclude(section=self.sec, subject=self.sub).filter(teacher=self.unq)
         self.assertFalse(others.filter(qualification_override__isnull=False).exists())
+
+
+# ---------------------------------------------------------------- Part A: backtracking search (basic_ed/search.py)
+def _problem(level, ay, gp, grade):
+    from basic_ed.engine import Problem
+    from basic_ed.services import core_anchor
+    P = Problem(level, ay, gp, grade)
+    P.anchor = core_anchor(level, ay, gp, grade)
+    return P
+
+
+class GreedyTrapTests(TestCase):
+    """A small timetable the OLD greedy cannot finish but the backtracking search can (thesis evidence)."""
+
+    def setUp(self):
+        from accounts.models import User
+        from basic_ed.engine import build_grid, to_time
+        call_command("seed_basic_ed", stdout=StringIO())
+        m.Faculty.objects.filter(level="JHS").update(is_active=False)
+        self.ay = m.AcademicYear.objects.create(label="2099-2100")
+        cfg = m.SchoolLevelConfig.objects.get(level="JHS")
+        grid = build_grid(cfg, m.GradeWindow.objects.get(level="JHS", grade_level=7))
+        s0, e0 = to_time(grid[0][0]), to_time(grid[0][1])
+        self.sec = m.Section.objects.create(level="JHS", academic_year=self.ay, grade_level=7, name="7-Trap", student_count=30)
+        for code, spec in (("TMATH", "TrapMath"), ("TENG", "TrapEng")):
+            m.CurriculumSubject.objects.create(level="JHS", academic_year=self.ay, grade_level=7, code=code, name=code, category="core",
+                                               sessions_per_week=2, specialization=spec, required_room_type="classroom")
+
+        def fac(name, spec, days, start=s0, end=e0):
+            u = User.objects.create(username=name, role="teacher", school_level="JHS", school_id=name, first_name=name, last_name="T")
+            f = m.Faculty.objects.create(user=u, level="JHS", employee_id=name, specializations=spec)
+            for d in days:
+                m.Availability.objects.create(faculty=f, day=d, start_time=start, end_time=end, available=True)
+            return f
+        self.a = fac("trapA", "TrapMath", ["Mon", "Tue", "Wed", "Thu", "Fri"])     # Math: free at the first period every day
+        self.b = fac("trapB", "TrapEng", ["Mon", "Tue"])                           # English: ONLY Monday and Tuesday, first period
+        fac("trapC", "TrapEng", ["Mon"], start=to_time(5 * 60), end=to_time(6 * 60))   # English too, but never free in school hours
+
+    def test_greedy_fails_and_the_search_places_everything(self):
+        from basic_ed.checker import check
+        from basic_ed.engine import solve, solve_greedy
+        P = _problem("JHS", self.ay, 1, 7)
+        old, old_un = solve_greedy(P, seed=7)
+        self.assertEqual(len(old), 2)                                         # greedy gives Math Mon+Tue, then English has no time
+        self.assertEqual([u["subject"].code for u in old_un], ["TENG"])
+        stats = {}
+        new, new_un = solve(_problem("JHS", self.ay, 1, 7), seed=7, stats=stats)
+        self.assertEqual((len(new), new_un), (4, []))
+        self.assertEqual(check(P, new), [])
+        eng = sorted(a["day"] for a in new if a["subject"].code == "TENG")
+        self.assertEqual(eng, ["Mon", "Tue"])                                 # English took the only times its teacher has
+        self.assertEqual(stats["placed"], 4)
+
+    def test_reasons_are_plain(self):
+        from basic_ed.engine import solve
+        m.Availability.objects.filter(faculty=self.b).delete()
+        m.Availability.objects.create(faculty=self.b, day="Mon", start_time=dtime(5), end_time=dtime(6), available=True)
+        _a, un = solve(_problem("JHS", self.ay, 1, 7), seed=7)
+        msg = next(u["message"] for u in un if u["subject"].code == "TENG")
+        self.assertIn("available time does not match the grade's daily schedule", msg)
+        m.Faculty.objects.filter(pk=self.a.pk).update(max_weekly_hours=1)
+        _a, un = solve(_problem("JHS", self.ay, 1, 7), seed=7)
+        msg = next(u["message"] for u in un if u["subject"].code == "TMATH")
+        self.assertIn("weekly limit", msg)
+        self.assertIn("trapA", msg)
+
+
+class SearchOnSampleDataTests(TestCase):
+    """The school's SHS / JHS sample data (seed_basic_ed + setup_basic_ed_staff): every timetable keeps every hard rule, the result is
+    reproducible with the same seed, and the time limit is respected."""
+
+    @classmethod
+    def setUpTestData(cls):
+        call_command("seed_basic_ed", stdout=StringIO())
+        call_command("setup_basic_ed_staff", stdout=StringIO())
+        cls.ay = m.AcademicYear.objects.get(label="2026-2027")
+
+    def test_no_hard_rule_is_broken(self):
+        from basic_ed.checker import check
+        from basic_ed.engine import solve
+        for level, grade in (("SHS", 11), ("SHS", 12), ("JHS", 7), ("JHS", 10)):
+            P = _problem(level, self.ay, 1, grade)
+            out, _un = solve(P, seed=grade * 7 + 1)
+            self.assertTrue(out, (level, grade))
+            self.assertEqual(check(P, out), [], (level, grade))
+
+    def test_same_seed_same_timetable(self):
+        from basic_ed.engine import solve
+        def key(res):
+            return sorted((a["section"].id, a["subject"].id, a["teacher"].id, a["room"].id, a["day"], a["start"]) for a in res[0])
+        one = solve(_problem("SHS", self.ay, 1, 11), seed=78)
+        two = solve(_problem("SHS", self.ay, 1, 11), seed=78)
+        self.assertEqual(key(one), key(two))
+
+    def test_time_limit_is_respected(self):
+        import time as _t
+        from basic_ed.search import solve
+        stats = {}
+        t0 = _t.monotonic()
+        solve(_problem("SHS", self.ay, 1, 11), seed=1, stats=stats, time_seconds=0.3, max_steps=10_000_000)
+        self.assertLess(_t.monotonic() - t0, 0.3 + 3.0)                    # + setting the problem up, which is outside the search
+        self.assertLessEqual(stats["seconds"], 0.3 + 3.0)
+
+    def test_grade_11_whole_year_subjects_repeat_or_are_reported(self):
+        from accounts.models import User
+        from basic_ed.checker import check
+        from basic_ed.engine import solve
+        from basic_ed.services import generate
+        actor = User.objects.create(username="pA", role="principal", school_level="SHS", school_id="PA1")
+        generate("SHS", self.ay, 1, 11, actor)                              # Term 1 exists: Term 2 must repeat its whole-year subjects
+        P = _problem("SHS", self.ay, 2, 11)
+        self.assertTrue(P.anchor)
+        out, _un = solve(P, seed=79)
+        self.assertEqual(check(P, out), [])                                # includes "repeats the other term exactly"
+        # block one repeated time: that subject is reported, never placed at new times
+        e = P.anchor[0]
+        P2 = _problem("SHS", self.ay, 2, 11)
+        P2.busy_room[P2.canon(e.room_id)].add((e.day, e.start_time.hour * 60 + e.start_time.minute))
+        out2, un2 = solve(P2, seed=79)
+        hit = [u for u in un2 if u["kind"] == "anchor_conflict" and u["subject"].id == e.subject_id and u["section"].id == e.section_id]
+        self.assertTrue(hit)
+        self.assertIn("cannot repeat it at the same day and time", hit[0]["message"])
+        self.assertFalse([a for a in out2 if a["subject"].id == e.subject_id and a["section"].id == e.section_id])
+
+
+# ---------------------------------------------------------------- Part B: teacher submits availability, Principal views it
+class AvailabilityFlowTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        call_command("seed_basic_ed", stdout=StringIO())
+        call_command("setup_basic_ed_staff", stdout=StringIO())
+        cls.ay = m.AcademicYear.objects.get(label="2026-2027")
+
+    def setUp(self):
+        from accounts.models import User
+        self.c = APIClient()
+        self.p_shs = User.objects.get(username="PrincipalSHS")
+        self.p_jhs = User.objects.get(username="PrincipalJHS")
+        self.shs = list(m.Faculty.objects.filter(level="SHS").select_related("user").order_by("id"))
+        self.jhs = list(m.Faculty.objects.filter(level="JHS").select_related("user").order_by("id"))
+        self.registrar = User.objects.create(username="regX", role="registrar", school_id="RX1")
+        self.admin = User.objects.create(username="admX", role="admin", school_id="AX1")
+
+    def _grid(self, fac):
+        self.c.force_authenticate(fac.user)
+        return self.c.get("/api/basic-ed/my/availability/").data
+
+    def _submit(self, fac, choose):
+        """choose(day, row) -> preference; every class-period cell of the teacher's grid is sent."""
+        g = self._grid(fac)["grid"]
+        cells = [{"day": d["key"], "start": r["start"], "preference": choose(d["key"], r)} for d in g["days"] for r in g["rows"]
+                 if r["kind"] == "period"]
+        self.c.force_authenticate(fac.user)
+        return self.c.post("/api/basic-ed/my/availability/", {"cells": cells}, format="json")
+
+    # ---- old rows / migration
+    def test_old_rows_load_as_available_unavailable_and_submitted(self):
+        import importlib
+        from django.apps import apps
+        mig = importlib.import_module("basic_ed.migrations.0005_availability_tiers_and_submission")
+        f = self.shs[0]
+        m.Availability.objects.filter(faculty=f).delete()
+        a1 = m.Availability.objects.create(faculty=f, day="Mon", start_time=dtime(7), end_time=dtime(9), available=True)
+        a2 = m.Availability.objects.create(faculty=f, day="Tue", start_time=dtime(7), end_time=dtime(9), available=False)
+        m.Availability.objects.filter(pk__in=[a1.pk, a2.pk]).update(preference="available")      # as before the migration
+        m.Faculty.objects.filter(pk=f.pk).update(availability_status="not_submitted", availability_submitted_at=None)
+        mig.forward(apps, None)
+        self.assertEqual(m.Availability.objects.get(pk=a1.pk).preference, "available")
+        self.assertEqual(m.Availability.objects.get(pk=a2.pk).preference, "unavailable")
+        f.refresh_from_db()
+        self.assertEqual(f.availability_status, "submitted")
+        self.assertIsNotNone(f.availability_submitted_at)
+        # an older caller that only says available=False still means Unavailable
+        a3 = m.Availability.objects.create(faculty=f, day="Wed", start_time=dtime(7), end_time=dtime(8), available=False)
+        self.assertEqual(a3.preference, "unavailable")
+
+    # ---- permissions
+    def test_who_may_read_and_write(self):
+        t = self.shs[1]
+        r = self._submit(t, lambda d, r: "available")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data["status"], "submitted")
+        # a teacher cannot write anyone else's (the only write is their own page), nor use the Principal's pages
+        self.c.force_authenticate(t.user)
+        self.assertEqual(self.c.post(f"/api/basic-ed/faculty/{self.shs[2].id}/availability/", {"rows": []}, format="json").status_code, 403)
+        self.assertEqual(self.c.get("/api/basic-ed/availability/").status_code, 403)
+        # the Principal cannot write a teacher's availability
+        self.c.force_authenticate(self.p_shs)
+        r = self.c.post(f"/api/basic-ed/faculty/{t.id}/availability/?level=SHS", {"rows": []}, format="json")
+        self.assertEqual(r.status_code, 403)
+        self.assertIn("submitted by each teacher", str(r.data))
+        self.assertEqual(self.c.post("/api/basic-ed/my/availability/", {"cells": []}, format="json").status_code, 403)
+        # the Principal sees only their own level
+        ids = {x["faculty_id"] for x in self.c.get("/api/basic-ed/availability/").data["teachers"]}
+        self.assertTrue(ids and ids <= {f.id for f in self.shs})
+        self.assertNotEqual(self.c.get(f"/api/basic-ed/availability/{self.jhs[0].id}/").status_code, 200)
+        self.c.force_authenticate(self.p_jhs)
+        self.assertNotEqual(self.c.get(f"/api/basic-ed/availability/{t.id}/").status_code, 200)
+        # Registrar: no access; IT Admin: read only
+        self.c.force_authenticate(self.registrar)
+        self.assertEqual(self.c.get("/api/basic-ed/availability/?level=SHS").status_code, 403)
+        self.c.force_authenticate(self.admin)
+        self.assertEqual(self.c.get("/api/basic-ed/availability/?level=SHS").status_code, 200)
+        self.assertEqual(self.c.post(f"/api/basic-ed/availability/{t.id}/return/?level=SHS", {"note": "fix it"}, format="json").status_code, 403)
+        self.assertEqual(self.c.post("/api/basic-ed/availability/remind/?level=SHS", {}, format="json").status_code, 403)
+
+    def test_submit_saves_tiers_rejects_breaks_and_is_audited(self):
+        from audit.models import AuditLog
+        t = self.shs[1]
+        g = self._grid(t)["grid"]
+        brk = next((r for r in g["rows"] if r["kind"] == "break"), None)
+        if brk is not None:
+            self.c.force_authenticate(t.user)
+            r = self.c.post("/api/basic-ed/my/availability/", {"cells": [{"day": "Mon", "start": brk["start"], "preference": "available"}]},
+                            format="json")
+            self.assertEqual(r.status_code, 400)
+            self.assertIn("break", r.data["detail"])
+        first = next(r for r in g["rows"] if r["kind"] == "period")
+        r = self._submit(t, lambda d, row: "preferred" if (d == "Wed" and row["start"] == first["start"]) else
+                         ("unavailable" if d == "Mon" else "available"))
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data["cells"][f"Wed|{first['start']}"], "preferred")
+        self.assertEqual(r.data["cells"][f"Mon|{first['start']}"], "unavailable")
+        prefs = set(m.Availability.objects.filter(faculty=t).values_list("preference", flat=True))
+        self.assertEqual(prefs, {"preferred", "available", "unavailable"})
+        self.assertTrue(AuditLog.objects.filter(entity="SHS/JHS availability", entity_id=str(t.id), new_values__level="SHS").exists())
+
+    # ---- generator
+    def test_preferred_first_unavailable_never_and_not_submitted_free(self):
+        from basic_ed.engine import Problem, solve, teacher_time_rule, TIER_PREFERRED
+        from basic_ed.checker import check
+        # one teacher teaches one subject: make it the only qualified one
+        P0 = Problem("SHS", self.ay, 1, 11)
+        sec = P0.sections[0]
+        sub = next(x for x in P0.subjects_for(sec) if x.category != "guidance")
+        t = next(f for f in self.shs if True)
+        m.TeachingAssignment.objects.create(faculty=t, section=sec, subject=sub)
+        g = self._grid(t)["grid"]
+        periods = [r for r in g["rows"] if r["kind"] == "period"]
+        pref_starts = {periods[1]["start"], periods[2]["start"]}
+        self._submit(t, lambda d, row: "unavailable" if d == "Mon" else ("preferred" if d in ("Thu", "Fri") and row["start"] in pref_starts
+                                                                        else "available"))
+        P = Problem("SHS", self.ay, 1, 11)
+        out, _un = solve(P, seed=78)
+        mine = [a for a in out if a["section"].id == sec.id and a["subject"].id == sub.id]
+        self.assertEqual(len(mine), sub.sessions_per_week)
+        self.assertFalse([a for a in out if a["teacher"].id == t.id and a["day"] == "Mon"])      # Unavailable never used
+        tiers = [teacher_time_rule(P, t, a["day"], (a["start"], a["end"])) for a in mine]
+        self.assertEqual(tiers.count(TIER_PREFERRED), min(len(mine), 4))                           # Preferred times taken first
+        self.assertEqual(check(P, out), [])
+        # a teacher who never submitted is not blocked at any time
+        other = self.shs[-1]
+        m.Availability.objects.filter(faculty=other).delete()
+        m.Faculty.objects.filter(pk=other.pk).update(availability_status="not_submitted")
+        P2 = Problem("SHS", self.ay, 1, 11)
+        self.assertTrue(all(teacher_time_rule(P2, other, d, s) is not None for d in ("Mon", "Wed", "Fri") for s in P2.grids[11]))
+
+    def test_resubmit_after_approval_does_not_move_placed_classes(self):
+        from accounts.models import User
+        from basic_ed.services import generate
+        run, _u = generate("SHS", self.ay, 1, 11, self.p_shs)
+        m.ScheduleRun.objects.filter(pk=run.pk).update(status="approved")
+        before = sorted(m.ScheduleEntry.objects.filter(run=run).values_list("id", "teacher_id", "day", "start_time", "room_id"))
+        busy = m.ScheduleEntry.objects.filter(run=run, teacher__isnull=False).values_list("teacher_id", flat=True).first()
+        t = m.Faculty.objects.get(pk=busy)
+        self.assertEqual(self._submit(t, lambda d, r: "unavailable" if d in ("Mon", "Tue") else "available").status_code, 200)
+        after = sorted(m.ScheduleEntry.objects.filter(run=run).values_list("id", "teacher_id", "day", "start_time", "room_id"))
+        self.assertEqual(before, after)
+        self.assertEqual(m.ScheduleRun.objects.get(pk=run.pk).status, "approved")
+        _ = User
+
+    def test_return_for_correction_and_reminders(self):
+        from audit.models import AuditLog
+        from basic_ed.engine import Problem
+        from notifications.models import Notification
+        t = self.shs[1]
+        self._submit(t, lambda d, r: "unavailable" if d == "Fri" else "available")
+        self.c.force_authenticate(self.p_shs)
+        self.assertEqual(self.c.post(f"/api/basic-ed/availability/{t.id}/return/", {"note": ""}, format="json").status_code, 400)
+        r = self.c.post(f"/api/basic-ed/availability/{t.id}/return/", {"note": "Friday mornings are free now, please update"}, format="json")
+        self.assertEqual(r.status_code, 200, r.data)
+        mine = self._grid(t)
+        self.assertEqual((mine["status"], mine["note"]), ("returned", "Friday mornings are free now, please update"))
+        self.assertTrue(Notification.objects.filter(recipient=t.user, message__contains="returned for correction").exists())
+        self.assertTrue(Problem("SHS", self.ay, 1, 11).unavail[t.id].get("Fri"))          # the last submission stays in use
+        self.c.force_authenticate(self.p_shs)
+        lst = {x["faculty_id"]: x for x in self.c.get("/api/basic-ed/availability/").data["teachers"]}
+        self.assertEqual(lst[t.id]["status"], "returned")
+        waiting = [f for f in self.shs if m.Faculty.objects.get(pk=f.pk).availability_status in ("not_submitted", "returned")]
+        r = self.c.post("/api/basic-ed/availability/remind/", {}, format="json")
+        self.assertEqual(r.data["reminded"], len([f for f in waiting if f.is_active]))
+        self.assertTrue(Notification.objects.filter(recipient=waiting[0].user, message__contains="availability").exists())
+        self.assertFalse(Notification.objects.filter(recipient__in=[f.user for f in self.jhs]).exists())    # other level untouched
+        self.assertTrue(AuditLog.objects.filter(entity="SHS/JHS availability", entity_id="reminder").exists())
+        self.assertTrue(AuditLog.objects.filter(entity="SHS/JHS availability", summary__contains="returned for correction").exists())
+
+    def test_break_for_one_grade_only_is_selectable_and_never_used_by_that_grade(self):
+        from basic_ed.checker import check
+        from basic_ed.engine import Problem, solve, to_min, window_breaks
+        w11 = m.GradeWindow.objects.get(level="SHS", grade_level=11)
+        b = window_breaks(w11)[0]
+        # Grade 12 starts as early as Grade 11 here, so Grade 11's break is a class time for Grade 12
+        w12 = m.GradeWindow.objects.get(level="SHS", grade_level=12)
+        w12.start_time, w12.end_time, w12.break_start, w12.break_end = w11.start_time, w11.end_time, None, None
+        w12.save()
+        t = next(f for f in self.shs if f.specializations)
+        g = self._grid(t)["grid"]
+        self.assertEqual(g["grades"], [11, 12])                                    # a teacher of both grades
+        noted = [r for r in g["rows"] if r["kind"] == "period" and "Break for Grade 11" in r["note"]]
+        self.assertTrue(noted)                                                      # selectable, with the note
+        self.assertEqual(self._submit(t, lambda d, r: "available").status_code, 200)
+        P = Problem("SHS", self.ay, 1, 11)
+        out, _un = solve(P, seed=78)
+        self.assertFalse([a for a in out if a["start"] < b[2] and a["end"] > b[1]])     # no Grade 11 class in its break
+        self.assertEqual(check(P, out), [])
+        _ = to_min

@@ -1112,18 +1112,19 @@ def professor_options_view(request):
     from curriculum.models import Program
     from . import professor_choice as _pc
     u = request.user
-    if not (getattr(u, "role", "") == "faculty" and getattr(u, "faculty_type", "") == "dean"):
-        return Response({"detail": "Only a Dean chooses professors for program subjects."}, status=403)
+    is_dean = getattr(u, "role", "") == "faculty" and getattr(u, "faculty_type", "") == "dean"
+    if not (is_dean or getattr(u, "role", "") == "registrar"):
+        return Response({"detail": "Only a Dean (program subjects) or the Registrar (Gen Ed subjects) chooses professors."}, status=403)
     q = request.query_params
     try:
         program = Program.objects.get(pk=int(q.get("program_id")))
     except (TypeError, ValueError, Program.DoesNotExist):
         return Response({"detail": "Choose a program."}, status=400)
-    if program.department not in (u.departments or []):
+    if is_dean and program.department not in (u.departments or []):
         return Response({"detail": "You can only choose professors for programs in your own college."}, status=403)
     if not q.get("year_level") or not q.get("semester"):
         return Response({"detail": "year_level and semester are required."}, status=400)
-    return Response(_pc.options(program, q.get("year_level"), q.get("semester"), user=u))
+    return Response(_pc.options(program, q.get("year_level"), q.get("semester"), user=u, kind="major" if is_dean else "minor"))
 
 
 @api_view(["GET"])
@@ -1134,20 +1135,22 @@ def professor_groups_view(request):
     from curriculum.models import Program, Subject
     from . import professor_choice as _pc
     u, q = request.user, request.query_params
-    if not (getattr(u, "role", "") == "faculty" and getattr(u, "faculty_type", "") == "dean"):
-        return Response({"detail": "Only a Dean chooses professors for program subjects."}, status=403)
+    is_dean = getattr(u, "role", "") == "faculty" and getattr(u, "faculty_type", "") == "dean"
+    if not (is_dean or getattr(u, "role", "") == "registrar"):
+        return Response({"detail": "Only a Dean (program subjects) or the Registrar (Gen Ed subjects) chooses professors."}, status=403)
+    kind = "major" if is_dean else "minor"
     try:
         program = Program.objects.get(pk=int(q.get("program_id")))
-        subject = Subject.objects.get(pk=int(q.get("subject_id")), program=program)
+        subject = Subject.objects.get(pk=int(q.get("subject_id")), program=program, classification=kind)
     except (TypeError, ValueError, Program.DoesNotExist, Subject.DoesNotExist):
         return Response({"detail": "Choose a program and subject."}, status=400)
-    if program.department not in (u.departments or []):
+    if is_dean and program.department not in (u.departments or []):
         return Response({"detail": "You can only choose professors for programs in your own college."}, status=403)
     semester, year_level = q.get("semester"), q.get("year_level")
     sections = list(Section.objects.filter(program=program, year_level=year_level, semester=semester).select_related("program"))
     if not sections:
         return Response({"detail": "This year level has no section."}, status=400)
-    replaced = list(Schedule.objects.filter(section__in=sections, subject__classification="major", status="draft",
+    replaced = list(Schedule.objects.filter(section__in=sections, subject__classification=kind, status="draft",
                                             is_manual_override=False).values_list("pk", flat=True))
     win, day = _pc._window({"start": q.get("start") or "", "end": q.get("end") or "", "day": q.get("day") or ""})
     return Response(_pc.subject_groups(u, subject, sections, semester, replaced, window=win, day=day))

@@ -34,7 +34,8 @@ function Changes({ log }) {
   );
 }
 
-export default function AuditLogs() {
+/* level: "SHS" / "JHS" for that school level's admin view (its records and its own principal / teachers); none = everything. */
+export default function AuditLogs({ level = "" }) {
   const [form, setForm] = useState(EMPTY);
   const [applied, setApplied] = useState(EMPTY);
   const [page, setPage] = useState(1);
@@ -44,11 +45,11 @@ export default function AuditLogs() {
 
   const load = useCallback(() => {
     setError("");
-    const params = Object.fromEntries(Object.entries({ ...applied, page }).filter(([, v]) => v !== "" && v !== null));
+    const params = Object.fromEntries(Object.entries({ ...applied, ...(level ? { level } : {}), page }).filter(([, v]) => v !== "" && v !== null));
     API.get("/audit/logs/", { params })
       .then((r) => setData(r.data))
       .catch((e) => setError(e.response?.data?.detail || "The audit logs could not be loaded."));
-  }, [applied, page]);
+  }, [applied, page, level]);
   useEffect(() => { load(); }, [load]);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
@@ -58,7 +59,8 @@ export default function AuditLogs() {
   return (
     <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "16px 20px" }}>
       <p style={{ margin: "0 0 12px", fontSize: 13, color: "#4b5563" }}>
-        Every change to the school's data, every sign-in and every Generate, with who did it, when, the values before and after, and the
+        {level ? `Every change to ${level} records and everything done by ${level} accounts (principal and teachers)` :
+          "Every change to the school's data, every sign-in and every Generate"}, with who did it, when, the values before and after, and the
         IP address. Logs cannot be changed or deleted by anyone.
       </p>
       <form onSubmit={apply} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-end", marginBottom: 12 }}>

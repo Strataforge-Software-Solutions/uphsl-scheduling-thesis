@@ -240,6 +240,12 @@ class Faculty(models.Model):
     preferred_start = models.TimeField(null=True, blank=True)
     preferred_end = models.TimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
+    # Availability is SUBMITTED by the teacher (My Profile) and only read by the Principal. The generator always uses the last submitted
+    # windows; "returned" keeps them in use until the teacher submits again.
+    AVAILABILITY_STATUSES = [("not_submitted", "Not submitted"), ("submitted", "Submitted"), ("returned", "Returned for correction")]
+    availability_status = models.CharField(max_length=13, choices=AVAILABILITY_STATUSES, default="not_submitted")
+    availability_submitted_at = models.DateTimeField(null=True, blank=True)
+    availability_note = models.CharField(max_length=300, blank=True, default="")     # the Principal's "return for correction" note
 
     class Meta:
         ordering = ["level", "user__last_name"]
@@ -262,9 +268,18 @@ class Availability(models.Model):
     start_time = models.TimeField()
     end_time = models.TimeField()
     available = models.BooleanField(default=True, help_text="False = NOT available in this window.")
+    # Preferred / Available / Unavailable (the teacher's grid). `available` is kept in step (False only for Unavailable) for older readers.
+    PREFERENCES = [("preferred", "Preferred"), ("available", "Available"), ("unavailable", "Unavailable")]
+    preference = models.CharField(max_length=11, choices=PREFERENCES, default="available")
 
     class Meta:
         ordering = ["day", "start_time"]
+
+    def save(self, *args, **kwargs):
+        if not self.available and self.preference == "available":
+            self.preference = "unavailable"          # older code that only says available=False
+        self.available = self.preference != "unavailable"
+        super().save(*args, **kwargs)
 
 
 class TeachingAssignment(models.Model):

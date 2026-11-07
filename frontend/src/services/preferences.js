@@ -29,22 +29,10 @@ function writeCache(p) {
   } catch (e) { /* private window or blocked storage: the server copy still applies */ }
 }
 
-// "system" follows the device's light / dark setting, and changes with it while the page is open
-function deviceIsDark() {
-  try { return !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches); } catch (e) { return false; }
-}
+// Themes: "light" = Default (UPHSL navy and white), "royal" = Royal (royal navy, gold and cream). Anything else reads as Default.
 export function resolveTheme(theme) {
-  return theme === "dark" || (theme === "system" && deviceIsDark()) ? "dark" : "light";
+  return theme === "royal" ? "royal" : "light";
 }
-try {
-  const mq = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)");
-  const follow = () => {
-    const el = document.documentElement;
-    if (el.getAttribute("data-theme-pref") === "system") el.setAttribute("data-theme", resolveTheme("system"));
-  };
-  if (mq && mq.addEventListener) mq.addEventListener("change", follow);
-  else if (mq && mq.addListener) mq.addListener(follow);
-} catch (e) { /* older browser: the theme is set again on the next page load */ }
 
 // put the display settings on <html>; DashboardTheme.css reads these attributes (never in print)
 export function applyPreferences(p) {

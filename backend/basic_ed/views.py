@@ -166,14 +166,9 @@ class FacultyViewSet(LevelViewSet):
 
     @action(detail=True, methods=["post"], url_path="availability")
     def set_availability(self, request, pk=None):
-        fac = self.get_object()
-        rows = request.data.get("rows", [])
-        ser = s.AvailabilitySerializer(data=rows, many=True)
-        ser.is_valid(raise_exception=True)
-        with transaction.atomic():
-            fac.availability.all().delete()
-            m.Availability.objects.bulk_create([m.Availability(faculty=fac, **r) for r in ser.validated_data])
-        return Response(s.FacultySerializer(fac, context=self.get_serializer_context()).data)
+        """Retired: availability is submitted by each teacher. Nobody else writes it (the Principal views it in Faculty availability)."""
+        raise PermissionDenied("Availability is submitted by each teacher from their own page. You can view it in Faculty availability "
+                               "and return it for correction, but not change it.")
 
     @action(detail=True, methods=["post"], url_path="reset-password")
     def reset_password(self, request, pk=None):
@@ -700,18 +695,112 @@ def my_schedule(request):
     })
 
 
-@api_view(["POST"])
+def _availability_payload(fac, include_grid=True):
+    from . import availability_flow as af
+    out = {"faculty_id": fac.id, "full_name": fac.full_name, "employee_id": fac.employee_id, "level": fac.level,
+           "max_weekly_hours": fac.max_weekly_hours, **af.status_info(fac, af.last_generated(fac.level))}
+    if include_grid:
+        grid = af.grid_for(fac)
+        out.update({"grid": grid, "cells": af.cells_for(fac, grid)})
+    return out
+
+
+@api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
 def my_availability(request):
-    fac = m.Faculty.objects.filter(user=request.user).first()
+    """A teacher's OWN availability: GET the grid, the current submission and its status; POST {cells: [...]} submits it to the Principal
+    (used from the next Generate on). Only the teacher writes it."""
+    from . import availability_flow as af
+    fac = m.Faculty.objects.filter(user=request.user).select_related("user").first()
     if request.user.role != "teacher" or not fac:
-        raise PermissionDenied("This page is for SHS / JHS teachers.")
-    ser = s.AvailabilitySerializer(data=request.data.get("rows", []), many=True)
-    ser.is_valid(raise_exception=True)
-    with transaction.atomic():
-        fac.availability.all().delete()
-        m.Availability.objects.bulk_create([m.Availability(faculty=fac, **r) for r in ser.validated_data])
-    return Response({"detail": "Availability saved. The principal will see it when the schedule is generated."})
+        raise PermissionDenied("This page is for SHS / JHS teachers (your own availability only).")
+    if request.method == "POST":
+        try:
+            af.submit(request.user, fac, request.data.get("cells"))
+        except af.FlowError as e:
+            return Response({"detail": e.message}, status=e.status)
+        out = _availability_payload(fac)
+        out["detail"] = ("Submitted to the Principal. It is used the next time the timetable is generated; approved or published "
+                         "timetables do not change.")
+        return Response(out)
+    return Response(_availability_payload(fac))
+
+
+def _load_hours(level):
+    hours = defaultdict(float)
+    runs = m.ScheduleRun.objects.filter(level=level).exclude(status="superseded")
+    for e in m.ScheduleEntry.objects.filter(run__in=runs, teacher__isnull=False):
+        hours[e.teacher_id] += (to_min(e.end_time) - to_min(e.start_time)) / 60
+    return hours
+
+
+def _level_teacher(request, fid):
+    lv = level_of(request)
+    fac = m.Faculty.objects.filter(pk=fid, level=lv).select_related("user").first()
+    if fac is None:
+        raise ValidationError({"detail": "That teacher is not in your school level."})
+    return lv, fac
+
+
+def _principal_only(request):
+    if request.user.role != "principal":
+        raise PermissionDenied("Read only: only the Principal of this school level can return availability or send reminders.")
+
+
+@api_view(["GET"])
+@permission_classes([IsLevelManager])
+def availability_overview(request):
+    """READ-ONLY: every teacher of the level with their availability status (Principal of that level, or the IT Admin)."""
+    from . import availability_flow as af
+    lv = level_of(request)
+    last = af.last_generated(lv)
+    hours = _load_hours(lv)
+    rows = []
+    for f in m.Faculty.objects.filter(level=lv, is_active=True).select_related("user").order_by("user__last_name", "user__first_name"):
+        rows.append({"faculty_id": f.id, "full_name": f.full_name, "employee_id": f.employee_id, "department": f.department,
+                     "max_weekly_hours": f.max_weekly_hours, "load_hours": round(hours.get(f.id, 0.0), 1),
+                     "preferred_start": f.preferred_start.strftime("%H:%M") if f.preferred_start else "",
+                     "preferred_end": f.preferred_end.strftime("%H:%M") if f.preferred_end else "",
+                     **af.status_info(f, last)})
+    return Response({"level": lv, "last_generated": last.isoformat() if last else None, "teachers": rows,
+                     "can_edit_status": request.user.role == "principal"})
+
+
+@api_view(["GET"])
+@permission_classes([IsLevelManager])
+def availability_detail(request, fid):
+    """READ-ONLY: one teacher's grid (the Principal cannot change it)."""
+    lv, fac = _level_teacher(request, fid)
+    out = _availability_payload(fac)
+    out["load_hours"] = round(_load_hours(lv).get(fac.id, 0.0), 1)
+    return Response(out)
+
+
+@api_view(["POST"])
+@permission_classes([IsLevelManager])
+def availability_return(request, fid):
+    """The Principal returns a teacher's availability for correction with a note (the last submission stays in use)."""
+    from . import availability_flow as af
+    _principal_only(request)
+    _lv, fac = _level_teacher(request, fid)
+    try:
+        af.return_for_correction(request.user, fac, request.data.get("note"))
+    except af.FlowError as e:
+        return Response({"detail": e.message}, status=e.status)
+    return Response({"detail": f"Returned to {fac.full_name}. Their last submission stays in use until they submit again.",
+                     **_availability_payload(fac, include_grid=False)})
+
+
+@api_view(["POST"])
+@permission_classes([IsLevelManager])
+def availability_remind(request):
+    """The Principal reminds every teacher of the level who has not submitted (or has a returned submission)."""
+    from . import availability_flow as af
+    _principal_only(request)
+    lv = level_of(request)
+    sent = af.remind(request.user, lv)
+    return Response({"reminded": len(sent), "detail": f"Reminder sent to {len(sent)} teacher(s)." if sent else
+                     "Every teacher has already submitted."})
 
 
 @api_view(["POST"])

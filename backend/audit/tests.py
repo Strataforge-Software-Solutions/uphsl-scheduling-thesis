@@ -106,3 +106,28 @@ class AuditLogTests(Base):
 
 
 _ = SY
+
+
+class LevelAuditLogTests(Base):
+    """The SHS / JHS admin view lists only that level's records and its own principal / teachers."""
+
+    def test_level_filter(self):
+        from basic_ed import models as bm
+        admin = User.objects.create_user(username="itadm2", password="pw", school_id="ITB", role="admin")
+        shs_t = User.objects.create_user(username="shst", password="pw", school_id="S1", role="teacher", school_level="SHS", first_name="Sam", last_name="H")
+        jhs_p = User.objects.create_user(username="jhsp", password="pw", school_id="J1", role="principal", school_level="JHS", first_name="Joy", last_name="P")
+        fac = bm.Faculty.objects.create(user=shs_t, level="SHS", employee_id="S1", specializations="Math")
+        fac.max_weekly_hours = 20
+        fac.save()                                                             # an SHS update: keeps its level on the entry
+        self.client.post("/api/accounts/login/", {"username": "jhsp", "password": "pw"}, format="json")
+        self.row(teacher=self.teachers[0], h=7)                                # a college record
+        self.client.force_authenticate(admin)
+        shs = self.client.get("/api/audit/logs/", {"level": "SHS"}).data["results"]
+        jhs = self.client.get("/api/audit/logs/", {"level": "JHS"}).data["results"]
+        self.assertTrue(any(x["entity"] == "SHS/JHS faculty" and x["action"] == "update" for x in shs))
+        self.assertFalse(any(x["entity"] == "schedule" for x in shs + jhs))      # no college records in a level view
+        self.assertTrue(any(x["action"] == "login" and x["user"] == "Joy P" for x in jhs))
+        self.assertFalse(any(x["action"] == "login" for x in shs))
+        self.assertEqual(self.client.get("/api/audit/logs/", {"level": "ABC"}).status_code, 400)
+        everything = self.client.get("/api/audit/logs/").data["results"]
+        self.assertTrue(any(x["entity"] == "schedule" for x in everything))      # the College admin view still sees all

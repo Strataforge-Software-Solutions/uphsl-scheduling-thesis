@@ -94,7 +94,7 @@ GEN_ED_AREAS = {
              (r"\bnstp\b", r"\brotc\b", r"national service", r"military science"), None),
     "history": ("History / Social Science", (r"philippine history", r"\brizal\b", r"contemporary world"),
                 (r"histor", r"social science", r"social studies", r"political science"), None),
-    "self": ("Psychology", (r"understanding the self",), (r"psycholog",), None),
+    "self": ("Psychology / Social Science", (r"understanding the self",), (r"psycholog", r"social science", r"sociolog"), None),
     "ethics": ("Philosophy / Ethics", (r"\bethics\b",), (r"philosoph", r"\bethics\b"), None),
     "art": ("Arts / Humanities", (r"art appreciation",), (r"fine arts?", r"\barts? education\b", r"humanities", r"^arts?$"), None),
     "gender": ("Sociology / Gender Studies", (r"gender and society",), (r"sociolog", r"gender", r"social science"), None),

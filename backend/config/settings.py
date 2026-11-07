@@ -147,5 +147,10 @@ STATIC_URL = "static/"
 # Uploaded files (profile pictures only). Not published under a public URL: a picture is sent only to its owner
 # through /api/accounts/me/picture/file/. Back this folder up together with the database.
 MEDIA_ROOT = os.environ.get("MEDIA_ROOT", str(BASE_DIR / "media"))
+
+# SHS / JHS timetable search (basic_ed/search.py): the ONE place for its limits, per grade-level Generate.
+# max_steps: placements tried; time_seconds: wall-clock limit for the whole run (restarts included); restarts: shuffled fallback attempts
+# used only when the search ends with something unplaced. When a limit is reached the best timetable found so far is kept.
+BASIC_ED_SEARCH = {"max_steps": 100_000, "time_seconds": 10.0, "restarts": 2}
 DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

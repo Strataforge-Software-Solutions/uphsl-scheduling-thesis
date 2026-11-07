@@ -10,6 +10,8 @@ import { StatTile } from "./Charts";
 import { be, errText, inputStyle, cardStyle, btn, btnPrimary, Field, Notice, Modal, ampm, hhmm, STATUS_LABEL, STATUS_TONE } from "./basicEdUi";
 import { SectionsTab, RoomsTab, FacultyTab, CurriculumTab } from "./BasicEdData";
 import TeachingAssignmentsPanel from "./BasicEdAssignments";
+import AuditLogs from "./AuditLogs";
+import { FacultyAvailability } from "./BasicEdAvailability";
 import { SchedulesPanel } from "./BasicEdSchedules";
 import BasicEdAnalytics from "./BasicEdAnalytics";
 import { BasicEdInsights } from "./InsightCards";
@@ -37,6 +39,7 @@ const NAV_ADMIN = [
   { group: "Insights" },
   { key: "overview", label: "Overview", icon: "" },
   { key: "activity", label: "Activity", icon: "" },
+  { key: "audit", label: "Audit logs", icon: "" },
   { group: "People" },
   { key: "accounts", label: "Accounts", icon: "" },
   { key: "faculty", label: "Faculty", icon: "" },
@@ -94,6 +97,7 @@ function BasicEdDashboard({ level }) {
   if (isAdmin) {
     titles.overview = ["System Overview", `${LEVEL_NAME[level]}: what is set up, what is missing, and how the timetables are doing.`];
     titles.activity = ["Recent Activity", `Latest approvals, revisions and changes to ${level} timetables.`];
+    titles.audit = ["Audit Logs", `Who changed what in ${LEVEL_NAME[level]}, when, the values before and after, and from which IP address. Read only.`];
     titles.accounts = ["Accounts", `Principal and teacher accounts of ${LEVEL_NAME[level]}: reset passwords, disable or enable accounts.`];
     titles.data = ["Data Tools", `Clear generated ${level} timetables so they can be generated again.`];
     titles.faculty = ["Faculty", `${LEVEL_NAME[level]} teachers, qualifications, availability and teaching loads.`];
@@ -114,6 +118,7 @@ function BasicEdDashboard({ level }) {
           {!overview && !error && <p style={{ color: "#6b7280" }}>Loading…{slow && <> Still waiting for the server: slow connection or database, or the latest <code>python manage.py migrate</code> has not been run. <button style={btn} onClick={reload}>Retry</button></>}</p>}
           {overview && isAdmin && tab === "overview" && <AdminOverview level={level} overview={overview} go={setTab} />}
           {overview && isAdmin && tab === "activity" && <AdminActivity overview={overview} />}
+          {isAdmin && tab === "audit" && <AuditLogs key={level} level={level} />}
           {isAdmin && tab === "accounts" && <Accounts level={level} />}
           {overview && isAdmin && tab === "data" && <AdminData level={level} overview={overview} />}
           {overview && !isAdmin && tab === "overview" && (
@@ -129,7 +134,7 @@ function BasicEdDashboard({ level }) {
           )}
           {overview && tab === "sections" && <><SectionsTab level={level} windows={overview.windows} /><TeachingAssignmentsPanel level={level} /></>}
           {overview && tab === "curriculum" && <CurriculumTab level={level} windows={overview.windows} structure={overview.structure} periodLabel={periodLabel} />}
-          {overview && tab === "faculty" && <FacultyTab level={level} />}
+          {overview && tab === "faculty" && <><FacultyTab level={level} /><FacultyAvailability level={level} /></>}
           {overview && tab === "rooms" && <RoomsTab level={level} config={overview.config} />}
           {overview && tab === "calendar" && <CalendarTab level={level} overview={overview} periodLabel={periodLabel} reload={reload} />}
           {overview && tab === "settings" && <SettingsTab level={level} overview={overview} reload={reload} />}
