@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import API, { refreshCurrentUser } from "../services/api";
+import API, { changePassword, markPasswordChanged, refreshCurrentUser } from "../services/api";
 import { usePreferences, DEFAULT_PREFS, initialsOf } from "../services/preferences";
 import { formatDate } from "../utils/formatDateTime";
 import { APP_INFO, SUPPORT } from "../config/appInfo";
 import { HELP_STEPS } from "../components/howto";
+import PasswordInput from "../components/PasswordInput";
 import "../components/DashboardTheme.css";
 import "./Settings.css";
 
@@ -17,6 +18,7 @@ const SECTIONS = [
   ["format", "Language and format", "globe"],
   ["display", "Display preferences", "display"],
   ["notifications", "Notifications", "bell"],
+  ["password", "Change password", "lock"],
   ["help", "Help and about", "help"],
 ];
 const PICTURE_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -32,6 +34,13 @@ function SettingsIcon({ name }) {
     display: <><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M8 21h8m-4-4v4" /></>,
     bell: <><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Zm-8 12h4" /></>,
     help: <><circle cx="12" cy="12" r="9" /><path d="M9.7 9a2.4 2.4 0 1 1 4.5 1.2c-.8 1.1-2.2 1.4-2.2 3m0 3h.01" /></>,
+    lock: <><rect x="4" y="10" width="16" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2" /></>,
+    mail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m4 7 8 6 8-6" /></>,
+    school: <><path d="m3 9 9-5 9 5-9 5-9-5Z" /><path d="M6 11v5c3.5 3 8.5 3 12 0v-5M21 9v6" /></>,
+    id: <><rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="8" cy="11" r="2" /><path d="M5.5 16c.6-1.5 1.4-2 2.5-2s1.9.5 2.5 2m3-5h4m-4 3h4" /></>,
+    login: <><path d="M4 7h12l4 3-4 3H4l-3-3 3-3Z" /><path d="M4 14h12l4 3-4 3H4l-3-3 3-3Z" /></>,
+    role: <><path d="M12 3 20 6v5c0 5-3.4 8.2-8 10-4.6-1.8-8-5-8-10V6l8-3Z" /><path d="m9 12 2 2 4-4" /></>,
+    department: <><path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M15 9h.01M9 13h.01M15 13h.01M10 21v-4h4v4" /></>,
   };
   return <svg className={name === "settings" ? "settings-title-icon" : "settings-nav-icon"} viewBox="0 0 24 24" aria-hidden="true" focusable="false" {...common}>{shapes[name]}</svg>;
 }
@@ -208,22 +217,27 @@ function ProfileSection({ headingRef }) {
         </div>
       </div>
 
-      <div className="settings-grid">
-        <label className="ui-field"><span className="ui-label">Contact email</span>
-          <input type="email" value={form.email || ""} maxLength={254} onChange={(e) => set("email", e.target.value)} autoComplete="email"
-            aria-invalid={emailBad ? "true" : "false"} />
-          {emailBad && <span className="ui-error">Enter a valid email address.</span>}</label>
-        <label className="ui-field"><span className="ui-label">Phone number (optional)</span>
-          <input type="tel" value={form.phone || ""} maxLength={30} onChange={(e) => set("phone", e.target.value)} autoComplete="tel" /></label>
+      <div className="settings-profile-columns">
+        <section className="settings-profile-card" aria-labelledby="contact-info-heading">
+          <div className="settings-profile-card-heading"><SettingsIcon name="mail" /><div><h3 id="contact-info-heading">Contact Information</h3><p>Update how the school can reach you.</p></div></div>
+          <label className="ui-field"><span className="ui-label">Contact email</span>
+            <input type="email" value={form.email || ""} maxLength={254} onChange={(e) => set("email", e.target.value)} autoComplete="email"
+              aria-invalid={emailBad ? "true" : "false"} />
+            {emailBad && <span className="ui-error">Enter a valid email address.</span>}</label>
+          <label className="ui-field"><span className="ui-label">Phone number (optional)</span>
+            <input type="tel" value={form.phone || ""} maxLength={30} onChange={(e) => set("phone", e.target.value)} autoComplete="tel" /></label>
+        </section>
+        <section className="settings-profile-card" aria-labelledby="school-info-heading">
+          <div className="settings-profile-card-heading"><SettingsIcon name="school" /><div><h3 id="school-info-heading">School Information</h3><p>Official school records (read-only).</p></div><span className="settings-readonly-badge"><SettingsIcon name="lock" />Read only</span></div>
+          <dl className="settings-readonly settings-school-info">
+            <div><dt><SettingsIcon name="user" />Name</dt><dd>{`${profile.first_name} ${profile.last_name}`.trim() || "—"}</dd></div>
+            <div><dt><SettingsIcon name="id" />School ID</dt><dd>{profile.school_id}</dd></div>
+            <div><dt><SettingsIcon name="login" />Login ID</dt><dd>{profile.username}</dd></div>
+            <div><dt><SettingsIcon name="role" />Role</dt><dd>{profile.role}</dd></div>
+            <div><dt><SettingsIcon name="department" />Department</dt><dd>{profile.department || "—"}</dd></div>
+          </dl>
+        </section>
       </div>
-
-      <dl className="settings-readonly">
-        <div><dt>Name</dt><dd>{`${profile.first_name} ${profile.last_name}`.trim() || "—"}</dd></div>
-        <div><dt>School ID</dt><dd>{profile.school_id}</dd></div>
-        <div><dt>Login ID</dt><dd>{profile.username}</dd></div>
-        <div><dt>Role</dt><dd>{profile.role}</dd></div>
-        <div><dt>Department</dt><dd>{profile.department || "—"}</dd></div>
-      </dl>
       <Actions busy={busy === "save" ? "save" : ""} dirty={dirty} onSave={onSave} resetLabel="Undo changes"
         onReset={() => { setForm(fromProfile()); setMsg({ ok: true, text: "Changes undone." }); }} />
       <Message msg={msg} />
@@ -343,6 +357,51 @@ function NotificationsSection({ headingRef }) {
   );
 }
 
+function ChangePasswordSection({ headingRef }) {
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  const submit = async (event) => {
+    event.preventDefault();
+    setMsg(null);
+    if (newPassword !== confirmPassword) {
+      setMsg({ ok: false, text: "The new passwords do not match." });
+      return;
+    }
+    setBusy(true);
+    try {
+      await changePassword(newPassword, oldPassword, confirmPassword);
+      markPasswordChanged();
+      setOldPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setMsg({ ok: true, text: "Your password has been changed." });
+    } catch (e) {
+      const data = e?.response?.data;
+      const details = [data?.old_password, data?.new_password, data?.confirm_password]
+        .flatMap((value) => Array.isArray(value) ? value : value ? [value] : []);
+      setMsg({ ok: false, text: details.join(" ") || errorText(e, "Could not change your password. Check your connection and try again.") });
+    }
+    setBusy(false);
+  };
+
+  return (
+    <Section id="password" title="Change password" intro="Choose a new password to protect your account." headingRef={headingRef}>
+      <form className="settings-password-form" onSubmit={submit}>
+        <div className="ui-field"><label className="ui-label" htmlFor="settings-current-password">Current password</label><PasswordInput id="settings-current-password" autoComplete="current-password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} required /></div>
+        <div className="ui-field"><label className="ui-label" htmlFor="settings-new-password">New password</label><PasswordInput id="settings-new-password" autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required /></div>
+        <p className="ui-help">Use a password that meets the system’s password requirements.</p>
+        <div className="ui-field"><label className="ui-label" htmlFor="settings-confirm-password">Confirm new password</label><PasswordInput id="settings-confirm-password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required /></div>
+        <div className="settings-actions"><button type="submit" className="ui-btn" disabled={busy || !oldPassword || !newPassword || !confirmPassword}>{busy ? "Updating…" : "Update password"}</button></div>
+        <Message msg={msg} />
+      </form>
+    </Section>
+  );
+}
+
 // ------------------------------------------------------------------ 6. help and about
 function HelpSection({ user, headingRef }) {
   const steps = HELP_STEPS[roleKey(user)] || HELP_STEPS.student;
@@ -385,7 +444,7 @@ export default function Settings({ user }) {
   }, [active]);
 
   const body = !ready ? <p className="ui-help">Loading…</p>
-    : !data && active !== "help" ? (
+    : !data && active !== "help" && active !== "password" ? (
       <div className="ui-panel settings-section"><p className="settings-msg err">Your settings could not be loaded. Check your connection and reload the page.</p></div>
     ) : {
       profile: <ProfileSection headingRef={headingRef} />,
@@ -393,6 +452,7 @@ export default function Settings({ user }) {
       format: <FormatSection headingRef={headingRef} />,
       display: <DisplaySection headingRef={headingRef} />,
       notifications: <NotificationsSection headingRef={headingRef} />,
+      password: <ChangePasswordSection headingRef={headingRef} />,
       help: <HelpSection user={user} headingRef={headingRef} />,
     }[active];
 

@@ -128,13 +128,30 @@
 .settings-readonly { padding: 16px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
 .settings-readonly dt { font-size: 12px; color: #64748b; }
 .settings-readonly dd { font-weight: 600; }
+.settings-profile-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 20px; }
+.settings-profile-card { min-width: 0; padding: 16px; border: 1px solid #e2e8f0; border-radius: 14px; background: rgba(255,255,255,.8); }
+.settings-profile-card-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.settings-profile-card-heading > .settings-nav-icon { width: 22px; height: 22px; flex-basis: 22px; color: #123b70; }
+.settings-profile-card-heading h3 { margin: 0; color: #0f172a; font-size: 16px; font-weight: 700; }
+.settings-profile-card-heading p { margin: 3px 0 0; color: #64748b; font-size: 12px; }
+.settings-profile-card .ui-field:last-child { margin-bottom: 0; }
+.settings-profile-card .settings-readonly.settings-school-info { display: flex; flex-direction: column; gap: 0; padding: 10px 14px; }
+.settings-school-info > div { display: flex; align-items: center; gap: 12px; min-height: 32px; }
+.settings-school-info dt { display: inline-flex; align-items: center; gap: 9px; flex: 0 0 44%; font-size: 13px; }
+.settings-school-info dt .settings-nav-icon { width: 16px; height: 16px; flex: 0 0 16px; color: #475569; }
+.settings-school-info dd { margin: 0; font-size: 13px; }
+.settings-readonly-badge { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; padding: 5px 8px; border-radius: 8px; background: #eaf1fc; color: #123b70; font-size: 11px; white-space: nowrap; }
+.settings-readonly-badge .settings-nav-icon { width: 14px; height: 14px; flex-basis: 14px; color: currentColor; }
 .settings-actions { justify-content: flex-end; }
 .settings-actions .ui-btn:not(.secondary) { background: #123b70; }
 .settings-section > .settings-actions { border-top: 1px solid #e2e8f0; padding-top: 18px; }
+.settings-password-form { max-width: 480px; }
+.settings-password-form > .ui-help { margin: -8px 0 16px; }
 @media (max-width: 860px) {
   .settings-body { padding: 18px; }
   .settings-nav { width: auto; }
   .settings-page-heading h2 { font-size: 24px; }
+  .settings-profile-columns { grid-template-columns: 1fr; }
 }
 @media (max-width: 560px) {
   .settings-top { padding: 10px 16px; }
