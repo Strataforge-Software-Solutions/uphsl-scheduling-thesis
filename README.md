@@ -112,8 +112,10 @@ Postgres `DATABASES` block and uncomment the MySQL one; in `requirements.txt`, s
 ## Deploying on Vercel
 
 The root `vercel.json` configures two Vercel Services: the Django API in `backend/` and the
-Create React App in `frontend/`. `/api/*`, `/admin/*`, and `/static/*` route to Django; all
-other paths route to React. The frontend uses the same-origin `/api` URL in production, while
+Create React App in `frontend/`. `/api/*` and `/admin/*` route to Django; Django admin and
+REST framework assets under `/static/admin/*` and `/static/rest_framework/*` also route there.
+Other `/static/*` assets route to React, and all remaining paths route to React. The frontend uses
+the same-origin `/api` URL in production, while
 local development continues to use `http://127.0.0.1:8000/api` by default.
 No service binding is declared: this Create React App makes API requests from the user's browser,
 and Vercel bindings are only available to server-side functions at runtime. The browser instead

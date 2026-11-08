@@ -24,9 +24,21 @@
       }
     },
     {
-      "source": "/static/(.*)",
+      "source": "/static/admin/(.*)",
       "destination": {
         "service": "backend"
+      }
+    },
+    {
+      "source": "/static/rest_framework/(.*)",
+      "destination": {
+        "service": "backend"
+      }
+    },
+    {
+      "source": "/static/(.*)",
+      "destination": {
+        "service": "frontend"
       }
     },
     {
