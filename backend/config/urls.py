@@ -1,7 +1,16 @@
 from django.contrib import admin
+from django.http import JsonResponse
 from django.urls import path, include
 
+def api_root(request):
+    return JsonResponse({
+        "service": "U-FAST Scheduling API",
+        "status": "running",
+        "api_prefix": "/api/",
+    })
+
 urlpatterns = [
+    path("", api_root, name="api-root"),
     path("admin/", admin.site.urls),
 
     # Auth: login, password change, token refresh

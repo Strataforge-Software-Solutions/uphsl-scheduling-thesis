@@ -1,3 +1,4 @@
+import CustomSelect from "./CustomSelect";
 import React, { useEffect, useState } from "react";
 import API from "../services/api";
 import { formatTime } from "../utils/formatDateTime";
@@ -91,9 +92,9 @@ export default function FacultyTimePopover({ teachers = [], initialId = "", seme
           <button onClick={onClose} style={{ background: "white", color: "#003366", border: "1px solid #003366", borderRadius: 6, padding: "4px 12px", fontSize: 13, cursor: "pointer" }}>Close</button>
         </div>
         {teachers.length > 1 && (
-          <select value={fid} onChange={(e) => setFid(e.target.value)} aria-label="Teacher" style={{ marginTop: 8, fontSize: 13, padding: "4px 6px", maxWidth: "100%" }}>
+          <CustomSelect value={fid} onChange={(e) => setFid(e.target.value)} aria-label="Teacher" style={{ marginTop: 8, fontSize: 13, padding: "4px 6px", maxWidth: "100%" }}>
             {teachers.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
-          </select>
+          </CustomSelect>
         )}
         {error && <p style={{ color: "#b91c1c", fontSize: 13 }}>{error}</p>}
         {!data && !error && <p style={{ fontSize: 13, color: "#6b7280" }}>Loading…</p>}
@@ -169,10 +170,10 @@ export default function FacultyTimePopover({ teachers = [], initialId = "", seme
                 <div role="group" aria-label="Assign this time" style={{ marginTop: 10, padding: "10px 12px", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 6, fontSize: 13, color: "#111827" }}>
                   <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
                     <span>Assign <strong>{subjectCode}</strong> to <strong>{data.name}</strong> on <strong>{DAYS_FULL[pick.day] || pick.day}</strong>, starting</span>
-                    <select aria-label="Start of the assigned time" value={start} onChange={(e) => setPick({ ...pick, start: Number(e.target.value) })}
+                    <CustomSelect aria-label="Start of the assigned time" value={start} onChange={(e) => setPick({ ...pick, start: Number(e.target.value) })}
                       style={{ fontSize: 13, padding: "3px 6px" }}>
                       {starts.map((m) => <option key={m} value={m}>{fmt(m)}</option>)}
-                    </select>
+                    </CustomSelect>
                     <span>to <strong>{fmt(start + needMinutes)}</strong></span>
                   </div>
                   {pick.kind === "also" && (

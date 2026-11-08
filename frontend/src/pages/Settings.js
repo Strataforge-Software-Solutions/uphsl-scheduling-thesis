@@ -1,3 +1,4 @@
+import CustomSelect from "../components/CustomSelect";
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import API, { refreshCurrentUser } from "../services/api";
@@ -272,10 +273,10 @@ function DisplaySection({ headingRef }) {
       ) : (
         <>
           <label className="ui-field settings-narrow"><span className="ui-label">Default landing page</span>
-            <select value={s.form.landing_page} onChange={(e) => s.set("landing_page", e.target.value)}>
+            <CustomSelect value={s.form.landing_page} onChange={(e) => s.set("landing_page", e.target.value)}>
               <option value="">Normal home page</option>
               {pages.map(([k, label]) => <option key={k} value={k}>{label}</option>)}
-            </select>
+            </CustomSelect>
           </label>
           <p className="ui-help">Only pages your role can open are listed. If a page is no longer available to you, the normal home page opens.</p>
           <Actions {...s} />

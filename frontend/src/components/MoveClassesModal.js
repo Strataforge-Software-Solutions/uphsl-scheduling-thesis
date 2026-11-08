@@ -1,3 +1,5 @@
+import CustomSelect from "./CustomSelect";
+import CustomTimePicker from "./CustomTimePicker";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import API from "../services/api";
 import { formatTime } from "../utils/formatDateTime";
@@ -146,15 +148,15 @@ export default function MoveClassesModal({ groups, describe, onClose, onDone }) 
                 <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
                   <div style={{ flex: "1 1 140px" }}>
                     <label style={{ fontSize: "12px", fontWeight: 600 }}>Day</label>
-                    <select style={{ ...box, width: "100%", marginTop: "3px" }} value={dayOf(current)}
+                    <CustomSelect style={{ ...box, width: "100%", marginTop: "3px" }} value={dayOf(current)}
                             onChange={(e) => (plan[current.key] ? setFor(current, { day: e.target.value }) : setDraftDay((d) => ({ ...d, [current.key]: e.target.value })))}>
                       {DAYS.map(([c, l]) => <option key={c} value={c}>{l}</option>)}
-                    </select>
+                    </CustomSelect>
                   </div>
                   <div style={{ flex: "1 1 140px" }}>
                     <label style={{ fontSize: "12px", fontWeight: 600 }}>Start time</label>
-                    <input type="time" style={{ ...box, width: "100%", marginTop: "3px" }} value={plan[current.key]?.start || ""}
-                           onChange={(e) => e.target.value && setFor(current, { start: e.target.value })} />
+                    <CustomTimePicker style={{ ...box, width: "100%", marginTop: "3px" }} value={plan[current.key]?.start || ""}
+                           onChange={(e) => e.target.value && setFor(current, { start: e.target.value })} aria-label="Start time" />
                   </div>
                 </div>
 

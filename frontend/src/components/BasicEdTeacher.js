@@ -26,7 +26,7 @@ function BasicEdTeacher() {
   const byKey = {};
   entries.forEach((e) => { byKey[`${e.day}|${hhmm(e.start_time)}`] = e; });
   const handleLogout = () => { logout(); window.location.href = "/login"; };
-  const nav = [{ key: "schedule", label: "My Schedule", icon: "" }, { key: "profile", label: "My Profile", icon: "" }];
+  const nav = [{ group: "Plan" }, { key: "schedule", label: "My Schedule", icon: "" }, { group: "People" }, { key: "profile", label: "My Profile", icon: "" }];
   return (
     <div className="app-shell">
       <Sidebar brandLabel="U-FAST" workspaceLabel={`${user.school_level} Faculty`} items={nav} activeKey={tab} onSelect={setTab} userName={user.username} userRole={`${user.school_level} Teacher`} onSignOut={handleLogout} />

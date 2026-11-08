@@ -1,3 +1,6 @@
+import CustomSelect from "./CustomSelect";
+import CustomDatePicker from "./CustomDatePicker";
+import CustomTimePicker from "./CustomTimePicker";
 import React, { useState, useEffect } from "react";
 import API from "../services/api";
 import Badge from "./Badge";
@@ -6,6 +9,7 @@ import RoomSelect from "./RoomSelect";
 import { kindLabel } from "../utils/labels";
 import ExamConflictDialog from "./ExamConflictDialog";
 import { formatDate, formatTimeRange } from "../utils/formatDateTime";
+import { useConfirmDialog } from "./ConfirmDialog";
 
 /* Exam Schedule -- shared by the Registrar and the Dean.
      Registrar : sees and prints MINOR subjects only, can edit their date and time.
@@ -36,6 +40,7 @@ function niceDate(iso) {
 const weekdayOf = (iso) => WEEKDAYS[new Date(iso + "T00:00:00").getDay()];
 
 function ExamSchedulePanel({ role, programId }) {
+  const confirmDialog = useConfirmDialog();
   const isRegistrar = role === "registrar";
   const ownKind = isRegistrar ? "minor" : "major";
 
@@ -175,7 +180,7 @@ function ExamSchedulePanel({ role, programId }) {
     }
   };
   const removeExam = async (e) => {
-    if (!window.confirm(`Remove the ${e.subject_code} exam on ${e.exam_date || "this date"}?`)) return;
+    if (!(await confirmDialog({ title: "Remove exam?", message: `Remove the ${e.subject_code} exam on ${e.exam_date || "this date"}?`, confirmLabel: "Remove exam" }))) return;
     try { await API.delete(`/exams/${e.id}/`); load(); }
     catch (err) { alert(err.response?.data?.detail || "Could not remove that exam."); }
   };
@@ -225,24 +230,24 @@ function ExamSchedulePanel({ role, programId }) {
         <div style={{ display: "flex", flexWrap: "wrap", gap: "14px", alignItems: "flex-end" }}>
           <div>
             <label style={fieldLabel}>Semester</label>
-            <select style={input} value={genForm.semester} onChange={(e) => setGenForm({ ...genForm, semester: e.target.value })}>
+            <CustomSelect style={input} value={genForm.semester} onChange={(e) => setGenForm({ ...genForm, semester: e.target.value })}>
               <option value="">-- Select --</option>
               {SEMESTERS.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
+            </CustomSelect>
           </div>
           <div>
             <label style={fieldLabel}>Exam Period</label>
-            <select style={input} value={genForm.exam_period} onChange={(e) => setGenForm({ ...genForm, exam_period: e.target.value })}>
+            <CustomSelect style={input} value={genForm.exam_period} onChange={(e) => setGenForm({ ...genForm, exam_period: e.target.value })}>
               {PERIODS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
+            </CustomSelect>
           </div>
           <div>
             <label style={fieldLabel}>Exam Week — From</label>
-            <input style={input} type="date" value={genForm.exam_start_date} onChange={(e) => setGenForm({ ...genForm, exam_start_date: e.target.value })} />
+            <CustomDatePicker style={input} value={genForm.exam_start_date} onChange={(e) => setGenForm({ ...genForm, exam_start_date: e.target.value })} aria-label="Exam week start date" />
           </div>
           <div>
             <label style={fieldLabel}>Exam Week — Until</label>
-            <input style={input} type="date" value={genForm.exam_end_date} min={genForm.exam_start_date || undefined} onChange={(e) => setGenForm({ ...genForm, exam_end_date: e.target.value })} />
+            <CustomDatePicker style={input} value={genForm.exam_end_date} min={genForm.exam_start_date || undefined} onChange={(e) => setGenForm({ ...genForm, exam_end_date: e.target.value })} aria-label="Exam week end date" />
           </div>
           <button onClick={runGenerate} disabled={generating || !genForm.semester || !genForm.exam_start_date || !genForm.exam_end_date}
             style={{ background: generating ? "#6b8bb3" : "#003366", color: "white", border: "none", padding: "10px 24px", borderRadius: 6, fontSize: "14px", fontWeight: 600, cursor: generating ? "default" : "pointer", height: "38px" }}>
@@ -311,28 +316,28 @@ function ExamSchedulePanel({ role, programId }) {
       </div>
 
       {/* ---------- filters + print ---------- */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "center", marginBottom: "14px" }}>
-        <input type="text" placeholder="Search subject, faculty, room or date" value={search}
-          onChange={(e) => setSearch(e.target.value)} style={{ ...input, minWidth: "260px" }} />
+      <div className="exam-filter-toolbar">
+        <input className="exam-filter-search" type="text" placeholder="Search subject, faculty, room or date" value={search}
+          onChange={(e) => setSearch(e.target.value)} />
         {isRegistrar ? (
-          <select style={input} value={period} onChange={(e) => setPeriod(e.target.value)}>
+          <CustomSelect style={input} value={period} onChange={(e) => setPeriod(e.target.value)}>
             <option value="">All exam periods</option>
             {PERIODS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
+          </CustomSelect>
         ) : (
           <>
-            <select style={input} value={sectionId} onChange={(e) => setSectionId(e.target.value)}>
+            <CustomSelect style={input} value={sectionId} onChange={(e) => setSectionId(e.target.value)}>
               <option value="">All sections</option>
               {sectionChoices.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-            </select>
-            <select style={input} value={yearLevel} onChange={(e) => setYearLevel(e.target.value)}>
+            </CustomSelect>
+            <CustomSelect style={input} value={yearLevel} onChange={(e) => setYearLevel(e.target.value)}>
               <option value="">All year levels</option>
               {yearChoices.map((y) => <option key={y} value={y}>{y}</option>)}
-            </select>
-            <select style={input} value={period} onChange={(e) => setPeriod(e.target.value)} title="Also decides which period is printed">
+            </CustomSelect>
+            <CustomSelect style={input} value={period} onChange={(e) => setPeriod(e.target.value)} title="Also decides which period is printed">
               <option value="">All exam periods</option>
               {PERIODS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
+            </CustomSelect>
           </>
         )}
         {(search || period || sectionId || yearLevel) && (
@@ -411,16 +416,17 @@ function ExamSchedulePanel({ role, programId }) {
                           <td colSpan={cols} style={{ ...td, padding: "12px" }}>
                             <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", alignItems: "flex-end" }}>
                               <div><label style={fieldLabel}>Date</label>
-                                <input style={input} type="date" value={editing.exam_date} onChange={(ev) => setEditing({ ...editing, exam_date: ev.target.value })} /></div>
+                                <CustomDatePicker style={input} value={editing.exam_date} onChange={(ev) => setEditing({ ...editing, exam_date: ev.target.value })} aria-label="Exam date" /></div>
                               <div><label style={fieldLabel}>Start</label>
-                                <input style={input} type="time" value={editing.start_time} onChange={(ev) => setEditing({ ...editing, start_time: ev.target.value })} /></div>
+                                <CustomTimePicker style={input} value={editing.start_time} onChange={(ev) => setEditing({ ...editing, start_time: ev.target.value })} aria-label="Exam start time" /></div>
                               <div><label style={fieldLabel}>End</label>
-                                <input style={input} type="time" value={editing.end_time} onChange={(ev) => setEditing({ ...editing, end_time: ev.target.value })} /></div>
-                              <button disabled={saving} onClick={saveEdit}
-                                style={{ background: "#003366", color: "white", border: "none", padding: "9px 18px", borderRadius: 4, fontWeight: 600, cursor: "pointer" }}>
-                                {saving ? "Saving…" : "Save"}
-                              </button>
-                              <button style={smallBtn} onClick={() => setEditing(null)}>Cancel</button>
+                                <CustomTimePicker style={input} value={editing.end_time} onChange={(ev) => setEditing({ ...editing, end_time: ev.target.value })} aria-label="Exam end time" /></div>
+                              <div className="exam-edit-actions">
+                                <button className="exam-edit-save" disabled={saving} onClick={saveEdit}>
+                                  {saving ? "Saving…" : "Save"}
+                                </button>
+                                <button className="exam-edit-cancel" onClick={() => setEditing(null)}>Cancel</button>
+                              </div>
                             </div>
                             {editError && <p style={{ color: "#b91c1c", fontSize: "13px", margin: "8px 0 0" }}>{editError}</p>}
                           </td>
@@ -443,26 +449,26 @@ function ExamSchedulePanel({ role, programId }) {
         </button>
         {showManual && (
           <div>
-            <select value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })}>
+            <CustomSelect value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })}>
               <option value="">-- Subject --</option>
               {ownedSubjects.map((s) => <option key={s.id} value={s.id}>{s.code} - {s.title}</option>)}
-            </select>
-            <select value={form.section} onChange={(e) => setForm({ ...form, section: e.target.value })}>
+            </CustomSelect>
+            <CustomSelect value={form.section} onChange={(e) => setForm({ ...form, section: e.target.value })}>
               <option value="">-- Section --</option>
               {sections.filter((s) => !programId || String(s.program) === String(programId))
                 .map((s) => <option key={s.id} value={s.id}>{s.name} · {s.year_level} · {s.semester}</option>)}
-            </select>
-            <select value={form.proctor} onChange={(e) => setForm({ ...form, proctor: e.target.value })}>
+            </CustomSelect>
+            <CustomSelect value={form.proctor} onChange={(e) => setForm({ ...form, proctor: e.target.value })}>
               <option value="">-- Proctor --</option>
               {facultyList.map((f) => <option key={f.id} value={f.id}>{f.full_name && f.full_name !== f.username ? `${f.full_name} (${f.username})` : f.username}</option>)}
-            </select>
+            </CustomSelect>
             <RoomSelect rooms={rooms} value={form.room} onChange={(v) => setForm({ ...form, room: v })} autoLabel="-- Room --" width={170} />
-            <input type="date" value={form.exam_date} onChange={(e) => setForm({ ...form, exam_date: e.target.value })} />
-            <input type="time" value={form.start_time} onChange={(e) => setForm({ ...form, start_time: e.target.value })} />
-            <input type="time" value={form.end_time} onChange={(e) => setForm({ ...form, end_time: e.target.value })} />
-            <select value={form.exam_period} onChange={(e) => setForm({ ...form, exam_period: e.target.value })}>
+            <CustomDatePicker value={form.exam_date} onChange={(e) => setForm({ ...form, exam_date: e.target.value })} aria-label="Exam date" />
+            <CustomTimePicker value={form.start_time} onChange={(e) => setForm({ ...form, start_time: e.target.value })} aria-label="Exam start time" />
+            <CustomTimePicker value={form.end_time} onChange={(e) => setForm({ ...form, end_time: e.target.value })} aria-label="Exam end time" />
+            <CustomSelect value={form.exam_period} onChange={(e) => setForm({ ...form, exam_period: e.target.value })}>
               {PERIODS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
+            </CustomSelect>
             <button onClick={addExam}>Add Exam Slot</button>
             {form.exam_date && (
               <HistoricalHint day={weekdayOf(form.exam_date)} startTime={form.start_time} endTime={form.end_time}

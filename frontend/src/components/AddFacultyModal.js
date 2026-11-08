@@ -1,3 +1,4 @@
+import CustomSelect from "./CustomSelect";
 import React, { useRef, useState } from "react";
 import API from "../services/api";
 
@@ -126,16 +127,16 @@ export default function AddFacultyModal({ departments, onClose, onCreated }) {
             </div>
             <div style={{ marginTop: "12px" }}>
               <label style={label}>Employment classification</label>
-              <select style={input} value={form.faculty_type} onChange={set("faculty_type")}>
+              <CustomSelect style={input} value={form.faculty_type} onChange={set("faculty_type")}>
                 <option value="full_time">Full-time</option>
                 <option value="part_time">Part-time</option>
-              </select>
+              </CustomSelect>
               {errors.faculty_type && <div style={{ color: "#b91c1c", fontSize: "12px" }}>{errors.faculty_type}</div>}
             </div>
             <div style={{ marginTop: "12px" }}>
               <label style={label}>Department</label>
               {departments.length > 1 ? (
-                <select style={input} value={form.department} onChange={set("department")}>{departments.map((d) => <option key={d} value={d}>{d}</option>)}</select>
+                <CustomSelect style={input} value={form.department} onChange={set("department")}>{departments.map((d) => <option key={d} value={d}>{d}</option>)}</CustomSelect>
               ) : (
                 <input style={{ ...input, background: "#f3f4f6" }} value={form.department} readOnly />
               )}

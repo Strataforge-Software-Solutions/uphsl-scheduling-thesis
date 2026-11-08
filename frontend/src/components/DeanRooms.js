@@ -1,3 +1,4 @@
+import CustomSelect from "./CustomSelect";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import API from "../services/api";
 import RoomSelect from "./RoomSelect";
@@ -95,10 +96,10 @@ export default function DeanRooms({ programs = [] }) {
           {data.departments.map((d) => (
             <label key={d} style={{ fontSize: "13px" }}>
               {d}{" "}
-              <select style={box} value={data.building_preference[d] || ""} onChange={(e) => setBuilding(d, e.target.value)}>
+              <CustomSelect style={box} value={data.building_preference[d] || ""} onChange={(e) => setBuilding(d, e.target.value)}>
                 <option value="">No preference</option>
                 {data.buildings.map((b) => <option key={b.code} value={b.code}>{BUILDING_LABEL[b.code] || b.label}</option>)}
-              </select>
+              </CustomSelect>
             </label>
           ))}
         </div>
@@ -113,16 +114,16 @@ export default function DeanRooms({ programs = [] }) {
             </p>
           </div>
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            <select style={{ ...box, minWidth: 200 }} value={programId} onChange={(e) => setProgramId(e.target.value)} aria-label="Program">
+            <CustomSelect style={{ ...box, minWidth: 200 }} value={programId} onChange={(e) => setProgramId(e.target.value)} aria-label="Program">
               <option value="">-- Select a program --</option>
               {programs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-            {programId && <><select style={box} value={year} onChange={(e) => setYear(e.target.value)}>
+            </CustomSelect>
+            {programId && <><CustomSelect style={box} value={year} onChange={(e) => setYear(e.target.value)}>
               <option value="">All year levels</option>{years.map((y) => <option key={y}>{y}</option>)}
-            </select>
-            <select style={box} value={sem} onChange={(e) => setSem(e.target.value)}>
+            </CustomSelect>
+            <CustomSelect style={box} value={sem} onChange={(e) => setSem(e.target.value)}>
               <option value="">All semesters</option>{sems.map((x) => <option key={x}>{x}</option>)}
-            </select></>}
+            </CustomSelect></>}
           </div>
         </div>
         {!programId ? (

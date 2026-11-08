@@ -1,3 +1,5 @@
+import CustomSelect from "./CustomSelect";
+import CustomDatePicker from "./CustomDatePicker";
 import HowToUse from "./HowToUse";
 import { reportLoadError } from "../services/loadError";
 import { RegistrarHome } from "./HomeWrappers";
@@ -25,10 +27,14 @@ import ExamSchedulePanel from "./ExamSchedulePanel";
 import GenerateSchedulePanel from "./GenerateSchedulePanel";
 import ErrorBoundary from "./ErrorBoundary";
 import ConflictChecker from "./ConflictChecker";
+import { useConfirmDialog } from "./ConfirmDialog";
 import MinorSchedulesPanel from "./MinorSchedulesPanel";
 import WorkloadPanel from "./WorkloadPanel";
 import "./DashboardTheme.css";
 import { OverrideBadge } from "./AssignAnywayDialog";
+import { HOME_INTRO } from "./howto";
+import coveragePolicyIllustration from "../assets/coverage-policy-illustration.png";
+import coverageReportIllustration from "../assets/coverage-report-illustration.png";
 
 // Same sections in the Dean, Registrar and Admin workspaces: Plan / Academics / People / Insights.
 const NAV_ITEMS = [
@@ -112,19 +118,24 @@ function RegistrarDashboard() {
 
       <div className="app-main">
         <TopBar crumb={header.title} userName={user?.username} />
-        <PageHeader eyebrow={header.eyebrow} title={header.title} subtitle={header.subtitle} />
+        <PageHeader
+          eyebrow={header.eyebrow}
+          title={header.title}
+          subtitle={header.subtitle}
+          supportingText={activeTab === "home" ? <><strong>{user?.username || "Registrar"}</strong> · Registrar · {HOME_INTRO.registrar}</> : null}
+        />
 
         <div className="app-page-body">
           {activeTab !== "home" && <HowToUse role="registrar" tab={activeTab} />}
-          {activeTab === "home" && <RegistrarHome nav={NAV_ITEMS} onNavigate={setActiveTab} name={user?.username} />}
+          {activeTab === "home" && <RegistrarHome nav={NAV_ITEMS} onNavigate={setActiveTab} name={user?.username} hideIntro />}
           {["curriculum", "exams"].includes(activeTab) && (
             <div className="app-toolbar">
-              <select value={college} onChange={(e) => setCollege(e.target.value)}>
+              <CustomSelect value={college} onChange={(e) => setCollege(e.target.value)}>
                 {colleges.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-              <select value={programId} onChange={(e) => setProgramId(e.target.value)}>
+              </CustomSelect>
+              <CustomSelect value={programId} onChange={(e) => setProgramId(e.target.value)}>
                 {programsInCollege.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              </CustomSelect>
             </div>
           )}
 
@@ -378,37 +389,37 @@ function SchedulesTab() {
           onChange={(e) => setSearch(e.target.value)}
           style={{ ...filterInputStyle, flex: "1 1 220px", minWidth: "200px" }}
         />
-        <select value={collegeFilter} onChange={(e) => { setCollegeFilter(e.target.value); setProgramFilter(""); }} style={filterInputStyle}>
+        <CustomSelect value={collegeFilter} onChange={(e) => { setCollegeFilter(e.target.value); setProgramFilter(""); }} style={filterInputStyle}>
           <option value="">All colleges</option>
           {collegeOptions.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <select value={programFilter} onChange={(e) => setProgramFilter(e.target.value)} style={filterInputStyle}>
+        </CustomSelect>
+        <CustomSelect value={programFilter} onChange={(e) => setProgramFilter(e.target.value)} style={filterInputStyle}>
           <option value="">All programs</option>
           {programOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-        </select>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={filterInputStyle}>
+        </CustomSelect>
+        <CustomSelect value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={filterInputStyle}>
           <option value="">All statuses</option>
           <option value="draft">Draft</option>
           <option value="approved">Approved</option>
           <option value="published">Published</option>
-        </select>
-        <select value={yearLevel} onChange={(e) => setYearLevel(e.target.value)} style={filterInputStyle}>
+        </CustomSelect>
+        <CustomSelect value={yearLevel} onChange={(e) => setYearLevel(e.target.value)} style={filterInputStyle}>
           <option value="">All year levels</option>
           {yearLevelOptions.map((y) => <option key={y} value={y}>{y}</option>)}
-        </select>
-        <select value={semester} onChange={(e) => setSemester(e.target.value)} style={filterInputStyle}>
+        </CustomSelect>
+        <CustomSelect value={semester} onChange={(e) => setSemester(e.target.value)} style={filterInputStyle}>
           <option value="">All semesters</option>
           {semesterOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={filterInputStyle}>
+        </CustomSelect>
+        <CustomSelect value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={filterInputStyle}>
           <option value="">Gen Ed &amp; program subjects</option>
           <option value="minor">Gen Ed only</option>
           <option value="major">Program subjects only</option>
-        </select>
+        </CustomSelect>
         <button onClick={resetFilters} style={{ ...filterInputStyle, color: "#111827" }}>Reset</button>
       </div>
 
-      <table className="sched-compact">
+      <table className="sched-compact schedule-list-table">
         <thead>
           <tr>
             <th style={{ width: 34 }}>
@@ -504,6 +515,7 @@ function SchedulesTab() {
  * block sections: everyone in a section takes that section's whole load). */
 /* ---------------- Curriculum: all departments, full CRUD ---------------- */
 function CurriculumTab({ programId, defaultProgram }) {
+  const confirmDialog = useConfirmDialog();
   const [subjects, setSubjects] = useState([]);
   const [programs, setPrograms] = useState([]);
   const [academicFields, setAcademicFields] = useState([]);
@@ -547,7 +559,7 @@ function CurriculumTab({ programId, defaultProgram }) {
   };
 
   const remove = async (id) => {
-    if (!window.confirm("Remove this subject?")) return;
+    if (!(await confirmDialog({ title: "Remove subject?", message: "This will remove the subject from the curriculum. Existing schedules will remain unchanged.", confirmLabel: "Remove subject" }))) return;
     await API.delete(`/curriculum/subjects/${id}/`);
     load();
   };
@@ -582,29 +594,47 @@ function CurriculumTab({ programId, defaultProgram }) {
         <button onClick={addAcademicField}>Add Field</button>
       </div>
 
-      <div style={{ marginBottom: "20px" }}>
-        <input placeholder="Code" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
-        <input placeholder="Title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-        <input type="number" placeholder="Lec Units" value={form.lec_units}
-               onChange={(e) => setForm({ ...form, lec_units: Number(e.target.value) })} />
-        <input type="number" placeholder="Lab Units" value={form.lab_units}
-               onChange={(e) => setForm({ ...form, lab_units: Number(e.target.value) })} />
-        <select value={form.program} onChange={(e) => setForm({ ...form, program: e.target.value })}>
-          <option value="">-- Program --</option>
-          {programs.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.department})</option>)}
-        </select>
-        <input placeholder="Year Level (e.g. 1st Year)" value={form.year_level}
-               onChange={(e) => setForm({ ...form, year_level: e.target.value })} />
-        <input placeholder="Semester (e.g. 1st Sem)" value={form.semester}
-               onChange={(e) => setForm({ ...form, semester: e.target.value })} />
-        <select value={form.classification} onChange={(e) => setForm({ ...form, classification: e.target.value })}>
-          <option value="major">{kindLabel("major", (programs.find((p) => String(p.id) === String(form.program)) || {}).name)}</option>
-          <option value="minor">{kindLabel("minor")}</option>
-        </select>
-        <select value={form.field} onChange={(e) => setForm({ ...form, field: e.target.value })}>
-          <option value="">-- Academic Field (optional) --</option>
-          {academicFields.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-        </select>
+      <div className="curriculum-add-form" style={{ marginBottom: "20px" }}>
+        <label className="curriculum-add-field curriculum-add-code"><span>Subject code</span>
+          <input aria-label="Subject code" placeholder="e.g., CS1101" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
+        </label>
+        <label className="curriculum-add-field curriculum-add-title"><span>Subject title</span>
+          <input aria-label="Subject title" placeholder="e.g., Introduction to Computing" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+        </label>
+        <label className="curriculum-add-field curriculum-add-lec"><span>Lecture units</span>
+          <input aria-label="Lecture units" type="number" min="0" placeholder="0" value={form.lec_units}
+                 onChange={(e) => setForm({ ...form, lec_units: Number(e.target.value) })} />
+        </label>
+        <label className="curriculum-add-field curriculum-add-lab"><span>Laboratory units</span>
+          <input aria-label="Laboratory units" type="number" min="0" placeholder="0" value={form.lab_units}
+                 onChange={(e) => setForm({ ...form, lab_units: Number(e.target.value) })} />
+        </label>
+        <div className="curriculum-add-field curriculum-add-program"><span>Program</span>
+          <CustomSelect aria-label="Program" value={form.program} onChange={(e) => setForm({ ...form, program: e.target.value })}>
+            <option value="">Select program</option>
+            {programs.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.department})</option>)}
+          </CustomSelect>
+        </div>
+        <label className="curriculum-add-field curriculum-add-year"><span>Year level</span>
+          <input aria-label="Year level" placeholder="e.g., 1st Year" value={form.year_level}
+                 onChange={(e) => setForm({ ...form, year_level: e.target.value })} />
+        </label>
+        <label className="curriculum-add-field curriculum-add-semester"><span>Semester</span>
+          <input aria-label="Semester" placeholder="e.g., 1st Sem" value={form.semester}
+                 onChange={(e) => setForm({ ...form, semester: e.target.value })} />
+        </label>
+        <div className="curriculum-add-field curriculum-add-classification"><span>Subject type</span>
+          <CustomSelect aria-label="Subject type" value={form.classification} onChange={(e) => setForm({ ...form, classification: e.target.value })}>
+            <option value="major">{kindLabel("major", (programs.find((p) => String(p.id) === String(form.program)) || {}).name)}</option>
+            <option value="minor">{kindLabel("minor")}</option>
+          </CustomSelect>
+        </div>
+        <div className="curriculum-add-field curriculum-add-academic-field"><span>Academic field (optional)</span>
+          <CustomSelect aria-label="Academic field (optional)" value={form.field} onChange={(e) => setForm({ ...form, field: e.target.value })}>
+            <option value="">Select academic field</option>
+            {academicFields.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+          </CustomSelect>
+        </div>
         <button onClick={addSubject}>Add Subject</button>
       </div>
 
@@ -619,12 +649,12 @@ function CurriculumTab({ programId, defaultProgram }) {
               <td>{kindLabel(s.classification, s.program_name)}</td>
               <td>{s.department}</td>
               <td>
-                <select value={s.field || ""} onChange={(e) => updateSubjectField(s.id, e.target.value)}>
+                <CustomSelect className="curriculum-field-select" value={s.field || ""} onChange={(e) => updateSubjectField(s.id, e.target.value)}>
                   <option value="">-- none --</option>
                   {academicFields.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-                </select>
+                </CustomSelect>
               </td>
-              <td><button onClick={() => remove(s.id)}>Remove</button></td>
+              <td><button className="curriculum-remove-button" onClick={() => remove(s.id)}>Remove</button></td>
             </tr>
           ))}
         </tbody>
@@ -639,9 +669,9 @@ function CurriculumTab({ programId, defaultProgram }) {
 function RegistrarInsights() {
   const [filters, setFilters] = useState({});
   return (
-    <div style={{ marginTop: 24 }}>
+    <div className="registrar-analytics-insights" style={{ marginTop: 24 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-        <h3 style={{ margin: 0, color: "#003366" }}>Insights — Gen Ed and every college</h3>
+        <h3 className="analytics-section-title"><AnalyticsIcon type="analytics" />Insights — Gen Ed and every college</h3>
         <InsightFilters value={filters} onChange={setFilters} />
       </div>
       <GenEdCoverageCard filters={filters} />
@@ -650,6 +680,21 @@ function RegistrarInsights() {
       <CapacityCard filters={filters} />
     </div>
   );
+}
+
+function AnalyticsIcon({ type }) {
+  const paths = {
+    analytics: <><path d="M3 17V3m0 14h14" /><path d="m5.5 13 3-3.5 2.7 1.8 4.3-5.1" /><circle cx="5.5" cy="13" r=".8" /><circle cx="8.5" cy="9.5" r=".8" /><circle cx="11.2" cy="11.3" r=".8" /><circle cx="15.5" cy="6.2" r=".8" /></>,
+    people: <><circle cx="8" cy="7" r="3" /><path d="M2.5 17c.5-2.7 2.3-4 5.5-4s5 1.3 5.5 4M14 5a2.5 2.5 0 0 1 0 4.8M14.5 13c1.7.4 2.7 1.7 3 4" /></>,
+    room: <><path d="M4 18V3h12v15M2 18h16M8 18v-4h4v4" /><circle cx="13.5" cy="9" r=".5" /></>,
+    calendar: <><rect x="3" y="4" width="14" height="13" rx="2" /><path d="M6.5 2.5v3M13.5 2.5v3M3.5 8h13M7 11h2m2 0h2m-6 3h2" /></>,
+    layers: <><path d="m10 2.5 7.5 4.2L10 11 2.5 6.7z" /><path d="m2.5 10.5 7.5 4.2 7.5-4.2M2.5 14.3l7.5 4.2 7.5-4.2" /></>,
+    clock: <><circle cx="10" cy="10" r="7" /><path d="M10 6v4l2.8 1.8" /></>,
+    check: <><circle cx="10" cy="10" r="7" /><path d="m6.5 10 2.3 2.3 4.8-5" /></>,
+    dependency: <><circle cx="4" cy="5" r="2" /><circle cx="16" cy="5" r="2" /><circle cx="10" cy="16" r="2" /><path d="m5.7 6.2 2.8 7.1m5.8-7.1-2.8 7.1M6 5h8" /></>,
+    capacity: <><circle cx="8" cy="7" r="3" /><path d="M2.5 17c.5-2.7 2.3-4 5.5-4s5 1.3 5.5 4M14 7h4m-2-2v4" /></>,
+  };
+  return <svg className="analytics-heading-icon" viewBox="0 0 20 20" aria-hidden="true">{paths[type] || paths.analytics}</svg>;
 }
 
 function AnalyticsTab() {
@@ -671,40 +716,40 @@ function AnalyticsTab() {
   if (!data) return <p>Loading analytics…</p>;
 
   return (
-    <div>
-      <WorkloadPanel canConfigure canSuggest />
-      <h3 style={{ color: "#003366" }}>Analytics — Institution-Wide</h3>
+    <div className="registrar-analytics-view">
+      <WorkloadPanel canConfigure canSuggest analyticsStyle />
+      <h3 className="analytics-section-title"><AnalyticsIcon type="analytics" />Analytics — Institution-Wide</h3>
       {data.semesters && data.semesters.length > 1 && (
-        <p style={{ fontSize: "13px", color: "#374151" }}>
+        <p className="analytics-filter-note" style={{ fontSize: "13px", color: "#374151" }}>
           Semester:{" "}
-          <select value={data.semester || ""} onChange={(e) => setSem(e.target.value)}>
+          <CustomSelect value={data.semester || ""} onChange={(e) => setSem(e.target.value)}>
             {data.semesters.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>{" "}
+          </CustomSelect>{" "}
           (1st and 2nd Sem use the same rooms and teachers, so each is shown on its own.)
         </p>
       )}
-      <p style={{ fontSize: "13px", color: "#6b7280", marginTop: 0 }}>
+      <p className="analytics-description" style={{ fontSize: "13px", color: "#6b7280", marginTop: 0 }}>
         A workforce/HR-style view of how teaching load and room capacity are actually being used.
       </p>
 
-      <div style={{ display: "flex", gap: "14px", flexWrap: "wrap", marginBottom: "24px" }}>
-        <StatTile label="Schedule Efficiency" value={`${data.schedule_efficiency}%`} />
-        <StatTile label="Workload Std. Deviation" value={`${data.workload_std_dev} hrs`} accent="#b8860b" />
-        <StatTile label="Teachers With Load" value={Object.keys(data.teacher_workload).length} />
-        <StatTile label="Rooms In Use" value={Object.keys(data.room_utilization).length} />
+      <div className="registrar-analytics-summary" style={{ display: "flex", gap: "14px", flexWrap: "wrap", marginBottom: "24px" }}>
+        <StatTile label="Schedule Efficiency" value={`${data.schedule_efficiency}%`} icon={<AnalyticsIcon type="analytics" />} />
+        <StatTile label="Workload Std. Deviation" value={`${data.workload_std_dev} hrs`} accent="#b8860b" icon={<AnalyticsIcon type="layers" />} />
+        <StatTile label="Teachers With Load" value={Object.keys(data.teacher_workload).length} icon={<AnalyticsIcon type="people" />} />
+        <StatTile label="Rooms In Use" value={Object.keys(data.room_utilization).length} icon={<AnalyticsIcon type="room" />} />
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px", marginBottom: "8px" }}>
-        <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "18px 20px" }}>
-          <h4 style={{ marginTop: 0, color: "#003366" }}>Teacher Workload</h4>
+      <div className="analytics-chart-grid">
+        <div className="analytics-chart-card">
+          <h4 className="analytics-chart-title"><AnalyticsIcon type="people" />Teacher Workload</h4>
           <HBarChart
             data={Object.entries(data.teacher_workload).map(([t, c]) => ({ label: t, value: c })).sort((a, b) => b.value - a.value)}
             unit=" hrs"
             emptyText="No schedule entries yet."
           />
         </div>
-        <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "18px 20px" }}>
-          <h4 style={{ marginTop: 0, color: "#003366" }}>Room Utilization</h4>
+        <div className="analytics-chart-card">
+          <h4 className="analytics-chart-title"><AnalyticsIcon type="room" />Room Utilization</h4>
           <HBarChart
             data={Object.entries(data.room_utilization).map(([r, c]) => ({ label: r, value: c })).sort((a, b) => b.value - a.value)}
             color="#b8860b"
@@ -714,16 +759,16 @@ function AnalyticsTab() {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px", marginTop: "20px" }}>
-        <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "18px 20px" }}>
-          <h4 style={{ marginTop: 0, color: "#003366" }}>Class Hours by Day</h4>
+      <div className="analytics-chart-grid analytics-chart-grid-secondary">
+        <div className="analytics-chart-card">
+          <h4 className="analytics-chart-title"><AnalyticsIcon type="calendar" />Class Hours by Day</h4>
           <HBarChart
             data={Object.entries(data.class_hours_by_day || {}).map(([d, n]) => ({ label: d, value: n }))}
             unit=" hrs" emptyText="No schedule entries yet."
           />
         </div>
-        <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "18px 20px" }}>
-          <h4 style={{ marginTop: 0, color: "#003366" }}>Schedule Status</h4>
+        <div className="analytics-chart-card">
+          <h4 className="analytics-chart-title"><AnalyticsIcon type="layers" />Schedule Status</h4>
           <HBarChart
             data={Object.entries(data.schedule_status || {}).map(([k, n]) => ({ label: k.charAt(0).toUpperCase() + k.slice(1), value: n }))}
             color="#b8860b" unit=" hrs" emptyText="No schedule entries yet."
@@ -731,8 +776,8 @@ function AnalyticsTab() {
         </div>
       </div>
 
-      <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "18px 20px", marginTop: "20px" }}>
-        <h4 style={{ marginTop: 0, color: "#003366" }}>Recent Activity</h4>
+      <div className="analytics-chart-card analytics-activity-card">
+        <h4 className="analytics-chart-title"><AnalyticsIcon type="clock" />Recent Activity</h4>
         <RecentActivity items={data.recent_activity} />
       </div>
     </div>
@@ -813,44 +858,102 @@ function CoverageTab() {
     load();
   };
 
-  return (
-    <div>
-      <div style={{ marginBottom: "24px", padding: "14px", background: "#f9fafb", borderRadius: 6 }}>
-        <h4 style={{ marginTop: 0 }}>Scheduling policy</h4>
-        <p style={{ fontSize: "13px", color: "#6b7280" }}>
-          Class schedules never let a section's students be in two classes at once (the scheduler's rule; no allowance).
-          This grace window applies to <strong>exam</strong> scheduling only: a small overlap between a student's exam and
-          another class or exam is tolerated. Teacher and room conflicts are always hard.
-        </p>
-        {config && (
-          <label style={{ fontSize: "13px" }}>
-            Exam grace window:{" "}
-            <input
-              type="number" min="0" max="120" style={{ width: "60px" }}
-              defaultValue={config.student_overlap_tolerance_minutes}
-              onBlur={(e) => updateTolerance(Number(e.target.value))}
-            /> minutes
-          </label>
-        )}
-      </div>
+  const today = new Date();
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const weekAgo = new Date(today);
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  const activeAbsences = absences.filter((a) => a.status !== "denied");
+  const coverageStats = [
+    { label: "Open absence reports", value: activeAbsences.filter((a) => a.coverage_status !== "applied").length, icon: "calendar" },
+    { label: "Coverage pending", value: activeAbsences.filter((a) => a.coverage_status === "suggested").length, icon: "layers" },
+    { label: "Today's absences", value: activeAbsences.filter((a) => a.date === todayKey).length, icon: "today" },
+    { label: "Resolved (last 7 days)", value: activeAbsences.filter((a) => a.coverage_status === "applied" && a.submitted_at && new Date(a.submitted_at) >= weekAgo).length, icon: "check" },
+  ];
 
-      <h3>Report a faculty absence</h3>
-      <div style={{ marginBottom: "16px" }}>
-        <select value={form.faculty} onChange={(e) => setForm({ ...form, faculty: e.target.value })}>
-          <option value="">-- Faculty --</option>
-          {facultyList.map((f) => <option key={f.id} value={f.id}>{f.full_name && f.full_name !== f.username ? `${f.full_name} (${f.username})` : f.username}</option>)}
-        </select>
-        <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
-        <input placeholder="Reason (optional)" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
-        <button onClick={reportAbsence} disabled={busy}>Report & Get Coverage Suggestions</button>
+  const CoverageIcon = ({ type }) => {
+    const paths = {
+      calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M7 3v4M17 3v4M3 10h18M8 14h3M8 17h6" /></>,
+      layers: <><path d="m12 3 9 5-9 5-9-5 9-5Z" /><path d="m3 12 9 5 9-5M3 16l9 5 9-5" /></>,
+      today: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M7 3v4M17 3v4M3 10h18" /><path d="m9 15 2 2 4-4" /></>,
+      check: <><circle cx="12" cy="12" r="9" /><path d="m8 12 2.5 2.5L16 9" /></>,
+      people: <><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="10" cy="7" r="4" /><path d="M20 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></>,
+      info: <><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></>,
+      gear: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4v-.2a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1-2.8-2.8.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3v-4h.2a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1 2.8-2.8.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V3h4v.2a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1 2.8 2.8-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z" /></>,
+    };
+    return <svg className="coverage-icon" viewBox="0 0 24 24" aria-hidden="true">{paths[type] || paths.info}</svg>;
+  };
+
+  return (
+    <div className="coverage-dashboard">
+      <section className="coverage-stat-row" aria-label="Faculty coverage summary">
+        {coverageStats.map((stat) => <div className="coverage-stat" key={stat.label}>
+          <span className="coverage-stat-icon"><CoverageIcon type={stat.icon} /></span>
+          <span className="coverage-stat-copy"><strong>{stat.label}</strong><b>{stat.value}</b></span>
+        </div>)}
+      </section>
+
+      <div className="coverage-top-grid">
+        <section className="coverage-panel coverage-report-panel">
+          <div className="coverage-panel-heading">
+            <span className="coverage-panel-icon"><CoverageIcon type="people" /></span>
+            <div><h3>Report a faculty absence</h3><p>Log an absence and get coverage options based on availability and workload.</p></div>
+            <img className="coverage-card-illustration coverage-report-illustration" src={coverageReportIllustration} alt="" aria-hidden="true" />
+          </div>
+          <div className="coverage-form-grid">
+            <label>Faculty <span aria-hidden="true">*</span>
+              <CustomSelect className="faculty-picker-select" value={form.faculty} onChange={(e) => setForm({ ...form, faculty: e.target.value })}>
+                <option value="">Select faculty member</option>
+                {facultyList.map((f) => <option key={f.id} value={f.id}>{f.full_name && f.full_name !== f.username ? `${f.full_name} (${f.username})` : f.username}</option>)}
+              </CustomSelect>
+            </label>
+            <label>Absence date <span aria-hidden="true">*</span>
+              <CustomDatePicker value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} aria-label="Absence date" />
+            </label>
+            <label className="coverage-reason-field">Reason <span aria-hidden="true">*</span>
+              <input className="coverage-reason" maxLength={200} placeholder="e.g., Medical leave, Official business, Personal emergency" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
+              <small>{form.reason.length} / 200</small>
+            </label>
+          </div>
+          <button className="coverage-submit" onClick={reportAbsence} disabled={busy || !form.faculty || !form.date || !form.reason.trim()}>
+            {busy ? "Finding coverage…" : "✦  Report & Get Coverage Suggestions"}
+          </button>
+        </section>
+
+        <div className="coverage-side-stack">
+          <section className="coverage-panel coverage-policy-panel">
+            <div className="coverage-panel-heading">
+              <span className="coverage-panel-icon"><CoverageIcon type="gear" /></span>
+              <div><h3>Scheduling policy</h3><p>Rules used when generating coverage schedules.</p></div>
+              <img className="coverage-card-illustration coverage-policy-illustration" src={coveragePolicyIllustration} alt="" aria-hidden="true" />
+            </div>
+            <ul>
+              <li>Use qualified faculty with available time slots.</li>
+              <li>Prefer the same department or course expertise.</li>
+              <li>Avoid schedule conflicts and workload overload.</li>
+              <li>Apply the exam grace window for exam-related absences.</li>
+            </ul>
+            {config && <label className="coverage-grace-field">Exam grace window
+              <input className="grace-window-input" type="number" min="0" max="120" defaultValue={config.student_overlap_tolerance_minutes} onBlur={(e) => updateTolerance(Number(e.target.value))} /> minutes
+            </label>}
+          </section>
+          <section className="coverage-panel coverage-howto-panel">
+            <div className="coverage-panel-heading">
+              <span className="coverage-panel-icon"><CoverageIcon type="info" /></span>
+              <div><h3>How to use this tab</h3></div>
+            </div>
+            <div className="coverage-steps">
+              <div><b>1</b><span>Report an absence with the date and reason.</span></div><i>›</i>
+              <div><b>2</b><span>Review recommended coverage options.</span></div><i>›</i>
+              <div><b>3</b><span>Apply coverage to update affected schedules.</span></div>
+            </div>
+          </section>
+        </div>
       </div>
       {error && <p style={{ color: "red" }}>{error}</p>}
 
-      {busy && <p>Finding coverage…</p>}
-
       {suggestions && (
-        <div style={{ marginBottom: "24px" }}>
-          <h4>Coverage suggestions</h4>
+        <section className="coverage-panel coverage-suggestions-panel">
+          <h3>Coverage suggestions</h3>
           {suggestions.length === 0 && <p>No classes found for that faculty on that weekday.</p>}
           <table>
             <thead><tr><th>Class</th><th>Needs</th><th>Time</th><th>Suggested faculty</th><th>Their specialization</th><th>Reason</th><th></th></tr></thead>
@@ -878,28 +981,35 @@ function CoverageTab() {
               ))}
             </tbody>
           </table>
-        </div>
+        </section>
       )}
 
-      <h3>Recent absences</h3>
-      <table>
-        <thead><tr><th>Faculty</th><th>Date</th><th>Reason</th><th>Coverage</th><th></th></tr></thead>
+      <section className="coverage-panel coverage-recent-panel">
+        <div className="coverage-recent-heading"><div className="coverage-panel-heading">
+          <span className="coverage-panel-icon"><CoverageIcon type="calendar" /></span>
+          <div><h3>Recent absences</h3><p>Recently reported absences and their coverage status.</p></div>
+        </div><span className="coverage-count">{activeAbsences.length} reports</span></div>
+        <div className="coverage-table-wrap"><table className="coverage-table">
+        <thead><tr><th>#</th><th>Faculty</th><th>Date</th><th>Reason</th><th>Coverage status</th><th>Actions</th></tr></thead>
         <tbody>
-          {absences.map((a) => (
+          {activeAbsences.map((a, index) => (
             <tr key={a.id}>
-              <td>{a.faculty_name}</td>
+              <td>{index + 1}</td>
+              <td><span className="coverage-faculty-name"><CoverageIcon type="people" />{a.faculty_name}</span></td>
               <td>{a.date}</td>
               <td>{a.reason || "—"}</td>
               <td>
                 {a.coverage_status === "applied" && <Badge tone="success">Covered</Badge>}
-                {a.coverage_status === "suggested" && <Badge tone="warning">Suggested</Badge>}
-                {(!a.coverage_status || a.coverage_status === "none") && <Badge tone="neutral">None yet</Badge>}
+                {a.coverage_status === "suggested" && <Badge tone="warning">Coverage pending</Badge>}
+                {(!a.coverage_status || a.coverage_status === "none") && <Badge tone="neutral">Open</Badge>}
               </td>
-              <td><button onClick={() => getSuggestions(a.id)}>View / Re-run suggestions</button></td>
+              <td><button className="coverage-view-button" onClick={() => getSuggestions(a.id)}>↻ &nbsp;View / Re-run suggestions</button></td>
             </tr>
           ))}
+          {activeAbsences.length === 0 && <tr><td className="coverage-empty" colSpan="6">No absence reports yet. Reports will appear here.</td></tr>}
         </tbody>
-      </table>
+        </table></div>
+      </section>
     </div>
   );
 }

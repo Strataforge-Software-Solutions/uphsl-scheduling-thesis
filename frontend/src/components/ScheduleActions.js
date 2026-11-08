@@ -11,8 +11,8 @@ export const btnStyle = (bg, fg = "#ffffff", border) => ({
   background: bg, color: fg, border: border || (bg === "#ffffff" ? `1px solid ${C.navy}` : "none"), borderRadius: 6,
   padding: "6px 12px", fontSize: 13, cursor: "pointer", whiteSpace: "nowrap",
 });
-const overlay = { position: "fixed", inset: 0, background: "rgba(15,23,42,.45)", zIndex: 1100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 };
-const panel = { background: "#ffffff", color: "#111827", borderRadius: 6, width: "100%", maxWidth: 620, maxHeight: "88vh", overflowY: "auto", padding: "18px 20px", boxShadow: "var(--shadow-pop)" };
+const overlay = { position: "fixed", inset: 0, background: "rgba(15,23,42,.48)", backdropFilter: "blur(2px)", zIndex: 1100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 };
+const panel = { background: "#ffffff", color: "#142b4e", border: "1px solid #e4eaf2", borderRadius: 12, width: "100%", maxWidth: 620, maxHeight: "88vh", overflowY: "auto", padding: "22px 24px 18px", boxShadow: "0 22px 60px rgba(15, 35, 63, .28)" };
 
 function ClassList({ items, tone }) {
   return (
@@ -52,30 +52,15 @@ export function SelectionBar({ groups, busy, onApprove, onPublish, onDraft, onRe
   );
 }
 
-/* Compact per-row actions: the next stage (Approve for a draft, Publish for an approved class) and Edit are visible; Back to draft,
-   Remove and History sit in a small "⋯" menu. While rows are ticked, the row's Approve / Publish / Remove are disabled so it is clear the
-   bulk bar acts on the selection. Only the buttons change: every rule is still checked on the server. */
+/* Compact per-row actions are explicit so no action is hidden behind a three-dot menu. */
 const small = (bg, fg = "#ffffff", border) => ({ ...btnStyle(bg, fg, border), padding: "3px 9px", fontSize: 12, lineHeight: "18px", borderRadius: 5 });
-const menuItem = (fg, disabled) => ({ display: "block", width: "100%", textAlign: "left", background: "#ffffff", color: disabled ? "#6b7280" : fg,
-  border: "none", borderRadius: 0, padding: "7px 12px", fontSize: 13, cursor: disabled ? "not-allowed" : "pointer", boxShadow: "none" });
 
 export function RowActions({ group, actions, onEdit, selecting }) {
-  const [open, setOpen] = useState(false);
-  const ref = React.useRef(null);
-  useEffect(() => {
-    if (!open) return undefined;
-    const close = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    const esc = (e) => { if (e.key === "Escape") setOpen(false); };
-    document.addEventListener("mousedown", close);
-    document.addEventListener("keydown", esc);
-    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", esc); };
-  }, [open]);
   const g = group;
   const lockTitle = selecting ? "Rows are selected: use the bar at the bottom (or clear the selection)" : undefined;
   const off = actions.busy || selecting;
-  const pick = (fn) => () => { setOpen(false); fn(); };
   return (
-    <div ref={ref} style={{ display: "flex", gap: 4, alignItems: "center", position: "relative", whiteSpace: "nowrap" }}>
+    <div style={{ display: "flex", gap: 4, alignItems: "center", position: "relative", whiteSpace: "nowrap" }}>
       {g.status === "draft" && (
         <button onClick={() => actions.changeStatus(g.ids, "approved")} disabled={off} title={lockTitle || "Approve this class (checked for conflicts first)"}
           style={{ ...small("#16a34a"), opacity: off ? 0.45 : 1 }}>Approve</button>
@@ -85,24 +70,9 @@ export function RowActions({ group, actions, onEdit, selecting }) {
           style={{ ...small("#2563eb"), opacity: off ? 0.45 : 1 }}>Publish</button>
       )}
       {g.status === "draft" && <button onClick={() => onEdit(g)} style={small("#003366")} title="Edit teacher / room, or choose a new free day and time">Edit</button>}
-      <button onClick={() => setOpen((v) => !v)} aria-haspopup="menu" aria-expanded={open} aria-label={`More actions for ${g.subject_code} ${g.section_name}`}
-        title="More actions" style={{ ...small("#ffffff", "#374151", "1px solid #d1d5db"), padding: "3px 7px", fontWeight: 600 }}>⋯</button>
-      {open && (
-        <div role="menu" style={{ position: "absolute", right: 0, top: "100%", marginTop: 4, zIndex: 60, background: "#ffffff", border: "1px solid #e5e7eb",
-          borderRadius: 6, boxShadow: "var(--shadow-pop)", minWidth: 170, overflow: "hidden" }}>
-          {g.status === "approved" && (
-            <button role="menuitem" disabled={actions.busy} onClick={pick(() => actions.changeStatus(g.ids, "draft"))} style={menuItem("#003366", actions.busy)}>Back to draft</button>
-          )}
-          {g.status === "draft" && (
-            <button role="menuitem" disabled={off} onClick={pick(() => actions.askRemove(g.ids))} title={lockTitle}
-              style={menuItem("#b91c1c", off)}>Remove…</button>
-          )}
-          {g.status !== "draft" && (
-            <div style={{ padding: "7px 12px", fontSize: 12, color: "#6b7280" }} title="Only drafts can be removed">Remove (drafts only)</div>
-          )}
-          <button role="menuitem" onClick={pick(() => actions.showHistory(g.ids, `${g.subject_code} ${g.section_name}`))} style={menuItem("#374151", false)}>History</button>
-        </div>
-      )}
+      {g.status === "approved" && <button onClick={() => actions.changeStatus(g.ids, "draft")} disabled={off} style={{ ...small("#ffffff", "#003366", "1px solid #cbd9ec"), opacity: off ? 0.5 : 1 }} title={lockTitle || "Move this class back to draft"}>Draft</button>}
+      {g.status === "draft" && <button onClick={() => actions.askRemove(g.ids)} disabled={off} style={{ ...small("#ffffff", "#b42318", "1px solid #f2c6c3"), opacity: off ? 0.5 : 1 }} title={lockTitle || "Remove this draft class"}>Remove</button>}
+      <button onClick={() => actions.showHistory(g.ids, `${g.subject_code} ${g.section_name}`)} style={small("#ffffff", "#374151", "1px solid #d1d5db")} title="View change history">History</button>
     </div>
   );
 }

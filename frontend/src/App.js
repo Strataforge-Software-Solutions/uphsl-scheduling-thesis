@@ -7,6 +7,7 @@ import { getCurrentUser } from "./services/api";
 import LoadErrorBanner from "./components/LoadErrorBanner";
 import Settings from "./pages/Settings";
 import { PreferencesProvider } from "./services/preferences";
+import { ConfirmDialogProvider } from "./components/ConfirmDialog";
 
 function App() {
   const [user, setUser] = useState(getCurrentUser());
@@ -15,6 +16,7 @@ function App() {
 
   return (
     <PreferencesProvider userId={user?.id}>
+    <ConfirmDialogProvider>
     <Router>
       <LoadErrorBanner />
       <Routes>
@@ -49,6 +51,7 @@ function App() {
         />
       </Routes>
     </Router>
+    </ConfirmDialogProvider>
     </PreferencesProvider>
   );
 }

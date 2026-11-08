@@ -1,3 +1,4 @@
+import CustomSelect from "./CustomSelect";
 import React, { useState, useEffect, useCallback } from "react";
 import { statusText } from "./BasicEdAvailability";
 import API from "../services/api";
@@ -5,6 +6,7 @@ import { reportLoadError } from "../services/loadError";
 import Badge from "./Badge";
 import { periodOptionsAll, periodName } from "../utils/terms";
 import { be, errText, inputStyle, cardStyle, btn, btnPrimary, Field, Modal, Notice, DAYS, hhmm } from "./basicEdUi";
+import { useConfirmDialog } from "./ConfirmDialog";
 
 /* ---------- generic form modal ---------- */
 function FormModal({ title, fields, initial, onSave, onClose, saving, error }) {
@@ -16,9 +18,9 @@ function FormModal({ title, fields, initial, onSave, onClose, saving, error }) {
         {fields.map((f) => (
           <Field key={f.key} label={f.label} style={f.wide ? { gridColumn: "1 / -1" } : undefined}>
             {f.type === "select" ? (
-              <select style={{ ...inputStyle, width: "100%" }} value={form[f.key] ?? ""} onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}>
+              <CustomSelect style={{ ...inputStyle, width: "100%" }} value={form[f.key] ?? ""} onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}>
                 {f.options.map((o) => <option key={o[0]} value={o[0]}>{o[1]}</option>)}
-              </select>
+              </CustomSelect>
             ) : f.type === "check" ? (
               <label style={{ fontSize: "13px" }}><input type="checkbox" checked={!!form[f.key]} onChange={(e) => setForm({ ...form, [f.key]: e.target.checked })} /> {f.hint || "Yes"}</label>
             ) : (
@@ -66,6 +68,7 @@ function Table({ head, children, empty }) {
 
 /* ---------- Sections ---------- */
 export function SectionsTab({ level, windows }) {
+  const confirmDialog = useConfirmDialog();
   const sections = useList(level, "sections/");
   const faculty = useList(level, "faculty/");
   const rooms = useList(level, "rooms/");
@@ -93,7 +96,7 @@ export function SectionsTab({ level, windows }) {
     } catch (e) { setErr(errText(e)); } finally { setSaving(false); }
   };
   const remove = async (s) => {
-    if (!window.confirm(`Remove section ${s.name}? Its schedule periods are removed too.`)) return;
+    if (!(await confirmDialog({ title: "Remove section?", message: `Remove section ${s.name}? Its schedule periods are removed too.`, confirmLabel: "Remove section" }))) return;
     try { await be.del(level, `sections/${s.id}/`); sections.load(); } catch (e) { alert(errText(e)); }
   };
   return (
@@ -123,6 +126,7 @@ export function SectionsTab({ level, windows }) {
 /* ---------- Rooms ---------- */
 const ROOM_TYPES = [["classroom", "Classroom"], ["computer_lab", "Computer lab"], ["science_lab", "Science lab"], ["workshop", "TVL workshop"], ["gym", "Gym / court"]];
 export function RoomsTab({ level, config }) {
+  const confirmDialog = useConfirmDialog();
   const rooms = useList(level, "rooms/");
   const [edit, setEdit] = useState(null);
   const [err, setErr] = useState("");
@@ -139,7 +143,7 @@ export function RoomsTab({ level, config }) {
     catch (e) { setErr(errText(e)); } finally { setSaving(false); }
   };
   const remove = async (r) => {
-    if (!window.confirm(`Delete room ${r.name}?`)) return;
+    if (!(await confirmDialog({ title: "Delete room?", message: `Delete room ${r.name}?`, confirmLabel: "Delete room" }))) return;
     try { await be.del(level, `rooms/${r.id}/`); rooms.load(); } catch (e) { alert(errText(e)); }
   };
   return (
@@ -224,6 +228,7 @@ export function FacultyTab({ level }) {
 /* ---------- Curriculum ---------- */
 const CATS = [["core", "Core"], ["applied", "Applied"], ["specialized", "Specialized"], ["elective", "Elective"], ["learning_area", "Learning area"], ["guidance", "Homeroom / guidance"]];
 export function CurriculumTab({ level, windows, periodLabel, structure }) {
+  const confirmDialog = useConfirmDialog();
   const [grade, setGrade] = useState("");
   const [period, setPeriod] = useState("");
   const [strand, setStrand] = useState("");
@@ -260,7 +265,7 @@ export function CurriculumTab({ level, windows, periodLabel, structure }) {
     catch (e) { setErr(errText(e)); } finally { setSaving(false); }
   };
   const retire = async (s) => {
-    if (!window.confirm(`Retire ${s.code}? Schedules already made keep it; new schedules won't use it.`)) return;
+    if (!(await confirmDialog({ title: "Retire subject?", message: `Retire ${s.code}? Schedules already made keep it; new schedules won't use it.`, confirmLabel: "Retire subject" }))) return;
     try { await be.del(level, `curriculum/${s.id}/`); curr.load(); } catch (e) { alert(errText(e)); }
   };
   const validate = async () => {
@@ -284,9 +289,9 @@ export function CurriculumTab({ level, windows, periodLabel, structure }) {
       <div style={cardStyle}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap", marginBottom: "10px" }}>
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            <select style={inputStyle} value={grade} onChange={(e) => setGrade(e.target.value)}><option value="">All grades</option>{windows.map((w) => <option key={w.grade_level} value={w.grade_level}>Grade {w.grade_level}</option>)}</select>
-            <select style={inputStyle} value={period} onChange={(e) => setPeriod(e.target.value)}><option value="">All terms / semesters</option>{periodOpts.map(([n, l]) => <option key={n} value={n}>{l}</option>)}</select>
-            {level === "SHS" && <select style={inputStyle} value={strand} onChange={(e) => setStrand(e.target.value)}><option value="">All strands</option>{strands.map((s) => <option key={s.id} value={s.code}>{s.code}</option>)}</select>}
+            <CustomSelect style={inputStyle} value={grade} onChange={(e) => setGrade(e.target.value)}><option value="">All grades</option>{windows.map((w) => <option key={w.grade_level} value={w.grade_level}>Grade {w.grade_level}</option>)}</CustomSelect>
+            <CustomSelect style={inputStyle} value={period} onChange={(e) => setPeriod(e.target.value)}><option value="">All terms / semesters</option>{periodOpts.map(([n, l]) => <option key={n} value={n}>{l}</option>)}</CustomSelect>
+            {level === "SHS" && <CustomSelect style={inputStyle} value={strand} onChange={(e) => setStrand(e.target.value)}><option value="">All strands</option>{strands.map((s) => <option key={s.id} value={s.code}>{s.code}</option>)}</CustomSelect>}
           </div>
           <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
             <button style={btn} onClick={validate}>Validate curriculum</button>

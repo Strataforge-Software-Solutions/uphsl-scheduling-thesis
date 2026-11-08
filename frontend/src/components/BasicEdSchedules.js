@@ -1,3 +1,4 @@
+import CustomSelect from "./CustomSelect";
 import { OverrideBadge } from "./AssignAnywayDialog";
 import React, { useState, useEffect, useCallback } from "react";
 import API from "../services/api";
@@ -7,6 +8,7 @@ import { StatTile, HBarChart } from "./Charts";
 import { periodInfo } from "../utils/terms";
 import { be, errText, inputStyle, cardStyle, btn, btnPrimary, Field, Modal, Notice, DAYS, hhmm, ampm, STATUS_LABEL, STATUS_TONE } from "./basicEdUi";
 import { formatDateTime } from "../utils/formatDateTime";
+import { useConfirmDialog } from "./ConfirmDialog";
 
 const toMin = (t) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
 const fromMin = (n) => `${String(Math.floor(n / 60)).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`;
@@ -88,10 +90,10 @@ export function GeneratePanel({ level, overview, periodLabel, onDone }) {
         Generating again keeps the earlier version in the history.
       </p>
       <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "flex-end" }}>
-        <Field label="Grade level"><select style={inputStyle} value={grade} onChange={(e) => { setGrade(e.target.value); setPeriod(1); }}>
-          {level !== "SHS" && <option value="all">All grade levels</option>}{overview.windows.map((w) => <option key={w.grade_level} value={w.grade_level}>Grade {w.grade_level} ({ampm(w.start_time)} – {ampm(w.end_time)})</option>)}</select></Field>
-        <Field label={periodLabel}><select style={inputStyle} value={period} onChange={(e) => setPeriod(e.target.value)}>
-          {Array.from({ length: nPeriods }, (_, i) => <option key={i} value={i + 1}>{periodLabel} {i + 1}</option>)}</select></Field>
+        <Field label="Grade level"><CustomSelect style={inputStyle} value={grade} onChange={(e) => { setGrade(e.target.value); setPeriod(1); }}>
+          {level !== "SHS" && <option value="all">All grade levels</option>}{overview.windows.map((w) => <option key={w.grade_level} value={w.grade_level}>Grade {w.grade_level} ({ampm(w.start_time)} – {ampm(w.end_time)})</option>)}</CustomSelect></Field>
+        <Field label={periodLabel}><CustomSelect style={inputStyle} value={period} onChange={(e) => setPeriod(e.target.value)}>
+          {Array.from({ length: nPeriods }, (_, i) => <option key={i} value={i + 1}>{periodLabel} {i + 1}</option>)}</CustomSelect></Field>
         <button style={btnPrimary} disabled={busy} onClick={() => run(false)}>{busy ? "Generating…" : "Generate schedule"}</button>
       </div>
       {busy && <p style={{ color: "#6b7280", fontSize: "13px" }}>This can take up to a minute on a slow connection. Please don't click again.</p>}
@@ -271,7 +273,7 @@ function RunDetail({ level, id, overview, periodLabel, onBack, user }) {
       {tab === "timetable" && (
         <div style={cardStyle}>
           <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "12px", flexWrap: "wrap" }}>
-            <select style={inputStyle} value={sectionId} onChange={(e) => setSectionId(e.target.value)}>{sections.map(([sid, name]) => <option key={sid} value={sid}>{name}</option>)}</select>
+            <CustomSelect style={inputStyle} value={sectionId} onChange={(e) => setSectionId(e.target.value)}>{sections.map(([sid, name]) => <option key={sid} value={sid}>{name}</option>)}</CustomSelect>
             {editable ? <span style={{ fontSize: "13px", color: "#6b7280" }}>Click a period to change its teacher, room or time. Every change is re-validated automatically.</span>
               : <span style={{ fontSize: "13px", color: "#6b7280" }}>Read-only ({STATUS_LABEL[run.status].toLowerCase()}). Request a revision to edit.</span>}
           </div>
@@ -364,6 +366,7 @@ function RunDetail({ level, id, overview, periodLabel, onBack, user }) {
 }
 
 function EntryEditModal({ level, entry, grid, faculty, rooms, onClose, onSaved }) {
+  const confirmDialog = useConfirmDialog();
   const [f, setF] = useState({ day: entry.day, start: hhmm(entry.start_time), teacher: entry.teacher || "", room: entry.room || "" });
   const [err, setErr] = useState("");
   const [issues, setIssues] = useState([]);
@@ -377,7 +380,7 @@ function EntryEditModal({ level, entry, grid, faculty, rooms, onClose, onSaved }
     } catch (e) { setErr(errText(e)); } finally { setSaving(false); }
   };
   const remove = async () => {
-    if (!window.confirm("Remove this period from the timetable?")) return;
+    if (!(await confirmDialog({ title: "Remove class period?", message: "Remove this period from the timetable?", confirmLabel: "Remove period" }))) return;
     try { await be.del(level, `entries/${entry.id}/`); onSaved(); } catch (e) { setErr(errText(e)); }
   };
   const eligibleRooms = rooms.filter((r) => r.is_active);
@@ -388,9 +391,9 @@ function EntryEditModal({ level, entry, grid, faculty, rooms, onClose, onSaved }
       {issues.length > 0 && <Notice tone="error"><b>Saved, but this change creates conflicts:</b><ul style={{ margin: "6px 0 0", paddingLeft: "18px" }}>{issues.map((i, k) => <li key={k}>{i.message}</li>)}</ul>
         <button style={{ ...btn, marginTop: "8px" }} onClick={onSaved}>Keep and review</button></Notice>}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-        <Field label="Day"><select style={{ ...inputStyle, width: "100%" }} value={f.day} onChange={(e) => setF({ ...f, day: e.target.value })}>{DAYS.map((d) => <option key={d[0]} value={d[0]}>{d[1]}</option>)}</select></Field>
-        <Field label="Period"><select style={{ ...inputStyle, width: "100%" }} value={f.start} onChange={(e) => setF({ ...f, start: e.target.value })}>{grid.map((g) => <option key={g[0]} value={g[0]}>{ampm(g[0])} – {ampm(g[1])}</option>)}</select></Field>
-        <Field label="Teacher"><select style={{ ...inputStyle, width: "100%" }} value={f.teacher} onChange={(e) => setF({ ...f, teacher: e.target.value })}><option value="">—</option>{faculty.filter((t) => t.is_active).map((t) => <option key={t.id} value={t.id}>{t.full_name}</option>)}</select></Field>
+        <Field label="Day"><CustomSelect style={{ ...inputStyle, width: "100%" }} value={f.day} onChange={(e) => setF({ ...f, day: e.target.value })}>{DAYS.map((d) => <option key={d[0]} value={d[0]}>{d[1]}</option>)}</CustomSelect></Field>
+        <Field label="Period"><CustomSelect style={{ ...inputStyle, width: "100%" }} value={f.start} onChange={(e) => setF({ ...f, start: e.target.value })}>{grid.map((g) => <option key={g[0]} value={g[0]}>{ampm(g[0])} – {ampm(g[1])}</option>)}</CustomSelect></Field>
+        <Field label="Teacher"><CustomSelect style={{ ...inputStyle, width: "100%" }} value={f.teacher} onChange={(e) => setF({ ...f, teacher: e.target.value })}><option value="">—</option>{faculty.filter((t) => t.is_active).map((t) => <option key={t.id} value={t.id}>{t.full_name}</option>)}</CustomSelect></Field>
         <Field label="Room"><RoomSelect rooms={eligibleRooms} value={f.room} onChange={(v) => setF({ ...f, room: v })} autoLabel="—" width="100%" style={{ padding: "8px 10px" }}
           groupBy={(r) => String(r.room_type || "").replace("_", " ")} /></Field>
       </div>

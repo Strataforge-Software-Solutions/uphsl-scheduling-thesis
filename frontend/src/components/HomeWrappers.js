@@ -29,10 +29,10 @@ function useClassData() {
   return [d, failed];
 }
 
-function classHome(role, [d, failed], nav, onNavigate, name, scope, labelMap) {
+function classHome(role, [d, failed], nav, onNavigate, name, scope, labelMap, hideIntro = false) {
   const stats = [
     { label: "Class periods", value: d ? d.class_periods : null },
-    { label: "Draft", value: d ? d.draft : null, accent: d && d.draft ? "#b45309" : "#15803d" },
+    { label: "Draft", value: d ? d.draft : null },
     { label: "Approved", value: d ? d.approved : null },
     { label: "Published", value: d ? d.published : null, accent: "#15803d" },
     { label: "Conflicts", value: d ? d.conflicts : null, accent: d && d.conflicts ? "#b91c1c" : "#15803d" },
@@ -46,11 +46,11 @@ function classHome(role, [d, failed], nav, onNavigate, name, scope, labelMap) {
     if (d.overloaded) tasks.push({ text: `${d.overloaded} teacher(s) are overloaded: press View Suggestions.`, tab: "analytics", tone: "bad" });
   }
   const status = d ? [
-    d.class_periods ? `${d.class_periods} class periods in the system: ${d.draft} draft, ${d.approved} approved, ${d.published} published.` : "No class periods exist.",
-    d.conflicts ? `${d.conflicts} conflict(s) found.` : "No conflicts found.",
-    d.overloaded ? `${d.overloaded} overloaded teacher(s).` : "No overloaded teachers.",
+    d.class_periods ? `${d.class_periods} periods · ${d.draft} draft · ${d.approved} approved · ${d.published} published` : "No class periods exist",
+    d.conflicts ? `${d.conflicts} scheduling ${d.conflicts === 1 ? "conflict" : "conflicts"} found` : "No scheduling conflicts",
+    d.overloaded ? `${d.overloaded} ${d.overloaded === 1 ? "teacher exceeds" : "teachers exceed"} the weekly limit` : "No teachers over the weekly limit",
   ] : failed ? ["The numbers could not be loaded. They retry automatically."] : [];
-  return <HomePage role={role} name={name} scope={scope} nav={nav} onNavigate={onNavigate} stats={stats} tasks={tasks} status={status} />;
+  return <HomePage role={role} name={name} scope={scope} nav={nav} onNavigate={onNavigate} stats={stats} tasks={tasks} status={status} hideIntro={hideIntro} />;
 }
 
 export function DeanHome({ nav, onNavigate, name, scope }) {
@@ -58,7 +58,7 @@ export function DeanHome({ nav, onNavigate, name, scope }) {
 }
 
 export function RegistrarHome({ nav, onNavigate, name }) {
-  return classHome("registrar", useClassData(), nav, onNavigate, name, "Registrar", { generate: "generate" });
+  return classHome("registrar", useClassData(), nav, onNavigate, name, "Registrar", { generate: "generate" }, true);
 }
 
 export function PrincipalHome({ level, levelName, overview, nav, onNavigate, name, extra }) {

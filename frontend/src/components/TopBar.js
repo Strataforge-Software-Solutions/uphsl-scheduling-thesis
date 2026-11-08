@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { reportLoadError } from "../services/loadError";
-import API from "../services/api";
+import API, { logout } from "../services/api";
 import { notificationTarget, jumpTo } from "../services/jump";
 import { useNavigate } from "react-router-dom";
 import { usePreferences, initialsOf } from "../services/preferences";
@@ -216,6 +216,7 @@ function AvatarMenu({ userName }) {
             {profile && <div className="app-avatar-menu-role">{profile.role}</div>}
           </div>
           <button type="button" role="menuitem" className="app-avatar-menu-item" onClick={() => { setOpen(false); navigate("/settings"); }}>My settings</button>
+          <button type="button" role="menuitem" className="app-avatar-menu-item app-avatar-menu-signout" onClick={() => { setOpen(false); logout(); window.location.href = "/login"; }}>Sign out</button>
         </div>
       )}
     </div>

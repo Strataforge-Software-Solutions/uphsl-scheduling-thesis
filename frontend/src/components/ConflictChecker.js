@@ -1,3 +1,4 @@
+import CustomSelect from "./CustomSelect";
 import React, { useCallback, useEffect, useState } from "react";
 import API from "../services/api";
 import ScheduleProblemsModal from "./ScheduleProblemsModal";
@@ -121,13 +122,13 @@ export default function ConflictChecker() {
         {report && report.allowance_minutes ? ` (students may overlap by up to ${report.allowance_minutes} minutes).` : " (no overlap is allowed for students either)."} Run it after generating or editing schedules.
         To fix one, press <strong>Fix this conflict</strong>: you choose which class moves and to which free day and time; nothing changes until you confirm.
       </p>
-      <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center", marginBottom: "14px" }}>
-        <select value={semester} onChange={(e) => setSemester(e.target.value)} aria-label="Semester" style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid #d1d5db" }}>
+      <div className="conflict-checker-toolbar">
+        <CustomSelect value={semester} onChange={(e) => setSemester(e.target.value)} aria-label="Semester" style={{ padding: "8px 10px", borderRadius: 6, border: "1px solid #d1d5db" }}>
           <option value="">All semesters</option>
           <option value="1st Sem">1st Sem</option>
           <option value="2nd Sem">2nd Sem</option>
           <option value="Summer">Summer</option>
-        </select>
+        </CustomSelect>
         <button onClick={run} disabled={busy}>{busy ? "Checking…" : "Check for conflicts"}</button>
         <span style={{ flex: 1 }} />
         <button style={btn} onClick={() => demo("add")} disabled={busy} title="Adds three sample double-bookings next to an existing class, to show the detection">Add sample conflicts (demo)</button>

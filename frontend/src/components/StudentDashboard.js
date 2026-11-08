@@ -9,7 +9,7 @@ import TopBar from "./TopBar";
 import PageHeader from "./PageHeader";
 import "./DashboardTheme.css";
 
-const NAV_ITEMS = [{ key: "timetable", label: "My Timetable", icon: "" }];
+const NAV_ITEMS = [{ group: "Plan" }, { key: "timetable", label: "My Timetable", icon: "" }];
 
 function StudentDashboard({ studentId }) {
   const [classes, setClasses] = useState([]);

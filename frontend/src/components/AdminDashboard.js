@@ -1,3 +1,4 @@
+import CustomSelect from "./CustomSelect";
 import React, { useState } from "react";
 import API, { logout, getCurrentUser } from "../services/api";
 import Sidebar from "./Sidebar";
@@ -11,6 +12,7 @@ import HowToUse from "./HowToUse";
 import AuditLogs from "./AuditLogs";
 import { useLandingTab } from "../services/preferences";
 import { formatDateTime } from "../utils/formatDateTime";
+import { useConfirmDialog } from "./ConfirmDialog";
 
 /* IT-admin workspace: setup health + counts, account tools, and clear-generated tools.
    Shown for role "admin" (or a Django superuser with no regular U-FAST role). */
@@ -207,6 +209,7 @@ export function Accounts({ level } = {}) {
 }
 
 function DataTools() {
+  const confirmDialog = useConfirmDialog();
   const [programs] = useLoad(() => API.get("/curriculum/programs/").then((r) => r.data));
   const [f, setF] = useState({ scope: "classes", program_id: "", year_level: "", semester: "", include_approved: false });
   const [preview, setPreview] = useState(null);
@@ -226,20 +229,20 @@ function DataTools() {
   return (
     <div style={card}>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", marginBottom: "14px" }}>
-        <select value={f.scope} onChange={(e) => set("scope", e.target.value)}>
+        <CustomSelect value={f.scope} onChange={(e) => set("scope", e.target.value)}>
           <option value="classes">Class schedules</option><option value="exams">Exam schedules</option>
-        </select>
-        <select value={f.program_id} onChange={(e) => set("program_id", e.target.value)}>
+        </CustomSelect>
+        <CustomSelect value={f.program_id} onChange={(e) => set("program_id", e.target.value)}>
           <option value="">All programs</option>
           {(programs || []).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-        <select value={f.year_level} onChange={(e) => set("year_level", e.target.value)}>
+        </CustomSelect>
+        <CustomSelect value={f.year_level} onChange={(e) => set("year_level", e.target.value)}>
           <option value="">All year levels</option>
           {["1st Year", "2nd Year", "3rd Year", "4th Year", "5th Year"].map((y) => <option key={y} value={y}>{y}</option>)}
-        </select>
-        <select value={f.semester} onChange={(e) => set("semester", e.target.value)}>
+        </CustomSelect>
+        <CustomSelect value={f.semester} onChange={(e) => set("semester", e.target.value)}>
           <option value="">Both semesters</option><option value="1st Sem">1st Sem</option><option value="2nd Sem">2nd Sem</option>
-        </select>
+        </CustomSelect>
         {f.scope === "classes" && (
           <label style={{ fontSize: "13px" }}>
             <input type="checkbox" checked={f.include_approved} onChange={(e) => set("include_approved", e.target.checked)} /> include approved / published
@@ -253,7 +256,7 @@ function DataTools() {
             {preview.kept_approved ? ` (${preview.kept_approved} approved/published row(s) will be kept)` : ""}.</p>
           {preview.count > 0 && (
             <button style={{ background: "#b91c1c", color: "white" }} disabled={busy}
-              onClick={() => window.confirm(`Delete ${preview.count} row(s)? This cannot be undone.`) && run(true)}>
+              onClick={async () => { if (await confirmDialog({ title: "Delete schedules?", message: `Delete ${preview.count} row(s)? This cannot be undone.`, confirmLabel: "Delete schedules" })) run(true); }}>
               Yes, delete them
             </button>
           )}

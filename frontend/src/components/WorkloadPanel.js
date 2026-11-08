@@ -1,3 +1,4 @@
+import CustomSelect from "./CustomSelect";
 import React, { useState, useEffect, useCallback } from "react";
 import API from "../services/api";
 import Badge from "./Badge";
@@ -10,6 +11,10 @@ const TYPE_LABEL = { full_time: "Full-time", part_time: "Part-time", dean: "Dean
 const POLICY_LABEL = {
   override: "Warn, and allow an authorized override (written to the audit log)",
   strict: "Strict: never allow an overloaded assignment",
+};
+const ANALYTICS_POLICY_LABEL = {
+  override: "Warn; allow authorized override",
+  strict: "Block overloaded assignments",
 };
 
 const fmt = (h) => (Number.isInteger(h) ? String(h) : String(Math.round(h * 100) / 100));
@@ -72,7 +77,7 @@ function Bar({ value, max, over }) {
   );
 }
 
-function LimitsEditor({ limits, onSaved }) {
+function LimitsEditor({ limits, onSaved, analyticsStyle = false }) {
   const [form, setForm] = useState(limits);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState(null);
@@ -95,17 +100,17 @@ function LimitsEditor({ limits, onSaved }) {
   };
   const inp = { padding: "7px", borderRadius: "6px", border: "1px solid #d1d5db", width: "90px" };
   return (
-    <div style={{ background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 6, padding: "12px 14px", marginBottom: "14px" }}>
-      <div style={{ fontWeight: 600, color: "#003366", marginBottom: "8px", fontSize: "14px" }}>Workload limits (hours per week)</div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "14px", alignItems: "flex-end" }}>
-        <label style={{ fontSize: "13px" }}>Full-time<br />
+    <div className={analyticsStyle ? "analytics-limits-editor" : undefined} style={analyticsStyle ? undefined : { background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 6, padding: "12px 14px", marginBottom: "14px" }}>
+      <div className={analyticsStyle ? "analytics-limits-title" : undefined} style={analyticsStyle ? undefined : { fontWeight: 600, color: "#003366", marginBottom: "8px", fontSize: "14px" }}>Workload limits (hours per week)</div>
+      <div className={`workload-limits-row${analyticsStyle ? " analytics-workload-limits-row" : ""}`}>
+        <label className="workload-limit-field" style={{ fontSize: "13px" }}>Full-time
           <input type="number" min="1" max="80" style={inp} value={form.full_time} onChange={(e) => setForm({ ...form, full_time: e.target.value })} /></label>
-        <label style={{ fontSize: "13px" }}>Part-time<br />
+        <label className="workload-limit-field" style={{ fontSize: "13px" }}>Part-time
           <input type="number" min="1" max="80" style={inp} value={form.part_time} onChange={(e) => setForm({ ...form, part_time: e.target.value })} /></label>
-        <label style={{ fontSize: "13px" }}>When a limit is exceeded<br />
-          <select value={form.policy} onChange={(e) => setForm({ ...form, policy: e.target.value })} style={{ padding: "7px", maxWidth: "340px" }}>
-            {Object.entries(POLICY_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select></label>
+        <label className="workload-policy-field" style={{ fontSize: "13px" }}>When a limit is exceeded
+          <CustomSelect className={analyticsStyle ? "analytics-workload-policy-select" : ""} value={form.policy} onChange={(e) => setForm({ ...form, policy: e.target.value })} style={{ padding: "7px", width: "280px", maxWidth: "100%" }}>
+            {Object.entries(analyticsStyle ? ANALYTICS_POLICY_LABEL : POLICY_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </CustomSelect></label>
         <button onClick={save} disabled={saving} style={{ background: "#003366", color: "white", border: "none", padding: "8px 16px", borderRadius: "6px", fontWeight: 600, cursor: "pointer" }}>
           {saving ? "Saving…" : "Save limits"}
         </button>
@@ -174,7 +179,7 @@ function ClassDetail({ facultyId, canSuggest }) {
   );
 }
 
-function WorkloadPanel({ canConfigure = false, canSuggest = false, refreshKey = 0 }) {
+function WorkloadPanel({ canConfigure = false, canSuggest = false, refreshKey = 0, analyticsStyle = false }) {
   const [data, setData] = useState(null);
   const [resolveFor, setResolveFor] = useState(null);
   const [error, setError] = useState("");
@@ -193,23 +198,26 @@ function WorkloadPanel({ canConfigure = false, canSuggest = false, refreshKey = 
   const rows = data.faculty.filter((r) => !onlyOver || r.overload_hours > 0);
 
   return (
-    <div style={{ background: "white", borderRadius: 6, padding: "20px 24px", border: "1px solid #e5e7eb", boxShadow: "none", marginBottom: "24px" }}>
+    <div className={analyticsStyle ? "analytics-workload-card" : undefined} style={analyticsStyle ? undefined : { background: "white", borderRadius: 6, padding: "20px 24px", border: "1px solid #e5e7eb", boxShadow: "none", marginBottom: "24px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: "8px", marginBottom: "10px" }}>
         <div>
-          <h3 style={{ margin: 0, color: "#003366" }}>Faculty Workload</h3>
+          <h3 className={analyticsStyle ? "analytics-workload-title" : undefined} style={analyticsStyle ? undefined : { margin: 0, color: "#003366" }}>
+            {analyticsStyle && <svg className="analytics-heading-icon" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8" cy="7" r="3" /><path d="M2.5 17c.5-2.7 2.3-4 5.5-4s5 1.3 5.5 4M14 5a2.5 2.5 0 0 1 0 4.8M14.5 13c1.7.4 2.7 1.7 3 4" /></svg>}
+            Faculty Workload
+          </h3>
           <p style={{ margin: "2px 0 0", fontSize: "13px", color: "#6b7280" }}>
             Teaching hours per week (shared classes counted once) against the limit for each classification:
             Full-time {data.limits.full_time} h · Part-time {data.limits.part_time} h.
             {data.overloaded > 0 ? ` ${data.overloaded} overloaded.` : " Nobody is overloaded."}
           </p>
         </div>
-        <label style={{ fontSize: "13px", display: "flex", alignItems: "center", gap: "6px" }}>
+        <label className="overloaded-only-filter" style={{ fontSize: "13px" }}>
           <input type="checkbox" checked={onlyOver} onChange={(e) => setOnlyOver(e.target.checked)} /> Overloaded only
         </label>
       </div>
 
       {resolveFor && <ResolverWindow focusId={resolveFor} onClose={() => { setResolveFor(null); load(); }} />}
-      {canConfigure && <LimitsEditor limits={data.limits} onSaved={load} />}
+      {canConfigure && <LimitsEditor limits={data.limits} onSaved={load} analyticsStyle={analyticsStyle} />}
 
       <div style={{ overflowX: "auto", maxHeight: "460px", overflowY: "auto" }}>
         <table>

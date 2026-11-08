@@ -1,3 +1,6 @@
+import CustomSelect from "./CustomSelect";
+import CustomDatePicker from "./CustomDatePicker";
+import CustomTimePicker from "./CustomTimePicker";
 import HowToUse from "./HowToUse";
 import { PrincipalHome } from "./HomeWrappers";
 import React, { useState, useEffect, useCallback } from "react";
@@ -21,15 +24,21 @@ import { periodHeading } from "../utils/terms";
 import "./DashboardTheme.css";
 import { useLandingTab } from "../services/preferences";
 import { formatDateTime } from "../utils/formatDateTime";
+import { useConfirmDialog } from "./ConfirmDialog";
 
 const NAV = [
   { key: "overview", label: "Home", icon: "" },
+  { group: "Plan" },
   { key: "schedules", label: "Schedules", icon: "" },
-  { key: "analytics", label: "Analytics", icon: "" },
+  { key: "calendar", label: "Calendar", icon: "" },
+  { group: "Academics" },
   { key: "sections", label: "Sections", icon: "" },
   { key: "curriculum", label: "Curriculum", icon: "" },
+  { group: "People" },
   { key: "faculty", label: "Faculty", icon: "" },
-  { key: "calendar", label: "Calendar", icon: "" },
+  { group: "Insights" },
+  { key: "analytics", label: "Analytics", icon: "" },
+  { group: "Management" },
   { key: "settings", label: "Settings", icon: "" },
 ];
 
@@ -224,6 +233,7 @@ function AdminActivity({ overview }) {
 }
 
 function AdminData({ level, overview }) {
+  const confirmDialog = useConfirmDialog();
   const [f, setF] = useState({ grade_level: "", include_approved: false });
   const [preview, setPreview] = useState(null);
   const [msg, setMsg] = useState(null);
@@ -240,17 +250,17 @@ function AdminData({ level, overview }) {
   return (
     <div style={adminCard}>
       <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", marginBottom: "14px", alignItems: "center" }}>
-        <select style={inputStyle} value={f.grade_level} onChange={(e) => set("grade_level", e.target.value)}>
+        <CustomSelect style={inputStyle} value={f.grade_level} onChange={(e) => set("grade_level", e.target.value)}>
           <option value="">All grade levels</option>
           {overview.windows.map((w) => <option key={w.grade_level} value={w.grade_level}>Grade {w.grade_level}</option>)}
-        </select>
+        </CustomSelect>
         <label style={{ fontSize: "13px" }}><input type="checkbox" checked={f.include_approved} onChange={(e) => set("include_approved", e.target.checked)} /> include approved / published</label>
         <button style={btn} disabled={busy} onClick={() => run(false)}>Preview what would be deleted</button>
       </div>
       {preview && (
         <div style={{ padding: "12px", background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 6 }}>
           <p style={{ margin: "0 0 8px" }}><b>{preview.runs}</b> timetable(s) with <b>{preview.entries}</b> period(s) would be deleted{preview.kept_approved ? ` (${preview.kept_approved} approved/published timetable(s) are kept)` : ""}.</p>
-          {preview.runs > 0 && <button style={{ ...btn, background: "#b91c1c", color: "white" }} disabled={busy} onClick={() => window.confirm(`Delete ${preview.runs} timetable(s)? This cannot be undone.`) && run(true)}>Yes, delete them</button>}
+          {preview.runs > 0 && <button style={{ ...btn, background: "#b91c1c", color: "white" }} disabled={busy} onClick={async () => { if (await confirmDialog({ title: "Delete timetables?", message: `Delete ${preview.runs} timetable(s)? This cannot be undone.`, confirmLabel: "Delete timetables" })) run(true); }}>Yes, delete them</button>}
         </div>)}
       {msg && <div style={{ marginTop: "10px" }}><Notice tone={msg.tone}>{msg.text}</Notice></div>}
       <p style={{ fontSize: "13px", color: "#6b7280", marginTop: "14px" }}>Curriculum, sections, rooms and teachers are never touched. Use this after changing recess/lunch or the period length, so every grade is generated again on the same periods.</p>
@@ -298,6 +308,7 @@ function Overview({ level, overview, go, hideStats = false }) {
 }
 
 function CalendarTab({ level, overview, periodLabel, reload }) {
+  const confirmDialog = useConfirmDialog();
   const [events, setEvents] = useState([]);
   const [edit, setEdit] = useState(null);
   const [mapEdit, setMapEdit] = useState(null);
@@ -324,9 +335,9 @@ function CalendarTab({ level, overview, periodLabel, reload }) {
         {terms.map((t) => (
           <div key={t.id} style={{ display: "flex", gap: "10px", alignItems: "center", padding: "6px 0", flexWrap: "wrap" }}>
             <b style={{ width: "70px" }}>{t.name}</b>
-            <input style={inputStyle} type="date" defaultValue={t.start_date || ""} onBlur={(e) => e.target.value !== (t.start_date || "") && saveTerm(t, { start_date: e.target.value })} />
+            <CustomDatePicker style={inputStyle} defaultValue={t.start_date || ""} onBlur={(e) => e.target.value !== (t.start_date || "") && saveTerm(t, { start_date: e.target.value })} aria-label={`${t.name} start date`} />
             <span>→</span>
-            <input style={inputStyle} type="date" defaultValue={t.end_date || ""} onBlur={(e) => e.target.value !== (t.end_date || "") && saveTerm(t, { end_date: e.target.value })} />
+            <CustomDatePicker style={inputStyle} defaultValue={t.end_date || ""} onBlur={(e) => e.target.value !== (t.end_date || "") && saveTerm(t, { end_date: e.target.value })} aria-label={`${t.name} end date`} />
           </div>))}
       </div>
       {grading.length > 0 && <div style={cardStyle}>
@@ -348,7 +359,7 @@ function CalendarTab({ level, overview, periodLabel, reload }) {
           <table style={{ width: "100%", fontSize: "13px", borderCollapse: "collapse" }}><tbody>
             {events.map((e) => (<tr key={e.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
               <td style={{ padding: "7px 8px 7px 0" }}>{e.start_date}{e.end_date !== e.start_date ? ` → ${e.end_date}` : ""}</td><td>{e.name}</td><td><Badge>{e.kind}</Badge></td>
-              <td><button style={btn} onClick={async () => { if (window.confirm("Delete this entry?")) { await be.del(level, `calendar/events/${e.id}/`); loadEvents(); } }}>Remove</button></td></tr>))}
+              <td><button style={btn} onClick={async () => { if (await confirmDialog({ title: "Delete calendar entry?", message: `Delete ${e.name}?`, confirmLabel: "Delete entry" })) { await be.del(level, `calendar/events/${e.id}/`); loadEvents(); } }}>Remove</button></td></tr>))}
           </tbody></table>
         </div>
       </div>
@@ -356,11 +367,11 @@ function CalendarTab({ level, overview, periodLabel, reload }) {
         <Modal title="Add calendar entry" onClose={() => setEdit(null)}>
           {err && <Notice tone="error">{err}</Notice>}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-            <Field label="Type"><select style={{ ...inputStyle, width: "100%" }} value={edit.kind} onChange={(e) => setEdit({ ...edit, kind: e.target.value })}>
-              {[["holiday", "Holiday"], ["exam", "Examination period"], ["suspension", "Class suspension"], ["break", "Break"], ["other", "Other (no classes)"]].map((o) => <option key={o[0]} value={o[0]}>{o[1]}</option>)}</select></Field>
+            <Field label="Type"><CustomSelect style={{ ...inputStyle, width: "100%" }} value={edit.kind} onChange={(e) => setEdit({ ...edit, kind: e.target.value })}>
+              {[["holiday", "Holiday"], ["exam", "Examination period"], ["suspension", "Class suspension"], ["break", "Break"], ["other", "Other (no classes)"]].map((o) => <option key={o[0]} value={o[0]}>{o[1]}</option>)}</CustomSelect></Field>
             <Field label="Name"><input style={{ ...inputStyle, width: "100%" }} value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /></Field>
-            <Field label="From"><input style={{ ...inputStyle, width: "100%" }} type="date" value={edit.start_date} onChange={(e) => setEdit({ ...edit, start_date: e.target.value, end_date: edit.end_date || e.target.value })} /></Field>
-            <Field label="To"><input style={{ ...inputStyle, width: "100%" }} type="date" value={edit.end_date} onChange={(e) => setEdit({ ...edit, end_date: e.target.value })} /></Field>
+            <Field label="From"><CustomDatePicker style={{ ...inputStyle, width: "100%" }} value={edit.start_date} onChange={(e) => setEdit({ ...edit, start_date: e.target.value, end_date: edit.end_date || e.target.value })} aria-label="Event start date" /></Field>
+            <Field label="To"><CustomDatePicker style={{ ...inputStyle, width: "100%" }} value={edit.end_date} onChange={(e) => setEdit({ ...edit, end_date: e.target.value })} aria-label="Event end date" /></Field>
           </div>
           <div style={{ textAlign: "right", marginTop: "16px" }}><button style={btnPrimary} onClick={saveEvent}>Save</button></div>
         </Modal>)}
@@ -406,15 +417,15 @@ function SettingsTab({ level, overview, reload }) {
         {wins.map((w, i) => (
           <div key={w.id} style={{ display: "grid", gridTemplateColumns: "90px 130px 130px 1fr auto", gap: "10px", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #f3f4f6" }}>
             <b>Grade {w.grade_level}</b>
-            <input style={inputStyle} type="time" value={hhmm(w.start_time)} onChange={(e) => setWins(wins.map((x, j) => j === i ? { ...x, start_time: e.target.value } : x))} />
-            <input style={inputStyle} type="time" value={hhmm(w.end_time)} onChange={(e) => setWins(wins.map((x, j) => j === i ? { ...x, end_time: e.target.value } : x))} />
+            <CustomTimePicker style={inputStyle} value={hhmm(w.start_time)} onChange={(e) => setWins(wins.map((x, j) => j === i ? { ...x, start_time: e.target.value } : x))} aria-label={`Grade ${w.grade_level} starts at`} />
+            <CustomTimePicker style={inputStyle} value={hhmm(w.end_time)} onChange={(e) => setWins(wins.map((x, j) => j === i ? { ...x, end_time: e.target.value } : x))} aria-label={`Grade ${w.grade_level} ends at`} />
             <input style={inputStyle} placeholder="Curriculum framework" value={w.curriculum_framework} onChange={(e) => setWins(wins.map((x, j) => j === i ? { ...x, curriculum_framework: e.target.value } : x))} />
             <label style={{ fontSize: "13px" }}><input type="checkbox" checked={w.framework_verified} onChange={(e) => setWins(wins.map((x, j) => j === i ? { ...x, framework_verified: e.target.checked } : x))} /> verified</label>
             <div style={{ gridColumn: "1 / -1", display: "flex", gap: "14px", flexWrap: "wrap", alignItems: "center", fontSize: "13px", color: "#374151" }}>
               {(level === "SHS" ? [["Break (30 min)", "break_start", "break_end"]] : [["Recess", "recess_start", "recess_end"], ["Lunch", "lunch_start", "lunch_end"]]).map(([label, a, b]) => (
                 <span key={label}><b>{label}</b>{" "}
-                  <input style={inputStyle} type="time" value={hhmm(w[a] || "")} onChange={(e) => setWins(wins.map((x, j) => j === i ? { ...x, [a]: e.target.value || null } : x))} />{" – "}
-                  <input style={inputStyle} type="time" value={hhmm(w[b] || "")} onChange={(e) => setWins(wins.map((x, j) => j === i ? { ...x, [b]: e.target.value || null } : x))} /></span>))}
+                  <CustomTimePicker style={inputStyle} value={hhmm(w[a] || "")} onChange={(e) => setWins(wins.map((x, j) => j === i ? { ...x, [a]: e.target.value || null } : x))} aria-label={`${label} start`} />{" – "}
+                  <CustomTimePicker style={inputStyle} value={hhmm(w[b] || "")} onChange={(e) => setWins(wins.map((x, j) => j === i ? { ...x, [b]: e.target.value || null } : x))} aria-label={`${label} end`} /></span>))}
             </div>
           </div>))}
         <p style={{ color: "#6b7280", fontSize: "13px" }}>{level === "SHS" ? "SHS has one 30-minute break (no separate recess or lunch)." : "Recess and lunch are both kept for JHS."} Breaks are never used for classes and show in the timetable and the printout. Classes are never placed outside a grade level's window. Current: {wins.map((w) => `Grade ${w.grade_level} ${ampm(hhmm(w.start_time))}–${ampm(hhmm(w.end_time))}`).join(" · ")}</p>

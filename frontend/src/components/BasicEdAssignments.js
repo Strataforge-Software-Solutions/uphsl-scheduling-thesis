@@ -1,3 +1,4 @@
+import CustomSelect from "./CustomSelect";
 import React, { useCallback, useEffect, useState } from "react";
 import TeacherPicker from "./TeacherPicker";
 import AssignAnywayDialog, { OverrideBadge } from "./AssignAnywayDialog";
@@ -52,10 +53,10 @@ export default function TeachingAssignmentsPanel({ level }) {
         Pin a teacher to a subject of a section. Subjects without a pin get a qualified teacher when you generate the timetable.
       </p>
       <label style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>Section{" "}
-        <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} style={{ fontSize: 14, padding: "5px 8px", marginLeft: 6 }}>
+        <CustomSelect value={sectionId} onChange={(e) => setSectionId(e.target.value)} style={{ fontSize: 14, padding: "5px 8px", marginLeft: 6 }}>
           <option value="">-- Choose a section --</option>
           {sections.map((s) => <option key={s.id} value={s.id}>{s.name} (Grade {s.grade_level})</option>)}
-        </select>
+        </CustomSelect>
       </label>
       {error && <Notice tone="error">{error}</Notice>}
       {msg && <div role="status" style={{ marginTop: 8, fontSize: 13, color: msg.ok ? "#166534" : "#b91c1c" }}>{msg.text}</div>}

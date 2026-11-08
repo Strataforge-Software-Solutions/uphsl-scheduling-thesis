@@ -1,3 +1,4 @@
+import CustomSelect from "./CustomSelect";
 import React, { useCallback, useEffect, useState } from "react";
 import API from "../services/api";
 import UnplacedResolve from "./UnplacedResolve";
@@ -202,12 +203,12 @@ export default function MinorSchedulesPanel() {
             <input value={schoolYear} onChange={(e) => setSchoolYear(e.target.value)} placeholder="2026-2027" style={{ ...sel, width: 120 }} aria-label="Academic year" />
           </label>
           <label style={{ fontSize: 13, color: "#4b5563" }}>Semester<br />
-            <select value={semester} onChange={(e) => setSemester(e.target.value)} style={sel} aria-label="Semester">{SEMS.map((s) => <option key={s}>{s}</option>)}</select>
+            <CustomSelect value={semester} onChange={(e) => setSemester(e.target.value)} style={{ ...sel, width: 136 }} aria-label="Semester">{SEMS.map((s) => <option key={s}>{s}</option>)}</CustomSelect>
           </label>
           <label style={{ fontSize: 13, color: "#4b5563" }}>Year level<br />
-            <select value={yearLevel} onChange={(e) => setYearLevel(e.target.value)} style={sel} aria-label="Year level">
+            <CustomSelect value={yearLevel} onChange={(e) => setYearLevel(e.target.value)} style={{ ...sel, width: 152 }} aria-label="Year level">
               <option value="All">All year levels</option>{YEARS.map((y) => <option key={y}>{y}</option>)}
-            </select>
+            </CustomSelect>
           </label>
           <button onClick={generate} disabled={busy || !schoolYear.trim()} style={{ alignSelf: "flex-end" }}>{busy ? "Generating…" : "Generate All Minor Schedules"}</button>
         </div>

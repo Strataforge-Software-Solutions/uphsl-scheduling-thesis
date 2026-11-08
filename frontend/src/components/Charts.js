@@ -11,15 +11,18 @@ import { formatDate } from "../utils/formatDateTime";
 // a figure is colored only when the color means something (red = problem, amber = needs attention); otherwise plain text
 const STATUS_ACCENT = new Set(["#b91c1c", "#b91c1c", "#c0392b", "#dc2626", "#991b1b", "#b45309", "#92400e", "#96690a"]);
 
-export function StatTile({ label, value, accent = "#003366" }) {
+export function StatTile({ label, value, accent = "#003366", icon }) {
   return (
-    <div style={{
+    <div className={icon ? "analytics-stat-tile analytics-stat-tile-with-icon" : "analytics-stat-tile"} style={{
       background: "white", border: "1px solid #e5e7eb", borderRadius: 6,
       padding: "8px 12px", minWidth: "140px", flex: "1 1 140px",
     }}>
-      <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "2px" }}>{label}</div>
-      <div style={{ fontSize: "18px", fontWeight: 600, color: STATUS_ACCENT.has(String(accent).toLowerCase()) ? accent : "#111827",
-        fontVariantNumeric: "tabular-nums" }}>{value}</div>
+      {icon && <div className="analytics-stat-icon">{icon}</div>}
+      <div className="analytics-stat-copy">
+        <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "2px" }}>{label}</div>
+        <div style={{ fontSize: "18px", fontWeight: 600, color: STATUS_ACCENT.has(String(accent).toLowerCase()) ? accent : "#111827",
+          fontVariantNumeric: "tabular-nums" }}>{value}</div>
+      </div>
     </div>
   );
 }

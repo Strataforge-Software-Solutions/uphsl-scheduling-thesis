@@ -1,6 +1,8 @@
+import CustomSelect from "./CustomSelect";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import API from "../services/api";
 import { roomMatches } from "./RoomSelect";
+import { useConfirmDialog } from "./ConfirmDialog";
 
 /* IT Admin -> Rooms: the only place room records are added, edited, viewed and deleted.
    Deans and the Registrar choose from these records in every room dropdown. */
@@ -11,6 +13,7 @@ const card = { background: "white", border: "1px solid #e5e7eb", borderRadius: 6
 const lbl = { fontSize: 13, fontWeight: 600, color: "#333" };
 
 export default function AdminRooms() {
+  const confirmDialog = useConfirmDialog();
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [q, setQ] = useState("");
@@ -22,7 +25,7 @@ export default function AdminRooms() {
   useEffect(() => { load(); }, [load]);
   const shown = useMemo(() => (data?.rooms || []).filter((r) => roomMatches(r, q) && (!type || r.room_type === type)), [data, q, type]);
   const remove = async (r) => {
-    if (!window.confirm(`Delete room ${r.name}? This cannot be undone.`)) return;
+    if (!(await confirmDialog({ title: "Delete room?", message: `Delete room ${r.name}? This cannot be undone.`, confirmLabel: "Delete room" }))) return;
     try { await API.delete(`/rooms/admin/rooms/${r.id}/`); setNote(`Room ${r.name} deleted.`); load(); }
     catch (e) { setNote(e.response?.data?.detail || "Could not delete the room."); }
   };
@@ -40,9 +43,9 @@ export default function AdminRooms() {
         </div>
         <div style={{ display: "flex", gap: 8, margin: "12px 0", flexWrap: "wrap" }}>
           <input style={{ ...box, minWidth: 240 }} placeholder="Search name, building or number…" value={q} onChange={(e) => setQ(e.target.value)} />
-          <select style={box} value={type} onChange={(e) => setType(e.target.value)}>
+          <CustomSelect style={box} value={type} onChange={(e) => setType(e.target.value)}>
             <option value="">All types</option>{data.types.map((t) => <option key={t} value={t}>{TYPE_LABEL[t] || t}</option>)}
-          </select>
+          </CustomSelect>
           <span style={{ alignSelf: "center", fontSize: 13, color: "#6b7280" }}>{shown.length} of {data.rooms.length} rooms</span>
         </div>
         {note && <p style={{ fontSize: 13, color: "#1e5f3a" }}>{note}</p>}
@@ -98,14 +101,14 @@ function RoomForm({ room, data, onClose, onSaved }) {
         <h3 style={{ margin: 0, color: "#003366" }}>{editing ? `Edit room ${room.name}` : "Add room"}</h3>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 14 }}>
           <div><label style={lbl}>Building</label>
-            <select style={w} value={f.building} onChange={set("building")}>{data.buildings.map((b) => <option key={b.code} value={b.code}>{BUILDING_LABEL[b.code] || b.label}</option>)}</select></div>
+            <CustomSelect style={w} value={f.building} onChange={set("building")}>{data.buildings.map((b) => <option key={b.code} value={b.code}>{BUILDING_LABEL[b.code] || b.label}</option>)}</CustomSelect></div>
           <div><label style={lbl}>Room number</label><input style={w} value={f.room_number} onChange={set("room_number")} placeholder="e.g. 307" /></div>
           <div><label style={lbl}>Name (optional)</label><input style={w} value={f.label} onChange={set("label")} placeholder="e.g. Comp Lab C" /></div>
           <div><label style={lbl}>Capacity</label><input type="number" min="1" style={w} value={f.capacity} onChange={set("capacity")} /></div>
           <div><label style={lbl}>Room type</label>
-            <select style={w} value={f.room_type} onChange={set("room_type")}>{data.types.map((t) => <option key={t} value={t}>{TYPE_LABEL[t] || t}</option>)}</select></div>
+            <CustomSelect style={w} value={f.room_type} onChange={set("room_type")}>{data.types.map((t) => <option key={t} value={t}>{TYPE_LABEL[t] || t}</option>)}</CustomSelect></div>
           <div><label style={lbl}>Owner (college)</label>
-            <select style={w} value={f.department} onChange={set("department")}><option value="">Shared (any college)</option>{data.departments.map((d) => <option key={d}>{d}</option>)}</select></div>
+            <CustomSelect style={w} value={f.department} onChange={set("department")}><option value="">Shared (any college)</option>{data.departments.map((d) => <option key={d}>{d}</option>)}</CustomSelect></div>
         </div>
         <div style={{ marginTop: 12 }}><label style={lbl}>Equipment</label><input style={w} value={f.equipment} onChange={set("equipment")} placeholder="e.g. Projector, Aircon, 30 PCs" /></div>
         {err && <p style={{ color: "#b91c1c", fontSize: 13 }}>{err}</p>}

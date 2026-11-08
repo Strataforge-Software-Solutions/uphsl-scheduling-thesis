@@ -1,3 +1,4 @@
+import CustomSelect from "./CustomSelect";
 import React, { useEffect, useState } from "react";
 import API from "../services/api";
 import { formatDateTime, formatTime } from "../utils/formatDateTime";
@@ -7,6 +8,7 @@ import { formatDateTime, formatTime } from "../utils/formatDateTime";
 const C = { navy: "#003366", line: "#e5e7eb", muted: "#6b7280", bad: "#b91c1c", warn: "#96690a", ok: "#1e7a45" };
 const card = { background: "#ffffff", borderRadius: 6, padding: "18px 22px", marginBottom: 22, border: "1px solid #e5e7eb", boxShadow: "none" };
 const linkBtn = { background: "#ffffff", color: C.navy, border: `1px solid ${C.navy}`, borderRadius: 6, padding: "3px 10px", fontSize: 12, cursor: "pointer" };
+const ANALYTICS_INSIGHT_TITLES = new Set(["Gen Ed coverage and sharing", "Room utilization by day and hour", "Cross-college dependencies", "Capacity vs enrollment"]);
 
 export function useInsight(url, params) {
   const [data, setData] = useState(null);
@@ -27,15 +29,28 @@ export function useInsight(url, params) {
 
 const CardTitle = React.createContext("u-fast");
 
-export function InsightCard({ title, subtitle, error, loading, onRetry, children, right }) {
+function InsightTitleIcon({ type }) {
+  const paths = type === "room"
+    ? <><rect x="4" y="2.5" width="12" height="15" rx="1.5" /><path d="M7 6h6M7 9h6M7 12h3" /></>
+    : type === "dependencies"
+      ? <><circle cx="4" cy="5" r="2" /><circle cx="16" cy="5" r="2" /><circle cx="10" cy="16" r="2" /><path d="m5.7 6.2 2.8 7.1m5.8-7.1-2.8 7.1M6 5h8" /></>
+      : type === "capacity"
+        ? <><circle cx="8" cy="7" r="3" /><path d="M2.5 17c.5-2.7 2.3-4 5.5-4s5 1.3 5.5 4M14 7h4m-2-2v4" /></>
+        : <><path d="m10 2.5 7.5 4.2L10 11 2.5 6.7z" /><path d="m2.5 10.5 7.5 4.2 7.5-4.2M2.5 14.3l7.5 4.2 7.5-4.2" /></>;
+  return <svg className="analytics-heading-icon" viewBox="0 0 20 20" aria-hidden="true">{paths}</svg>;
+}
+
+export function InsightCard({ title, subtitle, error, loading, onRetry, children, right, analyticsStyle = false, iconType }) {
   return (
     <CardTitle.Provider value={title}>
-    <div style={card}>
+    <div className={analyticsStyle ? "analytics-insight-card" : undefined} style={analyticsStyle ? undefined : card}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-        <h3 style={{ margin: 0, color: C.navy }}>{title}</h3>
+        <h3 className={analyticsStyle ? "analytics-insight-title" : undefined} style={analyticsStyle ? undefined : { margin: 0, color: C.navy }}>
+          {analyticsStyle && <InsightTitleIcon type={iconType} />}{title}
+        </h3>
         {right}
       </div>
-      {subtitle && <p style={{ fontSize: 13, color: C.muted, margin: "4px 0 12px" }}>{subtitle}</p>}
+      {subtitle && <p className={analyticsStyle ? "analytics-insight-subtitle" : undefined} style={analyticsStyle ? undefined : { fontSize: 13, color: C.muted, margin: "4px 0 12px" }}>{subtitle}</p>}
       {error ? <p style={{ color: C.bad, fontSize: 13 }}>{error} {onRetry && <button onClick={onRetry} style={linkBtn}>Try again</button>}</p>
         : loading ? <p style={{ color: C.muted, fontSize: 13 }}>Loading…</p> : children}
     </div>
@@ -64,9 +79,11 @@ export function downloadCsv(name, columns, rows) {
 }
 
 export function Metric({ label, value, tone, onClick, active }) {
+  const cardTitle = React.useContext(CardTitle);
+  const analyticsMetric = ANALYTICS_INSIGHT_TITLES.has(cardTitle);
   const color = tone === "bad" ? C.bad : tone === "warn" ? C.warn : tone === "ok" ? C.ok : C.navy;
   return (
-    <button type="button" onClick={onClick} disabled={!onClick}
+    <button className={analyticsMetric ? "analytics-insight-metric" : undefined} type="button" onClick={onClick} disabled={!onClick}
       style={{ textAlign: "left", background: active ? "#eef6ff" : "#f9fafb", color: "#111827", border: `1px solid ${active ? C.navy : C.line}`,
         borderRadius: 6, padding: "10px 14px", minWidth: 140, flex: "1 1 140px", cursor: onClick ? "pointer" : "default", boxShadow: "none" }}>
       <div style={{ fontSize: 18, fontWeight: 600, color, fontVariantNumeric: "tabular-nums" }}>{value}</div>
@@ -183,8 +200,8 @@ export function AuditTrailCard() {
   return (
     <InsightCard title="Audit trail" subtitle="Who approved, published, removed or generated what, and when. Read-only."
       error={error} loading={!d && !error} onRetry={retry}
-      right={<select value={cat} onChange={(e) => setCat(e.target.value)} aria-label="Filter by kind" style={{ padding: "5px 8px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: 13 }}>
-        {cats.map((c) => <option key={c} value={c}>{c ? c[0].toUpperCase() + c.slice(1) : "Every kind"}</option>)}</select>}>
+      right={<CustomSelect value={cat} onChange={(e) => setCat(e.target.value)} aria-label="Filter by kind" style={{ padding: "5px 8px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: 13 }}>
+        {cats.map((c) => <option key={c} value={c}>{c ? c[0].toUpperCase() + c.slice(1) : "Every kind"}</option>)}</CustomSelect>}>
       {d && (
         <>
           <SimpleTable rows={d.events} empty="Nothing recorded yet." columns={[
@@ -225,12 +242,12 @@ function StageLegend() {
 
 export function SemesterSelect({ value, onChange }) {
   return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} aria-label="Semester"
+    <CustomSelect value={value} onChange={(e) => onChange(e.target.value)} aria-label="Semester"
       style={{ padding: "5px 8px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: 13, background: "#ffffff", color: "#111827" }}>
       <option value="">All semesters</option>
       <option value="1st Sem">1st Sem</option>
       <option value="2nd Sem">2nd Sem</option>
-    </select>
+    </CustomSelect>
   );
 }
 
@@ -324,8 +341,8 @@ export function LoadBandsCard({ filters = {}, onOpenResolver }) {
     <InsightCard title="Faculty load bands" error={error} loading={!d && !error} onRetry={retry}
       subtitle="Weekly hours against each teacher's own limit (the limits in Settings). Shared classes count once."
       right={<label style={{ fontSize: 13, color: "#374151" }}>Underloaded below{" "}
-        <select value={pct} onChange={(e) => setPct(Number(e.target.value))} style={{ padding: "3px 6px", borderRadius: 6, border: "1px solid #d1d5db", background: "#ffffff", color: "#111827" }}>
-          {[25, 50, 75].map((p) => <option key={p} value={p}>{p}%</option>)}</select> of the limit</label>}>
+        <CustomSelect value={pct} onChange={(e) => setPct(Number(e.target.value))} style={{ padding: "3px 6px", borderRadius: 6, border: "1px solid #d1d5db", background: "#ffffff", color: "#111827" }}>
+          {[25, 50, 75].map((p) => <option key={p} value={p}>{p}%</option>)}</CustomSelect> of the limit</label>}>
       {d && (
         <>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -352,7 +369,7 @@ export function LoadBandsCard({ filters = {}, onOpenResolver }) {
 export function GenEdCoverageCard({ filters = {} }) {
   const [d, error, retry] = useInsight("/analytics/registrar/gened-coverage/", fq(filters));
   return (
-    <InsightCard title="Gen Ed coverage and sharing" error={error} loading={!d && !error} onRetry={retry}
+    <InsightCard title="Gen Ed coverage and sharing" analyticsStyle iconType="coverage" error={error} loading={!d && !error} onRetry={retry}
       subtitle="Per Gen Ed subject (the same code, units and title count as one requirement across programs).">
       {d && (
         <>
@@ -415,10 +432,10 @@ export function RoomHeatmapCard({ filters = {} }) {
   const [type, setType] = useState("");
   const [d, error, retry] = useInsight("/analytics/room-heatmap/", { ...fq(filters), ...(type ? { room_type: type } : {}) });
   return (
-    <InsightCard title="Room utilization by day and hour" error={error} loading={!d && !error} onRetry={retry}
+    <InsightCard title="Room utilization by day and hour" analyticsStyle iconType="room" error={error} loading={!d && !error} onRetry={retry}
       subtitle={`% of rooms booked in each hour${d && d.semester ? ` · ${d.semester}` : ""}${d ? ` · ${d.rooms} room${d.rooms === 1 ? "" : "s"}` : ""}. Darker = busier.`}
-      right={<select value={type} onChange={(e) => setType(e.target.value)} aria-label="Room type" style={{ padding: "5px 8px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: 13, background: "#ffffff", color: "#111827" }}>
-        <option value="">Every room type</option><option value="lecture">Lecture rooms</option><option value="lab">Laboratories</option><option value="gym">Gym</option></select>}>
+      right={<CustomSelect value={type} onChange={(e) => setType(e.target.value)} aria-label="Room type" style={{ padding: "5px 8px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: 13, background: "#ffffff", color: "#111827" }}>
+        <option value="">Every room type</option><option value="lecture">Lecture rooms</option><option value="lab">Laboratories</option><option value="gym">Gym</option></CustomSelect>}>
       {d && (
         <>
           <HourHeatmap days={d.days} hours={d.hours} cells={d.cells} total={d.rooms} />
@@ -434,7 +451,7 @@ export function RoomHeatmapCard({ filters = {} }) {
 export function DependenciesCard({ filters = {} }) {
   const [d, error, retry] = useInsight("/analytics/registrar/dependencies/", fq(filters));
   return (
-    <InsightCard title="Cross-college dependencies" error={error} loading={!d && !error} onRetry={retry}
+    <InsightCard title="Cross-college dependencies" analyticsStyle iconType="dependencies" error={error} loading={!d && !error} onRetry={retry}
       subtitle="Major classes that Gen Ed classes leave no room for, and shared Gen Ed classes waiting for your confirmation.">
       {d && (
         <>
@@ -465,7 +482,7 @@ export function CapacityCard({ filters = {} }) {
     { key: "students", label: "Students" }, { key: "seats", label: "Seats" }, { key: "fill_pct", label: "% full" },
     { key: "sections", label: "Sections", render: (r) => `${r.sections.join(", ")}${r.shared ? " (shared)" : ""}` }];
   return (
-    <InsightCard title="Capacity vs enrollment" error={error} loading={!d && !error} onRetry={retry}
+    <InsightCard title="Capacity vs enrollment" analyticsStyle iconType="capacity" error={error} loading={!d && !error} onRetry={retry}
       subtitle={`Each class against its room's seats${d && d.semester ? ` · ${d.semester}` : ""}. A shared class adds up all its sections.`}>
       {d && (
         <>
@@ -563,24 +580,24 @@ export function InsightFilters({ value, onChange, showCollege = true }) {
   const programs = (opts?.programs || []).filter((p) => !value.department || p.department === value.department);
   return (
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-      <select value={value.school_year || ""} onChange={(e) => set("school_year", e.target.value)} aria-label="School year" style={selStyle}>
+      <CustomSelect value={value.school_year || ""} onChange={(e) => set("school_year", e.target.value)} aria-label="School year" style={selStyle}>
         <option value="">All school years</option>
         {(opts?.school_years || []).map((y) => <option key={y} value={y}>{y}</option>)}
-      </select>
-      <select value={value.semester || ""} onChange={(e) => set("semester", e.target.value)} aria-label="Semester" style={selStyle}>
+      </CustomSelect>
+      <CustomSelect value={value.semester || ""} onChange={(e) => set("semester", e.target.value)} aria-label="Semester" style={selStyle}>
         <option value="">All semesters</option>
         {(opts?.semesters?.length ? opts.semesters : ["1st Sem", "2nd Sem"]).map((x) => <option key={x} value={x}>{x}</option>)}
-      </select>
+      </CustomSelect>
       {showCollege && (opts?.departments || []).length > 1 && (
-        <select value={value.department || ""} onChange={(e) => set("department", e.target.value)} aria-label="College" style={selStyle}>
+        <CustomSelect value={value.department || ""} onChange={(e) => set("department", e.target.value)} aria-label="College" style={selStyle}>
           <option value="">All colleges</option>
           {opts.departments.map((x) => <option key={x} value={x}>{x}</option>)}
-        </select>
+        </CustomSelect>
       )}
-      <select value={value.program_id || ""} onChange={(e) => set("program_id", e.target.value)} aria-label="Program" style={selStyle}>
+      <CustomSelect value={value.program_id || ""} onChange={(e) => set("program_id", e.target.value)} aria-label="Program" style={selStyle}>
         <option value="">All programs</option>
         {programs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-      </select>
+      </CustomSelect>
       {Object.values(value).some((v) => v) && (
         <button type="button" onClick={() => onChange({})} style={linkBtn}>Clear filters</button>
       )}
@@ -646,14 +663,14 @@ export function BasicEdInsights({ level }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
         <h3 style={{ margin: 0, color: "#003366" }}>Insights — {level}</h3>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <select value={year} onChange={(e) => setYear(e.target.value)} aria-label="School year" style={selStyle}>
+          <CustomSelect value={year} onChange={(e) => setYear(e.target.value)} aria-label="School year" style={selStyle}>
             <option value="">Active school year</option>
             {(meta?.years || []).map((y) => <option key={y} value={y}>{y}</option>)}
-          </select>
-          <select value={period} onChange={(e) => setPeriod(e.target.value)} aria-label="Grading period" style={selStyle}>
+          </CustomSelect>
+          <CustomSelect value={period} onChange={(e) => setPeriod(e.target.value)} aria-label="Grading period" style={selStyle}>
             <option value="">Latest timetable's period</option>
             {[1, 2, 3].map((n) => <option key={n} value={n}>{level === "JHS" ? `Term ${n}` : `Term / semester ${n}`}</option>)}
-          </select>
+          </CustomSelect>
         </div>
       </div>
       <FeasibilityCard level={level} params={params} />

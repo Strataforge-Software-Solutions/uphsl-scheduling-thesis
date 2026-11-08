@@ -1,3 +1,5 @@
+import CustomSelect from "./CustomSelect";
+import CustomDatePicker from "./CustomDatePicker";
 import React, { useCallback, useEffect, useState } from "react";
 import API from "../services/api";
 import { formatDateTime } from "../utils/formatDateTime";
@@ -65,23 +67,23 @@ export default function AuditLogs({ level = "" }) {
       </p>
       <form onSubmit={apply} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-end", marginBottom: 12 }}>
         <label style={{ fontSize: 12, color: "#374151", display: "flex", flexDirection: "column", gap: 3 }}>User
-          <select value={form.user} onChange={(e) => set("user", e.target.value)} style={{ ...field, minWidth: 180 }}>
+          <CustomSelect value={form.user} onChange={(e) => set("user", e.target.value)} style={{ ...field, minWidth: 180 }}>
             <option value="">All users</option>
             <option value="system">System (no signed-in user)</option>
             {(data?.users || []).map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
-          </select>
+          </CustomSelect>
         </label>
         <label style={{ fontSize: 12, color: "#374151", display: "flex", flexDirection: "column", gap: 3 }}>Action
-          <select value={form.action} onChange={(e) => set("action", e.target.value)} style={field}>
+          <CustomSelect value={form.action} onChange={(e) => set("action", e.target.value)} style={field}>
             <option value="">All actions</option>
             {(data?.actions || []).map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
-          </select>
+          </CustomSelect>
         </label>
         <label style={{ fontSize: 12, color: "#374151", display: "flex", flexDirection: "column", gap: 3 }}>From
-          <input type="date" value={form.date_from} onChange={(e) => set("date_from", e.target.value)} style={field} />
+          <CustomDatePicker value={form.date_from} onChange={(e) => set("date_from", e.target.value)} style={field} aria-label="From date" />
         </label>
         <label style={{ fontSize: 12, color: "#374151", display: "flex", flexDirection: "column", gap: 3 }}>To
-          <input type="date" value={form.date_to} onChange={(e) => set("date_to", e.target.value)} style={field} />
+          <CustomDatePicker value={form.date_to} onChange={(e) => set("date_to", e.target.value)} style={field} aria-label="To date" />
         </label>
         <label style={{ fontSize: 12, color: "#374151", display: "flex", flexDirection: "column", gap: 3, flex: "1 1 160px" }}>Record contains
           <input value={form.q} onChange={(e) => set("q", e.target.value)} placeholder="e.g. CS101, CS1, a name" style={field} />

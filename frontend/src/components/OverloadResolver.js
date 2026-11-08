@@ -172,7 +172,7 @@ export function ResolverWindow({ onClose, focusId = null }) {
 
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", zIndex: 80, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-      <div onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Overload suggestions"
+      <div className="overload-resolver-dialog" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Overload suggestions"
         style={{ background: "#f9fafb", borderRadius: 6, width: "100%", maxWidth: 860, maxHeight: "92vh", overflowY: "auto", padding: "20px 22px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
           <h3 style={{ margin: 0, color: "#003366" }}>Faculty overload — suggestions</h3>
@@ -200,23 +200,33 @@ export function ResolverWindow({ onClose, focusId = null }) {
           </div>)}
         {plan && plan.items.filter((i) => !focusId || i.faculty_id === focusId).map((it) => {
           const extra = it.classes.filter((c) => !c.recommended);
+          const lockedSubjects = (it.subjects || []).filter((subject) => !subject.editable);
           return (
-            <div key={`${it.faculty_id}-${it.term}`} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "14px 16px", marginBottom: 16 }}>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 6 }}>
-                <b style={{ fontSize: 16, color: "#7a1b14" }}>{it.full_name}</b>
+            <div className="overload-teacher-card" key={`${it.faculty_id}-${it.term}`}>
+              <div className="overload-teacher-heading">
+                <b>{it.full_name}</b>
                 <Badge tone="neutral">{TYPE_LABEL[it.faculty_type] || it.faculty_type}</Badge>
-                <span style={{ fontSize: 13, color: "#b91c1c", fontWeight: 600 }}>{fmt(it.hours)} h / {fmt(it.max_hours)} h — over by {fmt(it.overload_hours)} h ({it.term})</span>
+                <span className="overload-hours-summary">{fmt(it.hours)} / {fmt(it.max_hours)} h · {it.term}</span>
+                <Badge tone="warning">Over by {fmt(it.overload_hours)} h</Badge>
               </div>
-              <div style={{ fontSize: 13, color: "#4b5563", margin: "2px 0 8px" }}>
-                <b>Assigned subjects ({it.term}):</b>{" "}
-                {it.subjects.map((x, i) => (
-                  <span key={i} title={`${x.section} · ${x.when}`}>{i ? "; " : ""}{x.code} ({fmt(x.hours)} h){!x.editable && <span style={{ color: "#92400e" }}> [locked: {x.locked_reason}]</span>}</span>))}
-              </div>
-              {it.notes.map((n, i) => <div key={i} style={{ fontSize: 13, color: "#92400e", marginBottom: 6 }}>{n}</div>)}
-              {it.classes.length === 0 && (
-                <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 6, padding: "10px 12px", fontSize: 13, color: "#92400e" }}>
-                  <b>This cannot be resolved automatically.</b> Every class of this teacher is locked, so no replacement can be applied here. The warning stays until the load is within the limit: ask the owner of those classes (the Registrar for Gen Ed) to reassign them, or move the approved classes back to draft.
-                </div>)}
+              <details className="overload-subject-details">
+                <summary>Assigned classes <span>{(it.subjects || []).length}</span></summary>
+                <div className="overload-subject-list">
+                  {(it.subjects || []).map((x, i) => <div className="overload-subject-row" key={`${x.code}-${x.section}-${i}`}>
+                    <div><b>{x.code}</b><span>{x.subject}</span><small>{x.section} · {x.when}</small></div>
+                    <div className="overload-subject-meta"><b>{fmt(x.hours)} h</b><span className={x.editable ? "is-editable" : "is-locked"}>{x.editable ? "Can be moved" : x.locked_reason || "Locked"}</span></div>
+                  </div>)}
+                </div>
+              </details>
+              {lockedSubjects.length > 0 && <div className="overload-lock-note">
+                <b>{it.classes.length === 0 ? "No classes can be moved from this page." : `${lockedSubjects.length} assigned ${lockedSubjects.length === 1 ? "class is" : "classes are"} locked.`}</b>
+                <span>{it.classes.length === 0
+                  ? "These classes are shared, approved, published, or owned by another workspace. Ask the class owner to make an editable draft before changing its teacher."
+                  : "Locked classes are excluded from the suggested changes."}</span>
+              </div>}
+              {lockedSubjects.length === 0 && it.notes.length > 0 && <div className="overload-lock-note">
+                <b>Some overload may remain.</b><span>{it.notes[0]}</span>
+              </div>}
               {it.classes.filter((c) => c.recommended).map((c) => <ClassBlock key={c.schedule_ids.join("-")} teacher={it} cls={c} onDone={applied} />)}
               {extra.length > 0 && (
                 <>

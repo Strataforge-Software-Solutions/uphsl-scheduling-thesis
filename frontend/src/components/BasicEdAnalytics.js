@@ -1,3 +1,4 @@
+import CustomSelect from "./CustomSelect";
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Badge from "./Badge";
 import { StatTile, HBarChart } from "./Charts";
@@ -128,9 +129,9 @@ export default function BasicEdAnalytics({ level, overview }) {
         <h3 style={{ margin: 0, color: "#003366" }}>Analytics — {level === "SHS" ? "Senior High School" : "Junior High School"} teachers</h3>
         <div style={{ flex: 1 }} />
         {data.periods.length > 1 && (
-          <select style={inputStyle} value={data.period} onChange={(e) => setPeriod(e.target.value)} aria-label="Term">
+          <CustomSelect style={inputStyle} value={data.period} onChange={(e) => setPeriod(e.target.value)} aria-label="Term">
             {data.periods.map((n) => <option key={n} value={n}>{lbl(n)}</option>)}
-          </select>)}
+          </CustomSelect>)}
         <button style={btn} onClick={() => load(false)}>Refresh</button>
         {updated && <span style={{ fontSize: 12, color: "#6b7280" }}>Updated {formatTime(updated)} · refreshes automatically</span>}
       </div>
@@ -174,10 +175,10 @@ export default function BasicEdAnalytics({ level, overview }) {
             <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 10 }}>
               <h4 style={{ margin: 0, color: "#003366", flex: 1 }}>Teaching load per teacher</h4>
               <input style={{ ...inputStyle, minWidth: 190 }} placeholder="Search teacher or subject" value={q} onChange={(e) => setQ(e.target.value)} />
-              <select style={inputStyle} value={status} onChange={(e) => setStatus(e.target.value)}>
+              <CustomSelect style={inputStyle} value={status} onChange={(e) => setStatus(e.target.value)}>
                 <option value="all">All loads</option>
                 {Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-              </select>
+              </CustomSelect>
             </div>
             <div style={{ overflowX: "auto", maxHeight: 520, overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: 6 }}>
               <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 760 }}>

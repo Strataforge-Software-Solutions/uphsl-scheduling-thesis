@@ -1,3 +1,4 @@
+import CustomSelect from "./CustomSelect";
 import React, { useState, useEffect } from "react";
 import { reportLoadError } from "../services/loadError";
 import API from "../services/api";
@@ -252,12 +253,25 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
           ? "You generate the Gen Ed subjects. The Dean of each college then generates the program subjects and they are placed around yours in the same weekly schedule. You can edit and approve Gen Ed subjects only."
           : `You generate the ${progName()} subjects. They are placed around the Registrar's Gen Ed subjects in the same weekly schedule. You can edit, remove and approve ${progName()} subjects only; the Gen Ed subjects are view-only.`}
       </p>
-      <select value={programId} onChange={(e) => setProgramId(e.target.value)}>
-        <option value="">-- Program --</option>
-        {programs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-      </select>
-
-      {loadingCombos && <span> Loading year/semester options…</span>}
+      <div className="generate-schedule-controls">
+        <CustomSelect className="generate-program-select" value={programId} onChange={(e) => setProgramId(e.target.value)}>
+          <option value="">-- Program --</option>
+          {programs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </CustomSelect>
+        {loadingCombos && <span>Loading year/semester options…</span>}
+        {combos.length > 0 && (
+          <>
+            <CustomSelect className="generate-year-select" value={yearLevel} onChange={(e) => setYearLevel(e.target.value)} aria-label="Year level">
+              {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
+            </CustomSelect>
+            <CustomSelect className="generate-semester-select" value={semester} onChange={(e) => setSemester(e.target.value)} aria-label="Semester">
+              {semesterOptions.map((sem) => <option key={sem} value={sem}>{sem}</option>)}
+            </CustomSelect>
+          </>
+        )}
+        <button onClick={() => run(false)} disabled={running || !programId || !yearLevel || !semester || badRows.length > 0}
+          style={{ color: "white" }} title={badRows.length ? `Fix the Start / End Time of ${badRows.join(", ")} first.` : undefined}>{running ? "Generating…" : "Generate"}</button>
+      </div>
 
       {!loadingCombos && programId && combos.length === 0 && (
         <p style={{ color: "red", marginTop: "10px" }}>
@@ -265,20 +279,6 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
           before generating a schedule — the engine has nothing to schedule without one.
         </p>
       )}
-
-      {combos.length > 0 && (
-        <>
-          <select value={yearLevel} onChange={(e) => setYearLevel(e.target.value)} aria-label="Year level">
-            {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
-          </select>
-          <select value={semester} onChange={(e) => setSemester(e.target.value)} aria-label="Semester">
-            {semesterOptions.map((sem) => <option key={sem} value={sem}>{sem}</option>)}
-          </select>
-        </>
-      )}
-
-      <button onClick={() => run(false)} disabled={running || !programId || !yearLevel || !semester || badRows.length > 0}
-        style={{ color: "white" }} title={badRows.length ? `Fix the Start / End Time of ${badRows.join(", ")} first.` : undefined}>{running ? "Generating…" : "Generate"}</button>
       {programId && yearLevel && semester && (
         <NotGeneratedList programId={programId} yearLevel={yearLevel} semester={semester} refreshKey={listKey}
           onRetry={() => run(true)} retrying={running} />
@@ -414,11 +414,11 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
                             <RoomSelect rooms={roomsShown} suffix={freeText} groupBy={(r) => (r.room_type === "lab" ? "Computer laboratories" : "Lecture rooms")} value={room} onChange={(v) => setPick(s.id, "room", v)} ariaLabel={`Room for ${s.code}`} width="100%" style={{ fontSize: 12, padding: "3px 6px" }} />
                           </td>
                           <td>
-                            <select style={sel} value={p.start || ""} onChange={(e) => setTimes(s, "start", e.target.value)} aria-label={`Start time for ${s.code}`}>
+                            <CustomSelect portalMenu style={sel} value={p.start || ""} onChange={(e) => setTimes(s, "start", e.target.value)} aria-label={`Start time for ${s.code}`}>
                               <option value="">Any time</option>
                               {(p.start && !starts.includes(p.start) ? [p.start, ...starts] : starts).map((t) => (
                                 <option key={t} value={t}>{timeLabel(t)}{mark(outside(toMin(t), p.end ? toMin(p.end) : DAY_END))}</option>))}
-                            </select>
+                            </CustomSelect>
                             {p.day && (
                               <div style={{ marginTop: 4, fontSize: 12, color: "#1e3a8a", display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}
                                 title="Set from the Faculty time window: Generate places this subject on this day only">
@@ -429,11 +429,11 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
                             )}
                           </td>
                           <td>
-                            <select style={sel} value={p.end || ""} onChange={(e) => setTimes(s, "end", e.target.value)} aria-label={`End time for ${s.code}`}>
+                            <CustomSelect portalMenu style={sel} value={p.end || ""} onChange={(e) => setTimes(s, "end", e.target.value)} aria-label={`End time for ${s.code}`}>
                               <option value="">Any time</option>
                               {(p.end && !ends.includes(p.end) ? [...ends, p.end] : ends).map((t) => (
                                 <option key={t} value={t}>{timeLabel(t)}{mark(outside(p.start ? toMin(p.start) : DAY_START, toMin(t)))}</option>))}
-                            </select>
+                            </CustomSelect>
                           </td>
                           {isRegistrar && (
                             <td style={{ verticalAlign: "middle" }}>

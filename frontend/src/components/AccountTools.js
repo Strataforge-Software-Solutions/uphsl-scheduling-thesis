@@ -1,3 +1,4 @@
+import CustomSelect from "./CustomSelect";
 import React, { useState } from "react";
 import API from "../services/api";
 
@@ -97,10 +98,10 @@ export function AddStaffModal({ onClose, onCreated }) {
 
         <div style={{ marginTop: "12px" }}>
           <label style={{ fontSize: "13px", fontWeight: 600, color: "#333" }}>Role</label>
-          <select value={form.roleIndex} onChange={(e) => setForm({ ...form, roleIndex: e.target.value })}
+          <CustomSelect value={form.roleIndex} onChange={(e) => setForm({ ...form, roleIndex: e.target.value })}
                   style={{ width: "100%", padding: "9px", borderRadius: "6px", border: "1px solid #d1d5db", marginTop: "4px", boxSizing: "border-box" }}>
             {STAFF_ROLE_OPTIONS.map((opt, i) => <option key={opt.label} value={i}>{opt.label}</option>)}
-          </select>
+          </CustomSelect>
         </div>
 
         <div style={{ marginTop: "12px" }}>

@@ -1,3 +1,6 @@
+import CustomSelect from "./CustomSelect";
+import CustomDatePicker from "./CustomDatePicker";
+import CustomTimePicker from "./CustomTimePicker";
 import React, { useState, useEffect } from "react";
 import { onJump } from "../services/jump";
 import { useLandingTab } from "../services/preferences";
@@ -25,6 +28,7 @@ import NotGeneratedList from "./NotGeneratedList";
 import ErrorBoundary from "./ErrorBoundary";
 import { ReadinessCard, FacultyFitCard, LabCapacityCard, LoadBandsCard, InsightFilters } from "./InsightCards";
 import { useScheduleActions, SelectionBar, RowActions, btnStyle } from "./ScheduleActions";
+import { useConfirmDialog } from "./ConfirmDialog";
 import ClashDialog from "./ClashDialog";
 import ReplacementModal from "./ReplacementModal";
 import ExamSchedulePanel from "./ExamSchedulePanel";
@@ -59,11 +63,15 @@ const DEAN_NAV = [
   { key: "analytics", label: "Analytics", icon: "" },
 ];
 const FULL_TIME_NAV = [
+  { group: "Plan" },
   { key: "schedule", label: "My Schedule", icon: "" },
+  { group: "People" },
   { key: "availability", label: "Availability", icon: "" },
 ];
 const PART_TIME_NAV = [
+  { group: "Plan" },
   { key: "schedule", label: "My Schedule", icon: "" },
+  { group: "People" },
   { key: "availability", label: "Availability", icon: "" },
 ];
 
@@ -223,6 +231,7 @@ const PREFERENCE_BADGE = {
    being corrected. Kept outside AvailabilityHistory's own state so editing
    one row never re-renders or clears the others. */
 function AvailabilityRow({ row, onChanged, onDeleted }) {
+  const confirmDialog = useConfirmDialog();
   const [editing, setEditing] = useState(false);
   const [day, setDay] = useState(row.day);
   const [preference, setPreference] = useState(row.preference);
@@ -261,7 +270,7 @@ function AvailabilityRow({ row, onChanged, onDeleted }) {
   };
 
   const remove = async () => {
-    if (!window.confirm("Remove this availability block? This can't be undone, and the Dean/Registrar will no longer see it.")) return;
+    if (!(await confirmDialog({ title: "Remove availability?", message: "Remove this availability block? The Dean and Registrar will no longer see it.", confirmLabel: "Remove availability" }))) return;
     try {
       await API.delete(`/faculty/availability/${row.id}/`);
       onDeleted?.(row.id);
@@ -274,20 +283,20 @@ function AvailabilityRow({ row, onChanged, onDeleted }) {
     return (
       <tr>
         <td>
-          <select style={inputStyle} value={day} onChange={(e) => setDay(e.target.value)}>
+          <CustomSelect style={inputStyle} value={day} onChange={(e) => setDay(e.target.value)}>
             {DAY_OPTIONS.map((d) => <option key={d} value={d}>{d}</option>)}
-          </select>
+          </CustomSelect>
         </td>
         <td style={{ whiteSpace: "nowrap" }}>
-          <input style={{ ...inputStyle, width: "90px" }} type="time" value={start} onChange={(e) => setStart(e.target.value)} />
+          <CustomTimePicker style={{ ...inputStyle, width: "90px" }} value={start} onChange={(e) => setStart(e.target.value)} aria-label="Availability start time" />
           {" – "}
-          <input style={{ ...inputStyle, width: "90px" }} type="time" value={end} onChange={(e) => setEnd(e.target.value)} />
+          <CustomTimePicker style={{ ...inputStyle, width: "90px" }} value={end} onChange={(e) => setEnd(e.target.value)} aria-label="Availability end time" />
           {error && <div style={{ color: "#b91c1c", fontSize: "12px", marginTop: "4px" }}>{error}</div>}
         </td>
         <td>
-          <select style={inputStyle} value={preference} onChange={(e) => setPreference(e.target.value)}>
+          <CustomSelect style={inputStyle} value={preference} onChange={(e) => setPreference(e.target.value)}>
             {PREFERENCE_OPTIONS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
-          </select>
+          </CustomSelect>
         </td>
         <td>{row.submitted_at ? formatDate(row.submitted_at) : "—"}</td>
         <td style={{ whiteSpace: "nowrap" }}>
@@ -395,10 +404,10 @@ function DeanView({ department, departments = [department], activeTab, onNavigat
       {["schedules", "analytics", "conflicts", "availability"].includes(activeTab) && <OverloadBanner />}
       {activeTab !== "coverage" && activeTab !== "home" && (
         <div className="app-toolbar">
-          <select value={programId} onChange={(e) => setProgramId(e.target.value)}>
+          <CustomSelect value={programId} onChange={(e) => setProgramId(e.target.value)}>
             {programs.length === 0 && <option value="">No programs found</option>}
             {programs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          </CustomSelect>
           {programsLoaded && programs.length === 0 && (
             <span style={{ marginLeft: "12px", fontSize: "13px", color: "#b91c1c" }}>
               No program has the department name "{departments.join('" or "')}". Ask the IT Admin to run
@@ -618,13 +627,13 @@ function ScheduleManager({ programId, programName = "", departments = [] }) {
           onChange={(e) => setSearch(e.target.value)}
           style={{ ...filterSelectStyle, flex: "1 1 220px", minWidth: "200px" }}
         />
-        <select style={filterSelectStyle} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+        <CustomSelect style={filterSelectStyle} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="">All statuses</option>
           <option value="draft">Draft</option>
           <option value="approved">Approved</option>
           <option value="published">Published</option>
-        </select>
-        <select
+        </CustomSelect>
+        <CustomSelect
           style={filterSelectStyle}
           value={yearLevel}
           onChange={(e) => setYearLevel(e.target.value)}
@@ -632,8 +641,8 @@ function ScheduleManager({ programId, programName = "", departments = [] }) {
         >
           <option value="">All year levels</option>
           {yearLevelOptions.map((y) => <option key={y} value={y}>{y}</option>)}
-        </select>
-        <select
+        </CustomSelect>
+        <CustomSelect
           style={filterSelectStyle}
           value={semester}
           onChange={(e) => setSemester(e.target.value)}
@@ -641,10 +650,10 @@ function ScheduleManager({ programId, programName = "", departments = [] }) {
         >
           <option value="">All semesters</option>
           {semesterOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <select style={filterSelectStyle} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+        </CustomSelect>
+        <CustomSelect style={filterSelectStyle} value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
           {kindFilterOptions(programName).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
+        </CustomSelect>
         <button onClick={resetFilters} style={{ ...filterSelectStyle, color: "#111827" }}>Reset</button>
       </div>
 
@@ -653,7 +662,7 @@ function ScheduleManager({ programId, programName = "", departments = [] }) {
       <GenEdRequestsPanel role="dean" refreshKey={reqKey} onChanged={load} />
       {moveReq && <RequestMoveModal group={moveReq} onClose={() => setMoveReq(null)} onDone={() => setReqKey((k) => k + 1)} />}
 
-      <table className="sched-compact">
+      <table className="sched-compact schedule-list-table">
         <thead>
           <tr>
             <th style={{ width: "28px" }}>
@@ -855,13 +864,13 @@ function DeanCoverageTab({ department, departments = [department] }) {
   return (
     <div>
       <h3>Report a faculty absence — {department}</h3>
-      <div style={{ marginBottom: "16px" }}>
-        <select value={form.faculty} onChange={(e) => setForm({ ...form, faculty: e.target.value })}>
+      <div className="coverage-absence-form">
+        <CustomSelect className="faculty-picker-select" value={form.faculty} onChange={(e) => setForm({ ...form, faculty: e.target.value })}>
           <option value="">-- Faculty --</option>
           {ownDeptFaculty.map((f) => <option key={f.id} value={f.id}>{f.full_name && f.full_name !== f.username ? `${f.full_name} (${f.username})` : f.username}</option>)}
-        </select>
-        <input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
-        <input placeholder="Reason (optional)" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
+        </CustomSelect>
+        <CustomDatePicker value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} aria-label="Absence date" />
+        <input className="coverage-reason" placeholder="Reason (optional)" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} />
         <button onClick={reportAbsence} disabled={busy}>Report & Get Coverage Suggestions</button>
       </div>
       {error && <p style={{ color: "red" }}>{error}</p>}
@@ -924,6 +933,7 @@ function DeanCoverageTab({ department, departments = [department] }) {
  * department -- not a student portal, just roster data so Full-time/Part-time
  * faculty can see "who's in my class" on their own schedule view. ----------- */
 function DeanClassListsTab({ department, departments = [department] }) {
+  const confirmDialog = useConfirmDialog();
   const [students, setStudents] = useState([]);
   const [sections, setSections] = useState([]);
   const [programs, setPrograms] = useState([]);
@@ -994,7 +1004,7 @@ function DeanClassListsTab({ department, departments = [department] }) {
   };
 
   const remove = async (id) => {
-    if (!window.confirm("Remove this student from the class list?")) return;
+    if (!(await confirmDialog({ title: "Remove student?", message: "Remove this student from the class list?", confirmLabel: "Remove student" }))) return;
     try {
       await API.delete(`/engine/students/${id}/`);
     } catch (err) {
@@ -1027,13 +1037,13 @@ function DeanClassListsTab({ department, departments = [department] }) {
           takes that section's whole subject load, so teachers of that section see them on their class list.
         </p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "center" }}>
-          <select value={upProgram} onChange={(e) => { setUpProgram(e.target.value); setUpSemester(""); setUpResult(null); }} style={inputStyle} aria-label="Program">
+          <CustomSelect value={upProgram} onChange={(e) => { setUpProgram(e.target.value); setUpSemester(""); setUpResult(null); }} style={inputStyle} aria-label="Program">
             {programs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-          <select value={upSemester} onChange={(e) => { setUpSemester(e.target.value); setUpResult(null); }} style={inputStyle} aria-label="Semester">
+          </CustomSelect>
+          <CustomSelect value={upSemester} onChange={(e) => { setUpSemester(e.target.value); setUpResult(null); }} style={inputStyle} aria-label="Semester">
             <option value="">Current semester</option>
             {semesters.map((x) => <option key={x} value={x}>{x}</option>)}
-          </select>
+          </CustomSelect>
           <label style={{ ...inputStyle, cursor: "pointer", color: upFile ? "#111827" : "#6b7280" }}>
             {upFile ? upFile.name : "Choose file (.csv, .xlsx)"}
             <input type="file" accept=".csv,.xlsx,.xlsm,text/csv" style={{ display: "none" }}
@@ -1081,10 +1091,10 @@ function DeanClassListsTab({ department, departments = [department] }) {
           onChange={(e) => setSearch(e.target.value)}
           style={{ ...inputStyle, flex: "1 1 220px", minWidth: "200px" }}
         />
-        <select value={sectionFilter} onChange={(e) => setSectionFilter(e.target.value)} style={inputStyle}>
+        <CustomSelect value={sectionFilter} onChange={(e) => setSectionFilter(e.target.value)} style={inputStyle}>
           <option value="">All sections</option>
           {sections.map((s) => <option key={s.id} value={s.id}>{sectionLabel(s)} · {s.semester}</option>)}
-        </select>
+        </CustomSelect>
         <span style={{ fontSize: "13px", color: "#6b7280" }}>{filtered.length} students</span>
       </div>
 
@@ -1182,9 +1192,9 @@ function AnalyticsPanel() {
       {data.semesters && data.semesters.length > 1 && (
         <p style={{ fontSize: "13px", color: "#374151" }}>
           Semester:{" "}
-          <select value={data.semester || ""} onChange={(e) => setSem(e.target.value)}>
+          <CustomSelect value={data.semester || ""} onChange={(e) => setSem(e.target.value)}>
             {data.semesters.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>{" "}
+          </CustomSelect>{" "}
           (1st and 2nd Sem use the same rooms and teachers, so each is shown on its own.)
         </p>
       )}
@@ -1553,26 +1563,26 @@ function AvailabilityForm({ onSaved }) {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
           <div>
             <label style={fieldLabelStyle}>Day</label>
-            <select style={inputStyle} value={day} onChange={(e) => setDay(e.target.value)}>
+            <CustomSelect style={inputStyle} value={day} onChange={(e) => setDay(e.target.value)}>
               {DAY_OPTIONS.map((d) => <option key={d} value={d}>{d}</option>)}
-            </select>
+            </CustomSelect>
           </div>
           <div>
             <label style={fieldLabelStyle}>Preference</label>
-            <select style={inputStyle} value={preference} onChange={(e) => setPreference(e.target.value)}>
+            <CustomSelect style={inputStyle} value={preference} onChange={(e) => setPreference(e.target.value)}>
               {PREFERENCE_OPTIONS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
-            </select>
+            </CustomSelect>
           </div>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "18px" }}>
           <div>
             <label style={fieldLabelStyle}>Available from</label>
-            <input style={inputStyle} type="time" value={start} onChange={(e) => setStart(e.target.value)} />
+            <CustomTimePicker style={inputStyle} value={start} onChange={(e) => setStart(e.target.value)} aria-label="Available from" />
           </div>
           <div>
             <label style={fieldLabelStyle}>Available until</label>
-            <input style={inputStyle} type="time" value={end} onChange={(e) => setEnd(e.target.value)} />
+            <CustomTimePicker style={inputStyle} value={end} onChange={(e) => setEnd(e.target.value)} aria-label="Available until" />
           </div>
         </div>
 
