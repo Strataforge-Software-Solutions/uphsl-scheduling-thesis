@@ -1,15 +1,30 @@
-"""
-UPHSL Scheduling System — Django settings skeleton.
-Fill in SECRET_KEY, DB credentials, and ALLOWED_HOSTS before deploying.
-"""
+"""UPHSL Scheduling System — Django settings."""
 from pathlib import Path
 from datetime import timedelta
+import os
+
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = "change-me-before-deploy"
-DEBUG = True
-ALLOWED_HOSTS = ["*"]
+IS_VERCEL = os.environ.get("VERCEL") == "1"
+try:
+    from dotenv import load_dotenv
+    load_dotenv(BASE_DIR / ".env", override=not IS_VERCEL)
+except ImportError:   # python-dotenv not installed in this Python: run  pip install -r requirements.txt
+    import sys
+    print("WARNING: python-dotenv is not installed, so the .env file (database settings) was NOT read. "
+          "Run:  pip install -r requirements.txt", file=sys.stderr)
+
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "" if IS_VERCEL else "local-development-only-change-before-deploy")
+if not SECRET_KEY:
+    raise ImproperlyConfigured("Set DJANGO_SECRET_KEY in the deployment environment.")
+
+DEBUG = os.environ.get("DJANGO_DEBUG", "false" if IS_VERCEL else "true").lower() in {"1", "true", "yes"}
+ALLOWED_HOSTS = [host.strip() for host in os.environ.get(
+    "DJANGO_ALLOWED_HOSTS", ".vercel.app,localhost,127.0.0.1"
+).split(",") if host.strip()]
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -67,15 +82,6 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "config.wsgi.application"
-
-import os
-try:
-    from dotenv import load_dotenv
-    load_dotenv(BASE_DIR / ".env", override=True)   # the .env file wins over stale DB_* variables left in the terminal / Windows
-except ImportError:   # python-dotenv not installed in this Python: run  pip install -r requirements.txt
-    import sys
-    print("WARNING: python-dotenv is not installed, so the .env file (database settings) was NOT read. "
-          "Run:  pip install -r requirements.txt", file=sys.stderr)
 
 DATABASES = {
     "default": {
@@ -143,10 +149,15 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# Vercel functions have an ephemeral writable /tmp directory. Use it for the
+# current profile-picture implementation; configure external storage for durable uploads.
+DEFAULT_MEDIA_ROOT = "/tmp/ufast-media" if IS_VERCEL else str(BASE_DIR / "media")
 
 # Uploaded files (profile pictures only). Not published under a public URL: a picture is sent only to its owner
 # through /api/accounts/me/picture/file/. Back this folder up together with the database.
-MEDIA_ROOT = os.environ.get("MEDIA_ROOT", str(BASE_DIR / "media"))
+MEDIA_ROOT = os.environ.get("MEDIA_ROOT", DEFAULT_MEDIA_ROOT)
 
 # SHS / JHS timetable search (basic_ed/search.py): the ONE place for its limits, per grade-level Generate.
 # max_steps: placements tried; time_seconds: wall-clock limit for the whole run (restarts included); restarts: shuffled fallback attempts

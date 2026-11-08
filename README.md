@@ -109,6 +109,27 @@ components/RegistrarDashboard.js, StudentDashboard.js  # carry over, need same A
 Postgres `DATABASES` block and uncomment the MySQL one; in `requirements.txt`, swap
 `psycopg2-binary` for `mysqlclient`; update `.env` to match MySQL's fields (host `127.0.0.1`, port `3306`).
 
+## Deploying on Vercel
+
+The root `vercel.json` configures two Vercel Services: the Django API in `backend/` and the
+Create React App in `frontend/`. `/api/*`, `/admin/*`, and `/static/*` route to Django; all
+other paths route to React. The frontend uses the same-origin `/api` URL in production, while
+local development continues to use `http://127.0.0.1:8000/api` by default.
+No service binding is declared: this Create React App makes API requests from the user's browser,
+and Vercel bindings are only available to server-side functions at runtime. The browser instead
+uses the public `/api/*` rewrite on the shared domain.
+
+Set these environment variables in the Vercel project before deploying:
+
+- `DJANGO_SECRET_KEY`: a long, random secret.
+- `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, and `DB_PORT`: the PostgreSQL/Supabase connection.
+- `DJANGO_ALLOWED_HOSTS`: comma-separated allowed hostnames if using a custom domain (the default allows Vercel domains and localhost).
+- `REACT_APP_API_BASE_URL` is optional; leave it unset to use the shared `/api` route.
+
+`DEBUG` defaults off on Vercel. Apply Django migrations to the production database as a deployment
+operation before using the app. Profile pictures currently use Vercel's ephemeral `/tmp` storage;
+configure durable external storage if uploads must survive function restarts or deployments.
+
 
 1. `python manage.py startapp`-style migrations — run `makemigrations && migrate` once you drop this into a real environment.
 2. RegistrarDashboard.js / StudentDashboard.js still need to be pointed at the Django endpoints (currently only FacultyDashboard is wired).
