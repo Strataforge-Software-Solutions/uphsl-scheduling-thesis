@@ -122,3 +122,15 @@
   color: #6b7280;
   text-align: center;
 }
+
+html[data-theme="dark"] .login-container { background: #0b1220; color: #edf3fb; color-scheme: dark; }
+html[data-theme="dark"] .login-header h2 { color: #9cc5ff; }
+html[data-theme="dark"] .login-subtitle,
+html[data-theme="dark"] .login-help,
+html[data-theme="dark"] .login-footer { color: #9aabc0; }
+html[data-theme="dark"] .login-form { background: #121e2f; border-color: #2c3d52; }
+html[data-theme="dark"] .login-form h3 { color: #edf3fb; }
+html[data-theme="dark"] .login-form label { color: #c4d0df; }
+html[data-theme="dark"] .login-form input { background: #0f1a2a; color: #edf3fb; border-color: #40536b; }
+html[data-theme="dark"] .login-form input:focus { border-color: #8abaff; box-shadow: 0 0 0 2px #1c3553; }
+html[data-theme="dark"] .login-form button[type="submit"] { background: #24548b; border-color: #24548b; }

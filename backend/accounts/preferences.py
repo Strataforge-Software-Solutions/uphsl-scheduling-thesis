@@ -27,7 +27,7 @@ from .models import UserPreference
 User = get_user_model()
 
 # ---------------------------------------------------------------- allowed values
-THEMES = [("light", "Default"), ("royal", "Royal")]          # "light" is the stored value of the Default theme
+THEMES = [("light", "Default"), ("royal", "Royal"), ("dark", "Dark")]  # "light" is the stored value of Default
 TEXT_SIZES = [("small", "Small"), ("medium", "Medium"), ("large", "Large")]
 DENSITIES = [("comfortable", "Comfortable"), ("compact", "Compact")]
 MOTION = [("system", "Follow device"), ("on", "On"), ("off", "Off")]
