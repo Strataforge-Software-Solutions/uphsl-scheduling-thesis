@@ -12,15 +12,29 @@ import "./Settings.css";
    scheduling rules or schedule data (accounts/preferences.py on the server). */
 
 const SECTIONS = [
-  ["profile", "Edit profile"],
-  ["appearance", "Appearance"],
-  ["format", "Language and format"],
-  ["display", "Display preferences"],
-  ["notifications", "Notifications"],
-  ["help", "Help and about"],
+  ["profile", "Edit profile", "user"],
+  ["appearance", "Appearance", "palette"],
+  ["format", "Language and format", "globe"],
+  ["display", "Display preferences", "display"],
+  ["notifications", "Notifications", "bell"],
+  ["help", "Help and about", "help"],
 ];
 const PICTURE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_PICTURE = 2 * 1024 * 1024;
+
+function SettingsIcon({ name }) {
+  const common = { fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round" };
+  const shapes = {
+    settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.4 2.4-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5v.2h-3.4v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1-2.4-2.4.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H4.3v-3.4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1L8 5.2l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5v-.2h3.4v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1 2.4 2.4-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1h.2V14h-.2a1.7 1.7 0 0 0-1.5 1Z" /></>,
+    user: <><circle cx="12" cy="8" r="3.2" /><path d="M5.5 20c.5-3.2 2.8-5 6.5-5s6 1.8 6.5 5" /></>,
+    palette: <><path d="M12 3a9 9 0 1 0 0 18h1.2a2 2 0 0 0 1.5-3.3c-.8-.9-.1-2.2 1.1-2.2H18a3 3 0 0 0 3-3c0-5.2-4-9.5-9-9.5Z" /><circle cx="7.5" cy="11" r=".8" /><circle cx="10" cy="7.5" r=".8" /><circle cx="14.5" cy="7.8" r=".8" /></>,
+    globe: <><circle cx="12" cy="12" r="9" /><path d="M3.5 12h17M12 3c2.3 2.5 3.4 5.5 3.4 9s-1.1 6.5-3.4 9c-2.3-2.5-3.4-5.5-3.4-9S9.7 5.5 12 3Z" /></>,
+    display: <><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M8 21h8m-4-4v4" /></>,
+    bell: <><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Zm-8 12h4" /></>,
+    help: <><circle cx="12" cy="12" r="9" /><path d="M9.7 9a2.4 2.4 0 1 1 4.5 1.2c-.8 1.1-2.2 1.4-2.2 3m0 3h.01" /></>,
+  };
+  return <svg className={name === "settings" ? "settings-title-icon" : "settings-nav-icon"} viewBox="0 0 24 24" aria-hidden="true" focusable="false" {...common}>{shapes[name]}</svg>;
+}
 
 const errorText = (e, fallback) => e?.response?.data?.detail || fallback;
 const pick = (obj, keys) => Object.fromEntries(keys.map((k) => [k, obj[k]]));
@@ -386,20 +400,28 @@ export default function Settings({ user }) {
     <div className="settings-page">
       <header className="settings-top">
         <div className="settings-top-title"><span className="settings-brand">U-FAST</span><span aria-hidden="true">·</span><h1>My settings</h1></div>
-        <button type="button" className="ui-btn secondary" onClick={() => navigate("/dashboard")}>Back to dashboard</button>
       </header>
       <div className="settings-body">
         <nav className="settings-nav" aria-label="Settings sections">
           <ul>
-            {SECTIONS.map(([k, label]) => (
+            {SECTIONS.map(([k, label, icon]) => (
               <li key={k}>
                 <button type="button" className={`settings-nav-item${active === k ? " active" : ""}`} aria-current={active === k ? "page" : undefined}
-                  onClick={() => setActive(k)}>{label}</button>
+                  onClick={() => setActive(k)}><SettingsIcon name={icon} /><span>{label}</span></button>
               </li>
             ))}
           </ul>
         </nav>
-        <main className="settings-main">{body}</main>
+        <main className="settings-main">
+          <div className="settings-page-heading">
+            <div>
+              <h2><SettingsIcon name="settings" />My Settings</h2>
+              <p>Manage your preferences and more.</p>
+            </div>
+            <button type="button" className="ui-btn secondary" onClick={() => navigate("/dashboard")}>Back to dashboard</button>
+          </div>
+          {body}
+        </main>
       </div>
     </div>
   );
