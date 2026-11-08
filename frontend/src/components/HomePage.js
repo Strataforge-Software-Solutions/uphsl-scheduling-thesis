@@ -9,7 +9,6 @@ import recentNotificationsImage from "../assets/recent-notifications-illustratio
    Props: role ("dean" | "registrar" | "principal"), name, scope (e.g. college or school level), nav (sidebar items),
    onNavigate(tabKey), stats [{label, value, accent}], tasks [{text, tab, tone}], status [text], extra (optional node). */
 const card = { background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "12px 16px", marginBottom: 16 };
-const h = { margin: "0 0 8px", fontSize: 14, fontWeight: 600, color: "#111827" };
 const ROLE = { dean: "Dean", registrar: "Registrar", principal: "Principal" };
 
 function StatIcon({ label }) {
