@@ -1022,3 +1022,129 @@ table.sched-compact td input[type="checkbox"] {
   .registrar-analytics-view .analytics-workload-limits-row > button { grid-column: auto; }
   .registrar-analytics-view .analytics-workload-limits-row > button { width: 100%; }
 }
+
+
+/* My settings > Appearance > Dark: shared tokens and component overrides keep
+   the signed-in dashboards, settings, tables and controls readable together. */
+@media screen {
+  html[data-theme="dark"] {
+    color-scheme: dark;
+    --c-primary: #8abaff;
+    --c-primary-hover: #b2d2ff;
+    --c-primary-soft: #1c3553;
+    --c-text: #edf3fb;
+    --c-text-2: #c4d0df;
+    --c-text-3: #9aabc0;
+    --c-border: #40536b;
+    --c-line: #2c3d52;
+    --c-subtle: #1b2a3e;
+    --c-page: #0b1220;
+    --c-surface: #121e2f;
+    --c-ok: #86efac; --c-ok-bg: #10291f; --c-ok-line: #24583c;
+    --c-warn: #fcd34d; --c-warn-bg: #302611; --c-warn-line: #66501c;
+    --c-err: #fca5a5; --c-err-bg: #321b22; --c-err-line: #6b3039;
+    --c-draft: #c4d0df; --c-draft-bg: #1b2a3e; --c-draft-line: #40536b;
+    --uphsl-bg: #0b1220; --uphsl-card: #121e2f; --uphsl-border: #2c3d52;
+    --uphsl-text: #edf3fb; --uphsl-text-muted: #9aabc0;
+    background: #0b1220;
+  }
+  html[data-theme="dark"] body,
+  html[data-theme="dark"] .app-shell,
+  html[data-theme="dark"] .settings-page,
+  html[data-theme="dark"] .app-main,
+  html[data-theme="dark"] .main-content { background: var(--c-page); color: var(--c-text); }
+  html[data-theme="dark"] .app-sidebar { background: #111c2e; color: #dbe7f5; }
+  html[data-theme="dark"] .app-nav-item { color: #c5d2e2; }
+  html[data-theme="dark"] .app-nav-item:hover,
+  html[data-theme="dark"] .app-nav-item.active { background: #1c3553; color: #edf3fb; border-left-color: #8abaff; }
+  html[data-theme="dark"] .app-topbar,
+  html[data-theme="dark"] .settings-top { background: #111c2e; border-color: #2c3d52; }
+  html[data-theme="dark"] .app-page-header { border-color: #2c3d52; }
+  html[data-theme="dark"] .app-page-title,
+  html[data-theme="dark"] .settings-page-heading h2,
+  html[data-theme="dark"] .settings-nav::before,
+  html[data-theme="dark"] .settings-profile-card-heading h3,
+  html[data-theme="dark"] .settings-theme-fieldset > legend,
+  html[data-theme="dark"] .settings-appearance-group > legend,
+  html[data-theme="dark"] .settings-live-preview h3 { color: #edf3fb; }
+  html[data-theme="dark"] .ui-panel,
+  html[data-theme="dark"] .settings-nav,
+  html[data-theme="dark"] .settings-profile-card,
+  html[data-theme="dark"] .settings-theme-option,
+  html[data-theme="dark"] .settings-size-option,
+  html[data-theme="dark"] .settings-density-option { background: #121e2f; border-color: #2c3d52; color: #edf3fb; }
+  html[data-theme="dark"] .settings-readonly,
+  html[data-theme="dark"] .settings-profile-card .settings-readonly { background: #17263a; border-color: #2c3d52; }
+  html[data-theme="dark"] .settings-theme-option.selected,
+  html[data-theme="dark"] .settings-size-option.selected,
+  html[data-theme="dark"] .settings-density-option.selected { background: #1c3553; border-color: #8abaff; box-shadow: inset 0 0 0 1px #8abaff; }
+  html[data-theme="dark"] .settings-nav-item { color: #c4d0df; }
+  html[data-theme="dark"] .settings-nav-item.active { color: #fff; background: #194678; }
+  html[data-theme="dark"] .settings-readonly-badge { background: #1c3553; color: #b9d5ff; }
+  html[data-theme="dark"] .settings-motion-row { background: #172a43; }
+  html[data-theme="dark"] .settings-motion-copy,
+  html[data-theme="dark"] .settings-motion-toggle { color: #edf3fb; }
+  html[data-theme="dark"] .settings-motion-copy span { color: #c4d0df; }
+  html[data-theme="dark"] .settings-motion-icon { border-color: #8abaff; color: #b9d5ff; }
+  html[data-theme="dark"] .ui-btn.secondary { background: #17263a; color: #edf3fb; border-color: #40536b; }
+  html[data-theme="dark"] input,
+  html[data-theme="dark"] select,
+  html[data-theme="dark"] textarea,
+  html[data-theme="dark"] .login-form input { background-color: #0f1a2a; color: #edf3fb; border-color: #40536b; }
+  html[data-theme="dark"] input::placeholder,
+  html[data-theme="dark"] textarea::placeholder { color: #91a2b8; }
+  html[data-theme="dark"] table { background: #121e2f; color: #edf3fb; border-color: #2c3d52; }
+  html[data-theme="dark"] thead th { background: #1b2a3e; color: #edf3fb; border-color: #40536b; }
+  html[data-theme="dark"] tbody td { color: #dce6f3; border-color: #2c3d52; }
+  html[data-theme="dark"] tbody tr:nth-child(even) td { background-color: #152337; }
+  html[data-theme="dark"] tbody tr:hover td { background-color: #1c3553; }
+  html[data-theme="dark"] a { color: #9cc5ff; }
+  html[data-theme="dark"] .ui-status.ok { color: var(--c-ok); background: var(--c-ok-bg); border-color: var(--c-ok-line); }
+  html[data-theme="dark"] .ui-status.warn { color: var(--c-warn); background: var(--c-warn-bg); border-color: var(--c-warn-line); }
+  html[data-theme="dark"] .ui-status.err { color: var(--c-err); background: var(--c-err-bg); border-color: var(--c-err-line); }
+  /* Many legacy dashboard widgets use inline light backgrounds. Remap the common panel colors. */
+  html[data-theme="dark"] [style*="background: white"],
+  html[data-theme="dark"] [style*="background: rgb(255, 255, 255)"],
+  html[data-theme="dark"] [style*="background-color: white"],
+  html[data-theme="dark"] [style*="background-color: rgb(255, 255, 255)"],
+  html[data-theme="dark"] [style*="background: rgb(249, 250, 251)"],
+  html[data-theme="dark"] [style*="background: rgb(243, 244, 246)"],
+  html[data-theme="dark"] [style*="background-color: rgb(249, 250, 251)"],
+  html[data-theme="dark"] [style*="background-color: rgb(243, 244, 246)"] { background-color: #121e2f !important; color: #edf3fb; }
+  html[data-theme="dark"] [style*="color: rgb(15, 23, 42)"],
+  html[data-theme="dark"] [style*="color: rgb(17, 24, 39)"],
+  html[data-theme="dark"] [style*="color: #0f172a"],
+  html[data-theme="dark"] [style*="color: #111827"],
+  html[data-theme="dark"] [style*="color: rgb(55, 65, 81)"],
+  html[data-theme="dark"] [style*="color: rgb(51, 51, 51)"],
+  html[data-theme="dark"] [style*="color: rgb(68, 68, 68)"],
+  html[data-theme="dark"] [style*="color: rgb(75, 85, 99)"],
+  html[data-theme="dark"] [style*="color: rgb(107, 114, 128)"],
+  html[data-theme="dark"] [style*="color: #003366"],
+  html[data-theme="dark"] [style*="color: #374151"],
+  html[data-theme="dark"] [style*="color: #333"],
+  html[data-theme="dark"] [style*="color: #444"],
+  html[data-theme="dark"] [style*="color: #4b5563"],
+  html[data-theme="dark"] [style*="color: #6b7280"],
+  html[data-theme="dark"] [style*="color: rgb(30, 95, 58)"],
+  html[data-theme="dark"] [style*="color: rgb(30, 122, 69)"],
+  html[data-theme="dark"] [style*="color: rgb(22, 101, 52)"] { color: #86efac !important; }
+  html[data-theme="dark"] [style*="color: rgb(185, 28, 28)"],
+  html[data-theme="dark"] [style*="color: rgb(153, 27, 27)"] { color: #fca5a5 !important; }
+  html[data-theme="dark"] [style*="color: rgb(146, 64, 14)"],
+  html[data-theme="dark"] [style*="color: rgb(161, 98, 7)"] { color: #fcd34d !important; }
+  html[data-theme="dark"] [style*="background: rgb(255, 247, 237)"],
+  html[data-theme="dark"] [style*="background-color: rgb(255, 247, 237)"],
+  html[data-theme="dark"] [style*="background: rgb(234, 250, 240)"],
+  html[data-theme="dark"] [style*="background-color: rgb(234, 250, 240)"],
+  html[data-theme="dark"] [style*="background: rgb(240, 253, 244)"],
+  html[data-theme="dark"] [style*="background-color: rgb(240, 253, 244)"] { background-color: #172a35 !important; }
+  html[data-theme="dark"] [style*="background: rgb(240, 244, 248)"],
+  html[data-theme="dark"] [style*="background-color: rgb(240, 244, 248)"],
+  html[data-theme="dark"] [style*="background: rgb(234, 238, 245)"],
+  html[data-theme="dark"] [style*="background-color: rgb(234, 238, 245)"] { background-color: #17263a !important; }
+  html[data-theme="dark"] [style*="border: 1px solid rgb(254, 215, 170)"],
+  html[data-theme="dark"] [style*="border: 1px solid rgb(183, 228, 199)"],
+  html[data-theme="dark"] [style*="border: 1px solid rgb(187, 247, 208)"] { border-color: #3c5b50 !important; }
+  html[data-theme="dark"] :focus-visible { outline-color: #8abaff; }
+}

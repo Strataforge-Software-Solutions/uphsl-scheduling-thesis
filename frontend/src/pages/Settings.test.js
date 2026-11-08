@@ -57,7 +57,11 @@ afterEach(() => { act(() => root.unmount()); box.remove(); });
 const byText = (sel, text) => [...box.querySelectorAll(sel)].find((el) => el.textContent.trim() === text);
 async function click(el) { await act(async () => { el.click(); }); await act(async () => { await Promise.resolve(); }); }
 async function open(section) { await click(byText(".settings-nav-item", section)); }
-async function pickOption(label) { await click(byText(".settings-option", label).querySelector("input")); }
+async function pickOption(label) {
+  const option = [...box.querySelectorAll(".settings-option, .settings-theme-option, .settings-size-option, .settings-density-option, .settings-format-option")]
+    .find((el) => el.textContent.includes(label));
+  await click(option.querySelector("input"));
+}
 async function press(label) { await click(byText("button", label)); }
 
 test("Appearance saves, applies at once, is cached, and resets to defaults", async () => {
@@ -75,7 +79,7 @@ test("Appearance saves, applies at once, is cached, and resets to defaults", asy
   expect(API.patch).toHaveBeenLastCalledWith("/accounts/me/preferences/", { theme: "light", text_size: "medium", table_density: "comfortable", reduce_motion: "system" });
   expect(document.documentElement.getAttribute("data-text-size")).toBe("medium");
   expect(box.textContent).toContain("Reset to defaults and saved.");
-  expect(byText(".settings-option", "Dark")).toBeUndefined();          // Dark was replaced by Royal
+  expect([...box.querySelectorAll(".settings-theme-option")].some((el) => el.textContent.includes("Dark"))).toBe(true);
   await pickOption("Royal");
   await press("Save");
   expect(document.documentElement.getAttribute("data-theme")).toBe("royal");     // applied at once, no reload
@@ -115,11 +119,13 @@ test("Display: only the role's pages are listed, saved, and reset", async () => 
   expect(API.patch).toHaveBeenLastCalledWith("/accounts/me/preferences/", { landing_page: "" });
 });
 
-test("Notifications: switches save and reset; Mark all as read reports the count", async () => {
+test("Notifications: switches save and reset; mark-all action reports the count", async () => {
   await mount(<Settings user={{ role: "faculty", faculty_type: "full_time" }} />);
   await open("Notifications");
   expect(box.textContent).not.toMatch(/email notifications/i);
-  await click(box.querySelector(".settings-switch input"));              // "Schedule published or changed"
+  const scheduleSwitch = box.querySelector('[role="switch"][aria-label="Schedule published or changed"]');
+  expect(scheduleSwitch.getAttribute("aria-checked")).toBe("true");
+  await click(scheduleSwitch);
   await press("Save");
   expect(API.patch.mock.calls.at(-1)[1].notify_schedule).toBe(false);
   await press("Reset to defaults");

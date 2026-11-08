@@ -5,7 +5,7 @@ import API from "../services/api";
 import { reportLoadError } from "../services/loadError";
 import Badge from "./Badge";
 import { periodOptionsAll, periodName } from "../utils/terms";
-import { be, errText, inputStyle, cardStyle, btn, btnPrimary, Field, Modal, Notice, DAYS, hhmm } from "./basicEdUi";
+import { be, errText, inputStyle, cardStyle, btn, btnPrimary, Field, Modal, Notice } from "./basicEdUi";
 import { useConfirmDialog } from "./ConfirmDialog";
 
 /* ---------- generic form modal ---------- */

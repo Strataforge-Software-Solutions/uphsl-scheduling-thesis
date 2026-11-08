@@ -1,11 +1,13 @@
 import axios from "axios";
 
-// Defaults to localhost -- override by creating frontend/.env with:
+// Use the shared Vercel domain in production. Override locally by creating frontend/.env with:
 //   REACT_APP_API_BASE_URL=http://<your-machine's-LAN-IP>:8000/api
 // Needed if you're opening the frontend from a different device than the one
 // running Django (e.g. testing on a phone/another PC on the same Wi-Fi) --
 // 127.0.0.1 on that OTHER device means itself, not your backend machine.
-const BASE_URL = process.env.REACT_APP_API_BASE_URL || "http://127.0.0.1:8000/api";
+const BASE_URL = process.env.REACT_APP_API_BASE_URL || (
+  process.env.NODE_ENV === "production" ? "/api" : "http://127.0.0.1:8000/api"
+);
 
 const API = axios.create({
   baseURL: BASE_URL,

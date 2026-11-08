@@ -104,7 +104,7 @@ function Overview() {
         </div>
       </div>
       <p style={{ fontSize: "13px", color: "#6b7280" }}>
-        The full data editor is the Django admin at <b>{(process.env.REACT_APP_API_BASE_URL || "http://127.0.0.1:8000/api").replace(/\/api\/?$/, "")}/admin/</b>.
+        The full data editor is the Django admin at <b>{(API.defaults.baseURL || "").replace(/\/api\/?$/, "") || window.location.origin}/admin/</b>.
       </p>
     </div>
   );

@@ -29,9 +29,9 @@ function writeCache(p) {
   } catch (e) { /* private window or blocked storage: the server copy still applies */ }
 }
 
-// Themes: "light" = Default (UPHSL navy and white), "royal" = Royal (royal navy, gold and cream). Anything else reads as Default.
+// Themes: "light" = Default, "royal" = Royal, "dark" = site-wide dark colors.
 export function resolveTheme(theme) {
-  return theme === "royal" ? "royal" : "light";
+  return ["royal", "dark"].includes(theme) ? theme : "light";
 }
 
 // put the display settings on <html>; DashboardTheme.css reads these attributes (never in print)

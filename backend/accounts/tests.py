@@ -155,14 +155,15 @@ class MySettingsTests(TestCase):
             self.assertEqual(r.status_code, 400, body)
             self.assertTrue(r.data["detail"])
 
-    def test_themes_are_default_and_royal(self):
+    def test_themes_include_default_royal_and_dark(self):
         from accounts.models import UserPreference
         r = self.c.patch("/api/accounts/me/preferences/", {"theme": "royal"}, format="json")
         self.assertEqual((r.status_code, r.data["preferences"]["theme"]), (200, "royal"))
-        self.assertEqual(dict(r.data["choices"]["theme"]), {"light": "Default", "royal": "Royal"})
-        self.assertEqual(self.c.patch("/api/accounts/me/preferences/", {"theme": "dark"}, format="json").status_code, 400)
-        UserPreference.objects.filter(user=self.fac).update(theme="dark")          # saved before Dark was replaced
-        self.assertEqual(self.c.get("/api/accounts/me/preferences/").data["preferences"]["theme"], "light")
+        self.assertEqual(dict(r.data["choices"]["theme"]), {"light": "Default", "royal": "Royal", "dark": "Dark"})
+        dark = self.c.patch("/api/accounts/me/preferences/", {"theme": "dark"}, format="json")
+        self.assertEqual((dark.status_code, dark.data["preferences"]["theme"]), (200, "dark"))
+        UserPreference.objects.filter(user=self.fac).update(theme="dark")
+        self.assertEqual(self.c.get("/api/accounts/me/preferences/").data["preferences"]["theme"], "dark")
 
     def test_role_school_id_and_department_cannot_be_changed(self):
         for body in ({"role": "registrar"}, {"school_id": "X1"}, {"department": "Nursing"}, {"username": "x"}):

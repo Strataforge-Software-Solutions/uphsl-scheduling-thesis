@@ -1,0 +1,51 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "backend": {
+      "root": "backend",
+      "framework": "django"
+    },
+    "frontend": {
+      "root": "frontend",
+      "framework": "create-react-app"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": {
+        "service": "backend"
+      }
+    },
+    {
+      "source": "/admin/(.*)",
+      "destination": {
+        "service": "backend"
+      }
+    },
+    {
+      "source": "/static/admin/(.*)",
+      "destination": {
+        "service": "backend"
+      }
+    },
+    {
+      "source": "/static/rest_framework/(.*)",
+      "destination": {
+        "service": "backend"
+      }
+    },
+    {
+      "source": "/static/(.*)",
+      "destination": {
+        "service": "frontend"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "frontend"
+      }
+    }
+  ]
+}

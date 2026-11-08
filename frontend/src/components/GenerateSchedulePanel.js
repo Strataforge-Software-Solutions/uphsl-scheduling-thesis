@@ -235,8 +235,7 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
           + "down (e.g. laptop went to sleep, or the Supabase project paused). Check that "
           + "'python manage.py runserver' is still running and Supabase isn't paused, then try again.";
       } else if (!err.response) {
-        message = "Could not reach the backend at all -- confirm 'python manage.py runserver' "
-          + "is running and reachable at http://127.0.0.1:8000.";
+        message = "Could not reach the backend. Check the network connection and confirm the backend service is available.";
       }
       setResult({ error: message });
       setPopup({ title: "Schedule generation failed", tone: "bad", items: [{ text: message }] });
