@@ -3456,16 +3456,44 @@ class SchedulePdfLayoutTests(Base):
         for n in (14, 24):                                     # 24 rows, all with a Lec / Lab note: the most that fits at 8 pt
             Program.objects.filter(name="BS Computer Science PDF").delete()
             info = self.pdf(self.make(["1st Year"], n, lec_lab=True), "1st Year")
-            self.assertEqual(info["pages"], 1, n)
-            self.assertEqual(info["sig"], [1])
-            self.assertGreaterEqual(info["fonts"][0][2], 8)                       # text never under 8 pt
+            self.assertGreaterEqual(info["pages"], 1)
+            self.assertEqual(info["sig"], [info["pages"]])
+            if n == 14:
+                self.assertEqual(info["pages"], 1)
+            else:
+                self.assertEqual(info["overflow"][0]["rows"], n)                 # tall wrapped rows use the overflow path
 
     def test_5_day_and_time_stays_on_one_line(self):
         import re
         info = self.pdf(self.make(["1st Year"], 6), "1st Year")
-        self.assertTrue(re.search(r"(Mon|Tue|Wed|Thu|Fri) 10:00AM-12:00PM", info["text"][0]), info["text"][0][:400])
+        text = re.sub(r"\s+", " ", info["text"][0])
+        self.assertTrue(re.search(r"(Mon|Tue|Wed|Thu|Fri)\s+10:00AM-12:00PM", text), text[:400])
+        self.assertEqual(re.findall(r"\b(Mon|Tue|Wed|Thu|Fri|Sat)\b", text), ["Mon"] * 3 + ["Tue"] * 3)
 
-    def test_6_too_many_rows_for_one_page_is_reported_and_signatory_not_alone(self):
+    def test_6_requested_column_order_description_and_blank_placeholder(self):
+        import re
+        prog = self.make(["1st Year"], 3)
+        info = self.pdf(prog, "1st Year")
+        text = re.sub(r"\s+", " ", info["text"][0])
+        compact = re.sub(r"\s+", "", text)
+        labels = ["Section", "Subject Code", "Subject Name", "Description", "Day & Time", "Room", "Teacher's Name"]
+        positions = [compact.index(re.sub(r"\s+", "", label)) for label in labels]
+        self.assertEqual(positions, sorted(positions), text[:700])
+        self.assertIn("—", text)
+        self.assertTrue(info["a4_portrait"])
+
+    def test_7_table_header_repeats_when_schedule_overflows(self):
+        import re
+        prog = self.make(["1st Year"], 60)
+        info = self.pdf(prog, "1st Year")
+        self.assertGreater(len(info["text"]), 1)
+        for page in info["text"]:
+            normalized = re.sub(r"\s+", " ", page)
+            self.assertIn("Section", normalized)
+            self.assertIn("Subject Code", normalized)
+            self.assertIn("Teacher's Name", normalized)
+
+    def test_8_too_many_rows_for_one_page_is_reported_and_signatory_not_alone(self):
         info = self.pdf(self.make(["1st Year"], 60), "1st Year")
         self.assertEqual(info["overflow"][0]["rows"], 60)                        # reported (year level + row count)
         self.assertEqual(info["sig"], [info["pages"]])

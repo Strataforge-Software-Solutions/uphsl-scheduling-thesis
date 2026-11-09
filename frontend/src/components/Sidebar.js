@@ -30,7 +30,7 @@ function Chevron({ collapsed }) {
  *
  * items: [{ key, label, icon }] and optional section headings { group: "Plan" }
  */
-function Sidebar({ brandLabel, workspaceLabel, items, activeKey, onSelect, userName, userRole, onSignOut }) {
+function Sidebar({ brandLabel, workspaceLabel, items, activeKey, onSelect, onPrefetch, userName, userRole, onSignOut }) {
   const [collapsedGroups, setCollapsedGroups] = React.useState({});
 
   const sections = [];
@@ -47,13 +47,16 @@ function Sidebar({ brandLabel, workspaceLabel, items, activeKey, onSelect, userN
   });
 
   const toggleGroup = (group) => setCollapsedGroups((old) => ({ ...old, [group]: !old[group] }));
+  const prefetch = (item) => { if (item.key === "curriculum") onPrefetch?.(item.key); };
   const navItem = (item) => (
     <li key={item.key}>
       <button
         type="button"
         className={activeKey === item.key ? "app-nav-item active" : "app-nav-item"}
         aria-current={activeKey === item.key ? "page" : undefined}
-        onClick={() => onSelect(item.key)}
+        onMouseEnter={() => prefetch(item)}
+        onFocus={() => prefetch(item)}
+        onClick={() => { prefetch(item); onSelect(item.key); }}
       >
         {item.label}
       </button>

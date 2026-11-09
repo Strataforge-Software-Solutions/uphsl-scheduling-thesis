@@ -5,11 +5,19 @@ timestamp, badge-style status column, footer link). Uses reportlab -- pure
 Python, no system-level dependencies, safe to install on Windows.
 """
 import io
+import os
+import reportlab
 from datetime import datetime
+from xml.sax.saxutils import escape
 from reportlab.lib import colors
 from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, KeepTogether
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+
+if "Vera" not in pdfmetrics.getRegisteredFontNames():
+    pdfmetrics.registerFont(TTFont("Vera", os.path.join(os.path.dirname(reportlab.__file__), "fonts", "Vera.ttf")))
 
 NAVY = colors.HexColor("#003366")
 LIGHT_BLUE = colors.HexColor("#f7fafc")
@@ -157,7 +165,6 @@ def _signature_blocks(departments, styles, width, scale=1.0):
 import logging
 
 from reportlab.lib.pagesizes import A4
-from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.platypus import PageBreak
 
 log = logging.getLogger(__name__)
@@ -171,7 +178,7 @@ AVAIL_H = PAGE[1] - 2 * MARGIN - 2 * FRAME_PAD
 # (body font pt, vertical row padding pt): the padding shrinks first, the text never goes under 8 pt
 FIT_STEPS = ((9, 7), (9, 5), (9, 3.5), (8.5, 3), (8.5, 2.2), (8, 2), (8, 1.5))
 TAIL_ROWS = 3                                   # rows kept with the signatory if a page cannot be fitted
-OTHER_COLS = (0.46, 0.13, 0.13, 0.28)           # Subject, Room, Section, Teacher share what Day & Time leaves
+PDF_COLUMN_FRACTIONS = (0.12, 0.13, 0.14, 0.12, 0.23, 0.08, 0.18)
 
 
 def _group_tables(schedules):
@@ -192,17 +199,17 @@ def _day_time(g):
     return f"{g['day']} {_fmt_time(g['start'])}-{_fmt_time(g['end'])}"
 
 
-def _col_widths(all_groups, font):
-    """Day & Time wide enough for its longest text on ONE line ("Wed 10:00AM-12:00PM"); the rest is shared by the other columns."""
-    longest = max([stringWidth(_day_time(g), "Helvetica", font) for g in all_groups] + [stringWidth("Day & Time", "Helvetica-Bold", font + 0.5)])
-    dt = min(longest + 2 * 6 + 4, AVAIL_W * 0.32)
-    rest = AVAIL_W - dt
-    return [dt] + [f * rest for f in OTHER_COLS]
+def _col_widths():
+    """Portrait A4 widths in the requested order; Paragraph cells wrap long content."""
+    return [AVAIL_W * fraction for fraction in PDF_COLUMN_FRACTIONS]
 
 
 def _rows(grouped, font, header_style, cell_style, note_style):
-    header = [Paragraph(h, header_style) for h in ("Day &amp; Time", "Subject", "Room", "Section", "Teacher")]
+    header = [Paragraph(h, header_style) for h in (
+        "Section", "Subject Code", "Subject Name", "Description", "Day &amp; Time", "Room", "Teacher's Name",
+    )]
     first = {}
+    placeholder_style = ParagraphStyle("CellPlaceholder", parent=cell_style, fontName="Vera")
     for g in grouped:                     # already in week order, so the first one seen is the earliest meeting
         first.setdefault((g["section_id"], g["code"]), g)
     body = []
@@ -210,11 +217,19 @@ def _rows(grouped, font, header_style, cell_style, note_style):
         code = g["code"] or ""
         is_lab = len(code) > 1 and code.endswith("L")
         p = first.get((g["section_id"], code[:-1] if is_lab else code + "L"))
-        subject = [Paragraph(g["subject"], cell_style)]
+        day_text = escape(_day_time(g)).replace(" ", "&nbsp;")
+        day_time = [Paragraph(day_text, cell_style)]
         if p is not None:                 # the small Lec / Lab note: its own tight line, no extra spacing
-            subject.append(Paragraph(f'{"Lab, after Lec " if is_lab else "Lec, then Lab "}{_day_time(p)}', note_style))
-        body.append([Paragraph(_day_time(g).replace(" ", "&nbsp;"), cell_style), subject,
-                     Paragraph(g["room"], cell_style), Paragraph(g["section"], cell_style), Paragraph(g["teacher"], cell_style)])
+            day_time.append(Paragraph(escape(f'{"Lab, after Lec " if is_lab else "Lec, then Lab "}{_day_time(p)}'), note_style))
+        body.append([
+            Paragraph(escape(g["section"]), cell_style),
+            Paragraph(escape(g["code"] or ""), cell_style),
+            Paragraph(escape(g["subject"]), cell_style),
+            Paragraph("—", placeholder_style),
+            day_time,
+            Paragraph(escape(g["room"]), cell_style),
+            Paragraph(escape(g["teacher"]), cell_style),
+        ])
     return header, body
 
 
@@ -278,17 +293,18 @@ def build_schedule_pdf(schedules, title, subtitle="", workspace_label="REGISTRAR
     def page(t, last, font, pad_v):
         prog, yl, sem, ay, _rows_ = t
         cell = ParagraphStyle("Cell", parent=styles["Normal"], fontSize=font, leading=font * 1.2, textColor=colors.HexColor("#1f2937"))
-        head = ParagraphStyle("CellHeader", parent=styles["Normal"], fontSize=font + 0.5, leading=(font + 0.5) * 1.2,
+        header_font = min(font + 0.5, 7.5)
+        head = ParagraphStyle("CellHeader", parent=styles["Normal"], fontSize=header_font, leading=header_font * 1.2,
                               textColor=colors.white, fontName="Helvetica-Bold")
         note = ParagraphStyle("CellNote", parent=cell, fontSize=font - 1, leading=(font - 1) * 1.1, textColor=colors.HexColor("#475569"))
-        widths = _col_widths([g for gs in merged.values() for g in gs], font)
+        widths = _col_widths()
         header, body = _rows(merged[(prog, yl)], font, head, cell, note)
         if single:
             top = school_header(scope_html(scope_parts([year_level] if year_level else [yl], [semester] if semester else [sem], [ay])))
         else:            # "BS Computer Science - 1st Year - 1st Semester, A.Y. 2026-2027"
             top = school_header("") + [Paragraph(" - ".join(x for x in (prog, yl or "Year level not set", sem) if x) + f", A.Y. {ay}",
                                                  heading_style)]
-        pad_h = 6 if font < 9 else 8
+        pad_h = 4 if font < 9 else 5
         return top, header, body, widths, pad_h
 
     story = []
@@ -317,7 +333,15 @@ def build_schedule_pdf(schedules, title, subtitle="", workspace_label="REGISTRAR
         if not last:
             story += top + [_table([header] + body, widths, pad_v, pad_h)]
             continue
-        k = min(TAIL_ROWS, n)
+        # Pick as many final rows as can sit with the signatory on one page.
+        # Wrapped rows can be much taller than the old schedule rows.
+        k = 1
+        for candidate in range(1, min(TAIL_ROWS, n) + 1):
+            tail = [_table([header] + body[n - candidate:], widths, pad_v, pad_h)] + closing()
+            if _height(tail) <= AVAIL_H:
+                k = candidate
+            else:
+                break
         story += top
         if n > k:
             story.append(_table([header] + body[:n - k], widths, pad_v, pad_h))

@@ -1,4 +1,7 @@
-from rest_framework import viewsets
+from django.db import transaction
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
 from .models import Program, Subject, AcademicField
 from .serializers import ProgramSerializer, SubjectSerializer, AcademicFieldSerializer
 from .permissions import CanEditCurriculum
@@ -35,3 +38,23 @@ class SubjectViewSet(viewsets.ModelViewSet):
         context = super().get_serializer_context()
         context["request"] = self.request
         return context
+
+    @action(detail=False, methods=["post"], url_path="bulk-delete")
+    def bulk_delete(self, request):
+        ids = request.data.get("ids")
+        if not isinstance(ids, list) or not ids:
+            return Response({"detail": "Provide a non-empty list of subject IDs."}, status=status.HTTP_400_BAD_REQUEST)
+        if len(ids) > 500 or any(not isinstance(value, int) or isinstance(value, bool) or value < 1 for value in ids):
+            return Response({"detail": "Subject IDs must be positive integers (up to 500 per request)."},
+                            status=status.HTTP_400_BAD_REQUEST)
+        ids = set(ids)
+
+        with transaction.atomic():
+            subjects = self.get_queryset().filter(pk__in=ids)
+            if subjects.count() != len(ids):
+                return Response({"detail": "One or more subjects were not found or cannot be removed."},
+                                status=status.HTTP_404_NOT_FOUND)
+            deleted_count = len(ids)
+            subjects.delete()
+
+        return Response({"deleted": deleted_count}, status=status.HTTP_200_OK)

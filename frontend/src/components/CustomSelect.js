@@ -164,8 +164,9 @@ export default function CustomSelect({
       {open && (!portalMenu || menuPosition) && (() => {
         const menu = (
         <div ref={menuRef} id={menuId} className="custom-select-menu" role="listbox" aria-label={ariaLabel}
-          style={portalMenu ? { position: "fixed", left: menuPosition.left, width: menuPosition.width, top: menuPosition.top,
-            bottom: menuPosition.bottom, maxHeight: menuPosition.maxHeight, zIndex: 5000 } : undefined}>
+          style={portalMenu ? { position: "fixed", left: menuPosition.left, width: menuPosition.width,
+            top: menuPosition.top ?? "auto", bottom: menuPosition.bottom ?? "auto",
+            maxHeight: menuPosition.maxHeight, zIndex: 5000 } : undefined}>
           {options.map((option, index) => (
             <button
               key={`${option.value}-${index}`}

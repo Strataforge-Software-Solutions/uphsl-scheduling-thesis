@@ -5,6 +5,7 @@ import React, { useState, useEffect } from "react";
 import { onJump } from "../services/jump";
 import { useLandingTab } from "../services/preferences";
 import { reportLoadError } from "../services/loadError";
+import { getCachedCurriculumData, loadCurriculumData, prefetchCurriculumData, updateCurriculumCache } from "../services/curriculumCache";
 import API, { getCurrentUser, logout, displayName } from "../services/api";
 import { formatSchedule } from "../utils/formatSchedule";
 import { LecLabTag, buildLecLabIndex } from "../utils/lecLab";
@@ -123,6 +124,7 @@ function FacultyDashboard({ name, department, departments = [department], facult
         items={navItems}
         activeKey={activeTab}
         onSelect={setActiveTab}
+        onPrefetch={facultyType === "dean" ? prefetchCurriculumData : undefined}
         userName={facultyType === "dean" ? displayName(user) : name}
         userRole={facultyType === "dean" ? "College dean" : facultyType === "part_time" ? "Part-time faculty" : "Full-time faculty"}
         onSignOut={handleLogout}
@@ -1119,25 +1121,114 @@ function DeanClassListsTab({ department, departments = [department] }) {
 }
 
 function CurriculumManager({ programId }) {
-  const [subjects, setSubjects] = useState([]);
+  const confirmDialog = useConfirmDialog();
+  const initialData = getCachedCurriculumData();
+  const [subjects, setSubjects] = useState(() => initialData?.subjects || []);
+  const [loading, setLoading] = useState(!initialData);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   React.useEffect(() => {
-    API.get("/curriculum/subjects/").then((res) => setSubjects(res.data)).catch(reportLoadError("the curriculum subjects"));
+    loadCurriculumData()
+      .then((data) => setSubjects(data.subjects))
+      .catch(reportLoadError("the curriculum subjects"))
+      .finally(() => setLoading(false));
   }, []);
 
+  const remove = async (subject) => {
+    if (!(await confirmDialog({ title: "Remove subject?", message: "Removing this subject also deletes any schedule and exam records linked to it. This cannot be undone.", confirmLabel: "Remove subject" }))) return;
+    const index = subjects.findIndex((row) => row.id === subject.id);
+    setSubjects((current) => current.filter((row) => row.id !== subject.id));
+    setSelectedIds((current) => current.filter((id) => id !== subject.id));
+    updateCurriculumCache((data) => ({ ...data, subjects: data.subjects.filter((row) => row.id !== subject.id) }));
+    try {
+      await API.delete(`/curriculum/subjects/${subject.id}/`);
+    } catch (err) {
+      setSubjects((current) => {
+        if (current.some((row) => row.id === subject.id)) return current;
+        const restored = [...current];
+        restored.splice(Math.min(index, restored.length), 0, subject);
+        return restored;
+      });
+      updateCurriculumCache((data) => ({ ...data, subjects: [...data.subjects, subject] }));
+      reportLoadError("removing the subject")(err);
+    }
+  };
+
   const filtered = programId ? subjects.filter((s) => String(s.program) === String(programId)) : subjects;
+  const visibleIds = filtered.map((subject) => subject.id);
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+
+  React.useEffect(() => { setSelectedIds([]); }, [programId]);
+
+  const removeSelected = async () => {
+    const ids = visibleIds.filter((id) => selectedIds.includes(id));
+    if (!ids.length || bulkDeleting) return;
+    if (!(await confirmDialog({
+      title: `Remove ${ids.length} selected subject${ids.length === 1 ? "" : "s"}?`,
+      message: "Removing these subjects also deletes any schedule and exam records linked to them. This cannot be undone.",
+      confirmLabel: `Remove ${ids.length} subject${ids.length === 1 ? "" : "s"}`,
+    }))) return;
+
+    const idSet = new Set(ids);
+    const originalSubjects = subjects;
+    const removed = subjects.filter((subject) => idSet.has(subject.id));
+    setBulkDeleting(true);
+    setSubjects((current) => current.filter((subject) => !idSet.has(subject.id)));
+    setSelectedIds([]);
+    updateCurriculumCache((data) => ({ ...data, subjects: data.subjects.filter((subject) => !idSet.has(subject.id)) }));
+    try {
+      await API.post("/curriculum/subjects/bulk-delete/", { ids });
+    } catch (err) {
+      setSubjects((current) => {
+        const byId = new Map(current.map((subject) => [subject.id, subject]));
+        removed.forEach((subject) => byId.set(subject.id, subject));
+        const restored = originalSubjects.map((subject) => byId.get(subject.id)).filter(Boolean);
+        const originalIds = new Set(originalSubjects.map((subject) => subject.id));
+        return [...restored, ...current.filter((subject) => !originalIds.has(subject.id))];
+      });
+      setSelectedIds(ids);
+      updateCurriculumCache((data) => {
+        const byId = new Map(data.subjects.map((subject) => [subject.id, subject]));
+        removed.forEach((subject) => byId.set(subject.id, subject));
+        return { ...data, subjects: [...byId.values()] };
+      });
+      reportLoadError("removing the selected subjects")(err);
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
+  if (loading) return <p>Loading curriculum…</p>;
 
   return (
     <table>
       <thead>
-        <tr><th>Code</th><th>Title</th><th>Lec</th><th>Lab</th><th>Type</th><th>Actions</th></tr>
+        <tr>
+          <th><label style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <input type="checkbox" aria-label="Select all visible subjects" checked={allVisibleSelected} disabled={bulkDeleting}
+              onChange={(event) => setSelectedIds(event.target.checked ? visibleIds : [])} />Select all
+          </label></th>
+          <th>Code</th><th>Title</th><th>Lec</th><th>Lab</th><th>Type</th><th>Actions</th>
+        </tr>
       </thead>
       <tbody>
+        {selectedIds.length > 0 && <tr>
+          <td colSpan={7}>
+            <span>{selectedIds.length} selected</span>{" "}
+            <button className="curriculum-remove-button" disabled={bulkDeleting} onClick={removeSelected}>
+              {bulkDeleting ? "Removing…" : `Remove selected (${selectedIds.length})`}
+            </button>
+          </td>
+        </tr>}
         {filtered.map((s) => (
           <tr key={s.id}>
+            <td><input type="checkbox" aria-label={`Select ${s.code}`} checked={selectedIds.includes(s.id)} disabled={bulkDeleting}
+              onChange={(event) => setSelectedIds((current) => event.target.checked
+                ? [...current, s.id] : current.filter((id) => id !== s.id))} /></td>
             <td>{s.code}</td><td>{s.title}</td><td>{s.lec_units}</td><td>{s.lab_units}</td>
             <td>{kindLabel(s.classification, s.program_name)}</td>
-            <td><button onClick={() => API.delete(`/curriculum/subjects/${s.id}/`)}>Remove</button></td>
+            <td><button disabled={bulkDeleting} onClick={() => remove(s)}>Remove</button></td>
           </tr>
         ))}
       </tbody>
