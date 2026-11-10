@@ -423,6 +423,15 @@ function SettingsTab({ level, overview, reload }) {
   };
   const n = (k, label) => <label className="shs-config-field" key={k}><span>{label}</span><input type="number" value={cfg[k] ?? ""} onChange={(e) => setCfg({ ...cfg, [k]: e.target.value })} /></label>;
   const updateWindow = (index, patch) => setWins(wins.map((w, i) => i === index ? { ...w, ...patch } : w));
+  const updateBreakStart = (index, startKey, endKey, minutes, value) => {
+    let end = null;
+    if (value) {
+      const [hours, mins] = value.split(":").map(Number);
+      const total = hours * 60 + mins + minutes;
+      if (total < 24 * 60) end = `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+    }
+    updateWindow(index, { [startKey]: value || null, [endKey]: end });
+  };
   return (
     <div className="shs-settings-page">
       <section className="shs-settings-card shs-settings-config" style={cardStyle}>
@@ -430,31 +439,6 @@ function SettingsTab({ level, overview, reload }) {
           <span className="shs-settings-step" aria-hidden="true">01</span>
           <div><h2>{LEVEL_NAME[level]} configuration</h2><p>Set the building, class period, breaks and teacher workload limits.</p></div>
         </div>
-      </div>
-      <div style={cardStyle}>
-        <b>Daily time windows and curriculum framework per grade level</b>
-        {wins.map((w, i) => (
-          <div key={w.id} style={{ display: "grid", gridTemplateColumns: "90px 130px 130px 1fr auto", gap: "10px", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #f3f4f6" }}>
-            <b>Grade {w.grade_level}</b>
-            <CustomTimePicker style={inputStyle} value={hhmm(w.start_time)} onChange={(e) => setWins(wins.map((x, j) => j === i ? { ...x, start_time: e.target.value } : x))} aria-label={`Grade ${w.grade_level} starts at`} />
-            <CustomTimePicker style={inputStyle} value={hhmm(w.end_time)} onChange={(e) => setWins(wins.map((x, j) => j === i ? { ...x, end_time: e.target.value } : x))} aria-label={`Grade ${w.grade_level} ends at`} />
-            <input style={inputStyle} placeholder="Curriculum framework" value={w.curriculum_framework} onChange={(e) => setWins(wins.map((x, j) => j === i ? { ...x, curriculum_framework: e.target.value } : x))} />
-            <label style={{ fontSize: "13px" }}><input type="checkbox" checked={w.framework_verified} onChange={(e) => setWins(wins.map((x, j) => j === i ? { ...x, framework_verified: e.target.checked } : x))} /> verified</label>
-            <div style={{ gridColumn: "1 / -1", display: "flex", gap: "14px", flexWrap: "wrap", alignItems: "center", fontSize: "13px", color: "#374151" }}>
-              {(level === "SHS" ? [["Break (15 min)", "break_start", "break_end", 15]] : [["Recess (20 min)", "recess_start", "recess_end", 20], ["Lunch", "lunch_start", "lunch_end", null]]).map(([label, a, b, duration]) => (
-                <span key={label}><b>{label}</b>{" "}
-                  <CustomTimePicker style={inputStyle} value={hhmm(w[a] || "")} onChange={(e) => {
-                    const value = e.target.value || null;
-                    const endValue = value && duration ? (() => { const [h, m] = value.split(":").map(Number); const n = h * 60 + m + duration; return `${String(Math.floor(n / 60)).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`; })() : value ? w[b] : null;
-                    setWins(wins.map((x, j) => j === i ? { ...x, [a]: value, [b]: endValue } : x));
-                  }} aria-label={`${label} start`} />{" – "}
-                  {duration ? <span aria-label={`${label} end`}>{hhmm(w[b] || "") || "--:--"}</span> : <CustomTimePicker style={inputStyle} value={hhmm(w[b] || "")} onChange={(e) => setWins(wins.map((x, j) => j === i ? { ...x, [b]: e.target.value || null } : x))} aria-label={`${label} end`} />}</span>))}
-            </div>
-          </div>))}
-        <p style={{ color: "#6b7280", fontSize: "13px" }}>{level === "SHS" ? "SHS has one 15-minute break (no separate recess or lunch)." : "JHS recess lasts 20 minutes; the configured lunch interval is unchanged."} Breaks are never used for classes and show in the timetable and the printout. Classes are never placed outside a grade level's window. Current: {wins.map((w) => `Grade ${w.grade_level} ${ampm(hhmm(w.start_time))}–${ampm(hhmm(w.end_time))}`).join(" · ")}</p>
-      </div>
-      {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
-      <button style={btnPrimary} disabled={busy} onClick={save}>{busy ? "Saving…" : "Save settings"}</button>
         {cfg.notes && <p className="shs-config-note">{cfg.notes}</p>}
         <div className="shs-config-grid">
           <label className="shs-config-field"><span>Building</span><input value={cfg.building || ""} onChange={(e) => setCfg({ ...cfg, building: e.target.value })} /></label>
@@ -482,17 +466,19 @@ function SettingsTab({ level, overview, reload }) {
                 <label className="shs-window-field shs-framework-field"><span>Curriculum framework</span><input value={w.curriculum_framework || ""} onChange={(e) => updateWindow(i, { curriculum_framework: e.target.value })} placeholder="Enter framework name" /></label>
               </div>
               <div className="shs-window-breaks">
-                {(level === "SHS" ? [["Break (30 min)", "break_start", "break_end"]] : [["Recess", "recess_start", "recess_end"], ["Lunch", "lunch_start", "lunch_end"]]).map(([label, a, b]) => (
+                {(level === "SHS" ? [["Break (15 min)", "break_start", "break_end", 15]] : [["Recess (20 min)", "recess_start", "recess_end", 20], ["Lunch", "lunch_start", "lunch_end", null]]).map(([label, a, b, duration]) => (
                   <div className="shs-window-break-range" key={label}>
                     <strong>{label}</strong>
-                    <div className="shs-window-break-time"><span>Start</span><CustomTimePicker className="shs-window-time-picker" style={{ width: "100%" }} value={hhmm(w[a] || "")} onChange={(e) => updateWindow(i, { [a]: e.target.value || null })} aria-label={`${label} start`} /></div>
+                    <div className="shs-window-break-time"><span>Start</span><CustomTimePicker className="shs-window-time-picker" style={{ width: "100%" }} value={hhmm(w[a] || "")} onChange={(e) => duration ? updateBreakStart(i, a, b, duration, e.target.value) : updateWindow(i, { [a]: e.target.value || null })} aria-label={`${label} start`} /></div>
                     <span className="shs-window-range-separator" aria-hidden="true">to</span>
-                    <div className="shs-window-break-time"><span>End</span><CustomTimePicker className="shs-window-time-picker" style={{ width: "100%" }} value={hhmm(w[b] || "")} onChange={(e) => updateWindow(i, { [b]: e.target.value || null })} aria-label={`${label} end`} /></div>
+                    <div className="shs-window-break-time"><span>{duration ? `Derived end (${duration} min)` : "End"}</span>{duration
+                      ? <output aria-label={`${label} end`}>{hhmm(w[b] || "") || "--:--"}</output>
+                      : <CustomTimePicker className="shs-window-time-picker" style={{ width: "100%" }} value={hhmm(w[b] || "")} onChange={(e) => updateWindow(i, { [b]: e.target.value || null })} aria-label={`${label} end`} />}</div>
                   </div>))}
               </div>
             </article>))}
         </div>
-        <p className="shs-window-note">{level === "SHS" ? "SHS has one 30-minute break (no separate recess or lunch)." : "Recess and lunch are both kept for JHS."} Breaks are never used for classes and appear in timetables and printouts. Classes are never placed outside a grade’s window. <strong>Current:</strong> {wins.map((w) => `Grade ${w.grade_level} ${ampm(hhmm(w.start_time))}–${ampm(hhmm(w.end_time))}`).join(" · ")}</p>
+        <p className="shs-window-note">{level === "SHS" ? "SHS has one 15-minute break (no separate recess or lunch)." : "JHS recess lasts 20 minutes; the configured lunch interval is unchanged."} Break start times are adjustable; fixed break ends are derived. Breaks are reserved from class times and appear in timetables and printouts. Classes stay within each grade’s window. <strong>Current:</strong> {wins.map((w) => `Grade ${w.grade_level} ${ampm(hhmm(w.start_time))}–${ampm(hhmm(w.end_time))}`).join(" · ")}</p>
       </section>
       <div className="shs-settings-save-row">{msg && <Notice tone={msg.tone}>{msg.text}</Notice>}<button className="shs-save-settings" disabled={busy} onClick={save}>{busy ? "Saving settings…" : "Save settings"}</button></div>
     </div>
