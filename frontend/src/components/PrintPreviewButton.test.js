@@ -26,7 +26,7 @@ test("one year level or all year levels is sent with the other filters", async (
     root.render(<PrintPreviewButton params={{ program_id: 5, semester: "1st Sem" }} yearChoices={printYears([])} defaultYear="" />);
   });
   const open = () => act(async () => { el.querySelector("button").click(); });
-  const confirm = () => act(async () => { [...el.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent === "Print / Preview").click(); });
+  const confirm = () => act(async () => { [...el.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent === "Print Report").click(); });
   await open();
   const labels = [...el.querySelectorAll('[role="dialog"] label')].map((l) => l.textContent);
   expect(labels[4]).toContain("All year levels (1st - 4th)");

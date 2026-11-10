@@ -1,11 +1,13 @@
 """
-Creates the class time slots the scheduler can use: hourly (plus 30-minute ones for Nursing's 1.5 h x 2 day lectures), Monday-Saturday,
+Creates the class time slots the scheduler can use: hourly (plus 30-minute ones for Nursing's 1.5 h x 2 day lectures), Monday-Sunday,
 7:00 AM - 8:00 PM, INCLUDING 12:00-1:00 PM: lunch is not a fixed period in the college (students and professors eat in their free
 time between classes), so classes may start, end or run through noon. Re-running it on a database that was seeded with the old
 lunch hour adds the missing 12:00-1:00 PM slots (hourly and 30-minute) and changes nothing else.
 
+Sunday slots are also created from 7:00 AM to 8:00 PM. Schedule generation and manual rescheduling expose those slots only to ROTC subjects.
+
     python manage.py seed_timeslots
-    python manage.py seed_timeslots --start 7 --end 21 --days Mon,Tue,Wed,Thu,Fri,Sat
+    python manage.py seed_timeslots --start 7 --end 21 --days Mon,Tue,Wed,Thu,Fri,Sat,Sun
     python manage.py seed_timeslots --lunch 12     # the old behaviour: leave 12:00-1:00 PM out
 
 Why this matters: each class is now one continuous block (a 3-unit lecture is
@@ -21,14 +23,14 @@ from engine.models import TimeSlot
 
 
 class Command(BaseCommand):
-    help = "Create hourly (and 30-minute) Mon-Sat time slots, 7AM-8PM, noon included. Safe to re-run."
+    help = "Create hourly (and 30-minute) Mon-Sun time slots, 7AM-8PM, noon included. Sunday is reserved for ROTC scheduling. Safe to re-run."
 
     def add_arguments(self, parser):
         parser.add_argument("--start", type=int, default=7)
         parser.add_argument("--end", type=int, default=20)
         parser.add_argument("--lunch", type=int, default=-1, help="An hour to leave out (default: none; 12 = the old lunch hour).")
         parser.add_argument("--no-half", action="store_true", help="Skip the 30-minute slots (needed only for Nursing's 1.5-hour two-day classes).")
-        parser.add_argument("--days", default="Mon,Tue,Wed,Thu,Fri,Sat")
+        parser.add_argument("--days", default="Mon,Tue,Wed,Thu,Fri,Sat,Sun")
 
     def handle(self, *args, **o):
         made = 0

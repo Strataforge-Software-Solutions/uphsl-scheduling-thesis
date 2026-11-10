@@ -110,6 +110,7 @@ def _load(ids, section_id, subject_id):
 
 
 def suggest(user, *, ids=None, section_id=None, subject_id=None, room_id=None, school_year="", limit=MAX_OPTIONS, _full=False, window=None, _rooms=None, _inner=False,
+            split_session=False,
             _any_status=False, teacher_id=None, override_qualification=False, override_reason=""):
     """_any_status: READ-ONLY listing for a class that is approved / published (a Dean's Gen Ed move request); apply() never uses it.
     teacher_id: place a NOT-YET-PLACED class with the teacher the Dean picked from the three Professor groups ("not placed" pop-up).
@@ -128,9 +129,15 @@ def suggest(user, *, ids=None, section_id=None, subject_id=None, room_id=None, s
                               "Move it back to draft first.", 403)
     term = section.semester
     expected = list(S.blocks_for_subject(subject))
+    total_existing = sum(_mins(r.timeslot.end_time) - _mins(r.timeslot.start_time) for r in rows)
+    split_allowed = S.supports_manual_split_sessions(subject) and (
+        (mode == "move" and total_existing == 180) or (mode == "place" and not rows)
+    )
+    if split_session and not split_allowed:
+        raise RescheduleError("Two 1.5-hour sessions are available only for an unplaced or fully scheduled eligible Gen Ed subject.", 400)
     # ---- which block is being moved / placed
     if mode == "move":
-        total = sum(_mins(r.timeslot.end_time) - _mins(r.timeslot.start_time) for r in rows)
+        total = total_existing
         hours = next((h for h in expected if _minutes_of(h) == total), None)
         if hours is None:
             hours = next((h for h in expected if isinstance(h, S.PairHours) and _minutes_of(h) == total), None)
@@ -151,6 +158,8 @@ def suggest(user, *, ids=None, section_id=None, subject_id=None, room_id=None, s
         hours = sorted(left, key=lambda h: -float(h))[0]
         skip_ids = set()
         teacher_rows = rows
+    if split_session:
+        hours = 1.5
     # ---- fixed teacher / room for the class
     teacher = teacher_rows[0].teacher if teacher_rows else None
     room = rows[0].room if rows else None
@@ -235,6 +244,9 @@ def suggest(user, *, ids=None, section_id=None, subject_id=None, room_id=None, s
                 {"faculty_id": t.id, "name": t.user.get_full_name().strip() or t.user.username, "department": t.user.department or "",
                  "fit": "; ".join(w) + " (not yet a recorded specialization: the Dean can add it in the Faculty tab)"} for _p, t, w in near[:5]]})
     timeslots = list(TimeSlot.objects.all())
+    if not S.is_rotc_subject(subject):
+        timeslots = [sl for sl in timeslots if sl.day[:3] != "Sun"]
+    half_hour_slots_available = any(_mins(sl.end_time) - _mins(sl.start_time) == 30 for sl in timeslots)
     rules = _build_availability_rules(teachers, timeslots, school_year or (rows[0].school_year if rows else None), term or None)
     # A Dean / the Registrar placing a class BY HAND may use any time where nothing clashes, even outside the teacher's submitted
     # availability: those times are listed after the teacher's preferred / available ones and are clearly marked.
@@ -247,7 +259,8 @@ def suggest(user, *, ids=None, section_id=None, subject_id=None, room_id=None, s
             return 3
         m = _tiers.get(t.id)
         return max(m.get(sl.id, 2) for sl in real) if m else 0
-    blocks = S.with_half_blocks(S.build_block_slots(timeslots, hours), window)
+    blocks = (S.build_independent_session_slots(timeslots, hours) if split_session
+              else S.with_half_blocks(S.build_block_slots(timeslots, hours), window))
     if window:               # the Start / End Time the Dean chose for this subject stays a hard limit
         blocks = [b for b in blocks if window[0] <= _mins(b.start_time) and _mins(b.end_time) <= window[1]]
     # ---- what is already booked (everything except the class being moved)
@@ -398,25 +411,59 @@ def suggest(user, *, ids=None, section_id=None, subject_id=None, room_id=None, s
                    " This subject keeps its room, so no other room was tried.") + " The conflict stays active and nothing was changed."
     return {"mode": mode, "class": _class_info(subject, section, rows), "room": {"id": room.id if room else None, "name": room.name if room else "",
             "kept": bool(rows) or room is not None, "note": room_note}, "hours": float(hours), "options": options, "checked": counts,
+            "split_allowed": split_allowed,
+            "half_hour_slots_available": half_hour_slots_available if split_session else None,
             "outside_options": outside, "room_options": room_options, "room_change_allowed": may_change_room,
             "reason": reason, "can_apply": bool(options or outside or room_options),
             "assign_anyway": strict_teacher is not None}
 
 
-def apply(user, *, key, ids=None, section_id=None, subject_id=None, room_id=None, school_year="", window=None,
+def apply(user, *, key=None, session_keys=None, split_session=False, ids=None, section_id=None, subject_id=None, room_id=None, school_year="", window=None,
           teacher_id=None, override_qualification=False, override_reason=""):
     from . import locks
     from notifications.models import Notification
     res = suggest(user, ids=ids, section_id=section_id, subject_id=subject_id, room_id=room_id, school_year=school_year, _full=True, window=window,
+                  split_session=split_session,
                   teacher_id=teacher_id, override_qualification=override_qualification, override_reason=override_reason)
     _ov_meta = None
     if res.get("assign_anyway"):
         from . import faculty_groups as fg
         _ov_meta = fg.override_meta(user, (override_reason or "").strip())
-    opt = next((o for o in res["options"] + res["outside_options"] + res["room_options"] if o["key"] == key), None)
-    if opt is None:
-        raise RescheduleError("That day and time is no longer available (something changed). The list has been refreshed. Pick another option.", 409,
-                              {"refresh": True})
+    all_options = res["options"] + res["outside_options"] + res["room_options"]
+    selected_options = []
+    if split_session:
+        if not isinstance(session_keys, (list, tuple)) or len(session_keys) != 2 or session_keys[0] == session_keys[1]:
+            raise RescheduleError("Choose two different 1.5-hour sessions before confirming.", 400)
+        selected_options = [next((o for o in all_options if o["key"] == selected_key), None) for selected_key in session_keys]
+        if any(o is None for o in selected_options):
+            raise RescheduleError("One of those sessions is no longer available. The list has been refreshed; choose again.", 409,
+                                  {"refresh": True})
+        if (selected_options[0]["teacher_id"], selected_options[0]["room_id"]) != (selected_options[1]["teacher_id"], selected_options[1]["room_id"]):
+            raise RescheduleError("Both sessions must use the same teacher and room. Choose another time for one session.", 400)
+        selected_slots = [set(o["slot_ids"]) for o in selected_options]
+        slots_intersect = selected_slots[0] & selected_slots[1]
+        if slots_intersect:
+            raise RescheduleError("The two sessions cannot overlap. Choose two separate 1.5-hour periods.", 400)
+        # Validate overlaps even when distinct half-hour TimeSlot rows overlap in wall-clock time.
+        by_day = defaultdict(list)
+        selected_time_slots = {sl.id: sl for sl in TimeSlot.objects.filter(
+            pk__in={sid for option in selected_options for sid in option["slot_ids"]})}
+        for option in selected_options:
+            for sid in option["slot_ids"]:
+                sl = selected_time_slots.get(sid)
+                if sl:
+                    by_day[sl.day[:3]].append((_mins(sl.start_time), _mins(sl.end_time), option["key"]))
+        if any(a[2] != b[2] and max(a[0], b[0]) < min(a[1], b[1])
+               for intervals in by_day.values() for i, a in enumerate(intervals) for b in intervals[i + 1:]):
+            raise RescheduleError("The two sessions cannot overlap. Choose two separate 1.5-hour periods.", 400)
+        if selected_options[0]["room_id"] != selected_options[1]["room_id"]:
+            raise RescheduleError("Both sessions must use the same room.", 400)
+        opt = selected_options[0]
+    else:
+        opt = next((o for o in all_options if o["key"] == key), None)
+        if opt is None:
+            raise RescheduleError("That day and time is no longer available (something changed). The list has been refreshed. Pick another option.", 409,
+                                  {"refresh": True})
     section, subject, rows, mode = _load(ids, section_id, subject_id)
     members = _group(user, rows, mode)
     mk = rows[0].merge_key if members else ""
@@ -427,7 +474,7 @@ def apply(user, *, key, ids=None, section_id=None, subject_id=None, room_id=None
     from rooms.models import Room
     teacher = FacultyProfile.objects.select_related("user").get(pk=opt["teacher_id"])
     room = Room.objects.get(pk=opt["room_id"])
-    slots = list(TimeSlot.objects.filter(pk__in=opt["slot_ids"]))
+    slots = list(TimeSlot.objects.filter(pk__in=sorted({sid for o in (selected_options or [opt]) for sid in o["slot_ids"]})))
     term = section.semester
     year = school_year or (rows[0].school_year if rows else "") or Schedule.objects.filter(term=term).values_list("school_year", flat=True).first() or ""
     old_ids = [r.id for r in rows] if mode == "move" else []
@@ -482,17 +529,18 @@ def apply(user, *, key, ids=None, section_id=None, subject_id=None, room_id=None
             transaction.set_rollback(True)
             raise RescheduleError("The saved change would create a scheduling conflict, so nothing was changed.", 409, {"conflicts": clashes["conflicts"][:5]})
         ConflictLog.objects.filter(section=section, conflict_type="unresolved_csp", description__contains=subject.code, resolved=False).update(resolved=True)
+        new_label = " + ".join(o["label"] for o in selected_options) if split_session else opt["label"]
         Log.objects.create(action="UPDATE", schedule_id=new_ids[0] if new_ids else None, user=user,
-                           details=f"Smart Resolve: {subject.code} ({section.name}) {'moved' if mode == 'move' else 'placed'} at {opt['label']} in {room.name}")
+                           details=f"Smart Resolve: {subject.code} ({section.name}) {'moved' if mode == 'move' else 'placed'} at {new_label} in {room.name}")
         if teacher.user_id != getattr(user, "id", None):
             Notification.objects.create(recipient=teacher.user, notif_type="schedule_update",
-                                        message=f"{subject.code} ({section.program.name} {section.name}) is now {opt['label']} in {room.name}.")
+                                        message=f"{subject.code} ({section.program.name} {section.name}) is now {new_label} in {room.name}.")
     together = (" together with " + ", ".join(f"{s_.program.name} {s_.name}" for s_, _sub, _r in members if s_.id != section.id)
                 + " (shared class)") if members else ""
     return {"ok": True, "mode": mode, "shared": [{k: v for k, v in m.items() if k != "schedule_ids"} for m in shared],
-            "summary": f"{subject.code} — {section.program.name} {section.name}{together} is now {opt['label']} in {room.name} "
+            "summary": f"{subject.code} — {section.program.name} {section.name}{together} is now {new_label} in {room.name} "
             f"({teacher.user.get_full_name().strip() or teacher.user.username}). Room unchanged; no other class was moved.",
-            "changes": (f"{old_when} → {opt['label']}, "
+            "changes": (f"{old_when} → {new_label}, "
                         + (f"room stays {room.name}" if old_room is not None and old_room.id == room.id else
                            f"room {old_room.name} → {room.name}" if old_room is not None else f"room {room.name}")
                         + (f", teacher stays {teacher.user.get_full_name().strip() or teacher.user.username}"

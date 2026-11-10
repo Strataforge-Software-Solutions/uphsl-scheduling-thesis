@@ -933,6 +933,22 @@ class DashboardStatsTests(Base):
 class SmartResolveTests(Base):
     """Resolve lists only real free days/times for the class's OWN room; Apply re-checks and changes nothing else."""
 
+    def _gened_split_class(self, code="GE405", title="Filipino Christian Living 5", existing=True):
+        subject = Subject.objects.create(code=code, title=title, program=self.prog, lec_units=3, lab_units=0,
+                                         year_level="3rd Year", semester="1st Sem", classification="minor")
+        rows = []
+        for day in ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat"):
+            for start in range(7 * 60, 20 * 60, 30):
+                TimeSlot.objects.get_or_create(day=day, start_time=dtime(start // 60, start % 60),
+                                               end_time=dtime((start + 30) // 60, (start + 30) % 60))
+        if existing:
+            for start in range(7 * 60, 10 * 60, 30):
+                slot, _ = TimeSlot.objects.get_or_create(day="Mon", start_time=dtime(start // 60, start % 60),
+                                                         end_time=dtime((start + 30) // 60, (start + 30) % 60))
+                rows.append(Schedule.objects.create(subject=subject, section=self.sec[0], teacher=self.teachers[0], room=self.rooms[0],
+                                                    timeslot=slot, status="draft", term="1st Sem", school_year=SY))
+        return subject, rows
+
     def opts(self, row, user=None, **extra):
         self.client.force_authenticate(user or self.dean)
         return self.client.post("/api/engine/slot-options/", {"ids": [row.id], "limit": 300, **extra}, format="json")
@@ -1026,6 +1042,111 @@ class SmartResolveTests(Base):
                                                                 "room_id": self.rooms[2].id, "key": key}, format="json")
         self.assertEqual(ap.status_code, 200, ap.data)
         self.assertEqual(scan()["total"], 0)
+
+    def test_gened_split_options_are_two_independent_ninety_minute_sessions(self):
+        _subject, rows = self._gened_split_class()
+        self.client.force_authenticate(self.registrar)
+        response = self.client.post("/api/engine/slot-options/", {"ids": [r.id for r in rows], "limit": 300}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertTrue(response.data["split_allowed"])
+        response = self.client.post("/api/engine/slot-options/", {"ids": [r.id for r in rows], "limit": 300,
+                                                                  "split_session": True}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertTrue(response.data["half_hour_slots_available"])
+        self.assertTrue(response.data["options"], response.data)
+        self.assertTrue(all((int(o["end"].split(":")[0]) * 60 + int(o["end"].split(":")[1]))
+                            - (int(o["start"].split(":")[0]) * 60 + int(o["start"].split(":")[1])) == 90
+                            for o in response.data["options"]))
+
+    def test_split_eligibility_is_limited_to_minor_three_hour_lecture_only_subjects(self):
+        from engine.scheduler import supports_manual_split_sessions
+        eligible, _ = self._gened_split_class(existing=False)
+        major = Subject.objects.create(code="CS703", title="Three Hour Subject", program=self.prog, lec_units=3, lab_units=0,
+                                       year_level="3rd Year", semester="1st Sem", classification="major")
+        two_units = Subject.objects.create(code="GE204", title="Two Unit Gen Ed", program=self.prog, lec_units=2, lab_units=0,
+                                          year_level="2nd Year", semester="1st Sem", classification="minor")
+        with_lab = Subject.objects.create(code="GE306", title="Gen Ed With Lab", program=self.prog, lec_units=3, lab_units=1,
+                                         year_level="3rd Year", semester="1st Sem", classification="minor")
+        self.assertTrue(supports_manual_split_sessions(eligible))
+        self.assertFalse(supports_manual_split_sessions(major))
+        self.assertFalse(supports_manual_split_sessions(two_units))
+        self.assertFalse(supports_manual_split_sessions(with_lab))
+
+    def test_gened_split_apply_rejects_overlap_then_saves_two_nonoverlapping_sessions(self):
+        subject, rows = self._gened_split_class()
+        self.client.force_authenticate(self.registrar)
+        body = {"ids": [r.id for r in rows], "limit": 300, "split_session": True}
+        options = self.client.post("/api/engine/slot-options/", body, format="json")
+        self.assertEqual(options.status_code, 200, options.data)
+        monday = {o["start"]: o for o in options.data["options"] if o["day"] == "Mon"}
+        self.assertIn("07:00", monday)
+        self.assertIn("08:00", monday)
+        self.assertIn("09:00", monday)
+        missing_second = self.client.post("/api/engine/slot-options/apply/", {**body, "session_keys": [monday["07:00"]["key"]]}, format="json")
+        self.assertEqual(missing_second.status_code, 400, missing_second.data)
+        overlap = self.client.post("/api/engine/slot-options/apply/", {**body, "session_keys": [monday["07:00"]["key"], monday["08:00"]["key"]]}, format="json")
+        self.assertEqual(overlap.status_code, 400, overlap.data)
+        self.assertEqual(Schedule.objects.filter(subject=subject).count(), 6)
+        applied = self.client.post("/api/engine/slot-options/apply/", {**body, "session_keys": [monday["07:00"]["key"], monday["09:00"]["key"]]}, format="json")
+        self.assertEqual(applied.status_code, 200, applied.data)
+        result = list(Schedule.objects.filter(subject=subject).select_related("timeslot").order_by("timeslot__start_time"))
+        self.assertEqual(len(result), 6)
+        self.assertEqual({(r.timeslot.start_time, r.timeslot.end_time) for r in result},
+                         {(dtime(7), dtime(7, 30)), (dtime(7, 30), dtime(8)), (dtime(8), dtime(8, 30)),
+                          (dtime(9), dtime(9, 30)), (dtime(9, 30), dtime(10)), (dtime(10), dtime(10, 30))})
+        self.assertEqual(scan()["total"], 0)
+
+    def test_split_apply_rejects_stale_slot_without_changing_current_schedule(self):
+        subject, rows = self._gened_split_class()
+        self.client.force_authenticate(self.registrar)
+        body = {"ids": [r.id for r in rows], "limit": 300, "split_session": True}
+        options = self.client.post("/api/engine/slot-options/", body, format="json")
+        tuesday = next(o for o in options.data["options"] if o["day"] == "Tue" and o["start"] == "07:00")
+        wednesday = next(o for o in options.data["options"] if o["day"] == "Wed" and o["start"] == "07:00")
+        blocked = TimeSlot.objects.get(day="Tue", start_time=dtime(7), end_time=dtime(7, 30))
+        Schedule.objects.create(subject=Subject.objects.get(code="TST100"), section=self.sec[1], teacher=self.teachers[1], room=self.rooms[0],
+                                timeslot=blocked, status="draft", term="1st Sem", school_year=SY)
+        response = self.client.post("/api/engine/slot-options/apply/", {**body, "session_keys": [tuesday["key"], wednesday["key"]]}, format="json")
+        self.assertEqual(response.status_code, 409, response.data)
+        self.assertEqual(Schedule.objects.filter(subject=subject).count(), 6)
+        self.assertEqual({r.timeslot.day for r in Schedule.objects.filter(subject=subject).select_related("timeslot")}, {"Mon"})
+
+    def test_unplaced_gened_class_can_be_placed_in_two_sessions(self):
+        subject, _rows = self._gened_split_class(existing=False)
+        teacher = make_cas_teacher(90)
+        self.client.force_authenticate(self.registrar)
+        body = {"section_id": self.sec[0].id, "subject_id": subject.id, "room_id": self.rooms[0].id,
+                "split_session": True, "limit": 300}
+        response = self.client.post("/api/engine/slot-options/", body, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertTrue(response.data["options"])
+        monday = {o["start"]: o for o in response.data["options"] if o["day"] == "Mon"}
+        applied = self.client.post("/api/engine/slot-options/apply/", {**body, "session_keys": [monday["07:00"]["key"], monday["09:00"]["key"]]}, format="json")
+        self.assertEqual(applied.status_code, 200, applied.data)
+        self.assertEqual(Schedule.objects.filter(subject=subject, section=self.sec[0], teacher=teacher).count(), 6)
+        self.assertEqual(scan()["total"], 0)
+
+    def test_split_is_hidden_for_rotc_pathfit_and_when_half_hour_slots_are_missing(self):
+        self.client.force_authenticate(self.registrar)
+        for code, title in (("GE501", "NSTP / ROTC 1"), ("PATHFIT1", "Physical Activities Toward Health and Fitness 1")):
+            subject, rows = self._gened_split_class(code=code, title=title)
+            response = self.client.post("/api/engine/slot-options/", {"ids": [r.id for r in rows]}, format="json")
+            self.assertEqual(response.status_code, 200, response.data)
+            self.assertFalse(response.data["split_allowed"])
+            rejected = self.client.post("/api/engine/slot-options/", {"ids": [r.id for r in rows], "split_session": True}, format="json")
+            self.assertEqual(rejected.status_code, 400)
+            Schedule.objects.filter(subject=subject).delete()
+    def test_split_mode_explains_when_half_hour_slots_are_missing(self):
+        subject = Subject.objects.create(code="GE405", title="Filipino Christian Living 5", program=self.prog, lec_units=3, lab_units=0,
+                                         year_level="3rd Year", semester="1st Sem", classification="minor")
+        rows = [Schedule.objects.create(subject=subject, section=self.sec[0], teacher=self.teachers[0], room=self.rooms[0],
+                                        timeslot=TimeSlot.objects.get(day="Mon", start_time=dtime(hour)), status="draft", term="1st Sem")
+                for hour in (7, 8, 9)]
+        self.client.force_authenticate(self.registrar)
+        response = self.client.post("/api/engine/slot-options/", {"ids": [r.id for r in rows], "split_session": True}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertFalse(response.data["half_hour_slots_available"])
+        self.assertFalse(response.data["options"])
 
 
 class GenerationRulesTests(Base):

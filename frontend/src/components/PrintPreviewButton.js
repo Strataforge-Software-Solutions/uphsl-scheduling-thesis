@@ -85,7 +85,7 @@ export default function PrintPreviewButton({ params, disabled = false, onFixed, 
       <span style={{ position: "relative", display: "inline-block" }}>
         <button onClick={() => (years.length ? (setYear(defaultYear || ALL), setAsking((a) => !a)) : print(false, null))} disabled={busy || disabled}
           style={{ background: "#003366", color: "white" }} title="Opens the class schedule as a PDF (portrait) to preview or print">
-          {busy ? "Checking and preparing PDF…" : "Print / Preview"}
+          {busy ? "Checking and preparing PDF…" : "Print Report"}
         </button>
         {asking && (
           <div role="dialog" aria-label="Print which year levels" style={{ position: "absolute", right: 0, top: "100%", marginTop: 6, zIndex: 1100, width: "min(300px, 90vw)",
@@ -104,7 +104,7 @@ export default function PrintPreviewButton({ params, disabled = false, onFixed, 
             </div>
             <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
               <button type="button" onClick={() => setAsking(false)} style={{ background: "white", color: "#003366", border: "1px solid #003366", padding: "4px 10px", fontSize: 13 }}>Cancel</button>
-              <button type="button" onClick={() => print(false, year)} style={{ background: "#003366", color: "white", padding: "4px 10px", fontSize: 13 }}>Print / Preview</button>
+              <button type="button" onClick={() => print(false, year)} style={{ background: "#003366", color: "white", padding: "4px 10px", fontSize: 13 }}>Print Report</button>
             </div>
           </div>
         )}
