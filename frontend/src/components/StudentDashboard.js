@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { reportLoadError } from "../services/loadError";
-import API, { getCurrentUser, getSchedules, logout } from "../services/api";
+import { getCurrentUser, getSchedules, logout } from "../services/api";
 import { formatSchedule } from "../utils/formatSchedule";
 import { LecLabTag, buildLecLabIndex } from "../utils/lecLab";
 import { mergeSchedulesByDay } from "../utils/mergeSchedules";

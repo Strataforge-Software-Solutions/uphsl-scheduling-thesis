@@ -213,7 +213,6 @@ export default function MinorSchedulesPanel() {
     setBusy(false);
   };
 
-  const sel = { padding: "8px 10px", borderRadius: 6, border: "1px solid #d1d5db" };
   const stat = (label, value, color) => (
     <div style={{ minWidth: 130 }}><div style={{ fontSize: 18, fontWeight: 600, color: color || "#111827", fontVariantNumeric: "tabular-nums" }}>{value}</div><div style={{ fontSize: 12, color: "#6b7280" }}>{label}</div></div>
   );
