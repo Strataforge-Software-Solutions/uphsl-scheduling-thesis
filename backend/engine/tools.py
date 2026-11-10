@@ -143,7 +143,10 @@ def _options(pl, others, limit=6, order=None):
     shape = _shape(pl["rows"], pl["end_shift"])
     span = max(e for _, e in shape)
     ok = []
+    from .college_break import overlaps as overlaps_college_break
     for st in range(DAY_START, DAY_END - span + 1, STEP):
+        if any(overlaps_college_break(st + a, st + b) for a, b in shape):
+            continue
         if all(not any(st + a < x[5] and x[4] < st + b for x in rel) for a, b in shape)                 and not lecorder.violates(order, [(pl["day"], st + a, st + b) for a, b in shape]):
             ok.append(st)
     ok.sort(key=lambda x: abs(x - pl["start"]))
@@ -201,10 +204,15 @@ def _evaluate(plans):
     pool = _load_pool(plans)
     moving_ids = {r.id for pl in plans for r in pl["rows"]}
     new_pos = [(pl["rows"][0].subject.code, pl["rows"][0].section_id, pl["day"], p[4], p[5]) for pl in plans for p in _placed(pl)]
-    results, opts, order_msgs = [], [], []
+    results, opts, order_msgs, break_msgs = [], [], [], []
+    from .college_break import overlaps as overlaps_college_break, message as college_break_message
     for pl in plans:
         others = _pool_for(pl, plans, pool)
-        results.append((pl, _clashes(pl, _placed(pl), others, tol)))
+        placed = _placed(pl)
+        has_break_overlap = any(overlaps_college_break(start, end) for _t, _r, _s, _mk, start, end, _id in placed)
+        found = _clashes(pl, placed, others, tol)
+        results.append((pl, found))
+        break_msgs.append(college_break_message() if has_break_overlap else "")
         r0 = pl["rows"][0]
         # Lecture before Lab, the solver's rule; partners moved in the same request count at their NEW time
         mine = {r.id for r in pl["rows"]}
@@ -214,7 +222,7 @@ def _evaluate(plans):
         order_msgs.append(lecorder.message(order, r0.subject) if lecorder.violates(order, ivs) else "")
         opts.append(_options(pl, others, order=order))
     msgs = _describe_clashes(plans, results, tol)
-    msgs = [m + ([om] if om else []) for m, om in zip(msgs, order_msgs)]
+    msgs = [m + ([om] if om else []) + ([bm] if bm else []) for m, om, bm in zip(msgs, order_msgs, break_msgs)]
     return [(pl, m, o) for (pl, _f), m, o in zip(results, msgs, opts)]
 
 

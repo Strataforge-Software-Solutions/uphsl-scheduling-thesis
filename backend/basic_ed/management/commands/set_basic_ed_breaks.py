@@ -6,11 +6,10 @@ the validation.
     python manage.py set_basic_ed_breaks               # only grade levels that have no breaks yet
     python manage.py set_basic_ed_breaks --reset       # put the defaults back everywhere
 
-Defaults (change them any time in Settings > Daily time windows):
-  JHS Grades 7-10  45-min periods   recess 10:15-10:30   lunch 12:00-12:45   day 8:00-3:00 PM (was 2:00 PM: the 60 minutes of
-                                    recess + lunch are added at the end so the 8 periods a day, which the MATATAG load needs, stay)
-  SHS Grade 11     50-min periods   ONE 30-minute break 9:30-10:00   day 7:00 AM-12:30 PM   6 periods a day
-  SHS Grade 12     50-min periods   ONE 30-minute break 3:00-3:30 PM  day 12:30-6:30 PM       6 periods a day
+Defaults (break start times can be changed in Settings > Daily time windows; durations are fixed):
+  JHS Grades 7-10  45-min periods   recess 10:15-10:35   lunch 12:00-12:45   day 8:00 AM-3:00 PM (7 available periods)
+  SHS Grade 11     50-min periods   ONE 15-minute break 9:30-9:45   day 7:00 AM-12:30 PM   6 periods a day
+  SHS Grade 12     50-min periods   ONE 15-minute break 3:00-3:15 PM  day 12:30-6:30 PM       6 periods a day
 SHS has no separate recess / lunch. JHS keeps both (its hours are not changed by this command except for the original JHS default).
 Existing timetables are not touched; regenerate them (or press Revalidate) to see the effect.
 """
@@ -22,10 +21,10 @@ from django.db import transaction
 from basic_ed.models import GradeWindow, ScheduleRun, SchoolLevelConfig
 
 DEFAULTS = {
-    ("JHS", None): dict(recess=(time(10, 15), time(10, 30)), lunch=(time(12, 0), time(12, 45)), end=time(15, 0), old_end=time(14, 0)),
-    # SHS: ONE 30-minute break after 3 periods (50 min each), school hours unchanged: Grade 11 7:00-12:30, Grade 12 12:30-6:30 PM
-    ("SHS", 11): dict(single=(time(9, 30), time(10, 0))),
-    ("SHS", 12): dict(single=(time(15, 0), time(15, 30))),
+    ("JHS", None): dict(recess=(time(10, 15), time(10, 35)), lunch=(time(12, 0), time(12, 45))),
+    # SHS: ONE 15-minute break, school hours unchanged: Grade 11 7:00-12:30, Grade 12 12:30-6:30 PM
+    ("SHS", 11): dict(single=(time(9, 30), time(9, 45))),
+    ("SHS", 12): dict(single=(time(15, 0), time(15, 15))),
 }
 
 
@@ -41,15 +40,12 @@ def apply_defaults(w, reset=False):
             return ""
         w.break_start, w.break_end = d["single"]
         w.recess_start = w.recess_end = w.lunch_start = w.lunch_end = None
-        return f"one 30-minute break {d['single'][0]:%H:%M}-{d['single'][1]:%H:%M} (no recess / lunch)"
+        return f"one 15-minute break {d['single'][0]:%H:%M}-{d['single'][1]:%H:%M} (no recess / lunch)"
     if not d or (not reset and (w.recess_start or w.lunch_start)):
         return ""
     w.recess_start, w.recess_end = d["recess"]
     w.lunch_start, w.lunch_end = d["lunch"]
     note = f"recess {d['recess'][0]:%H:%M}-{d['recess'][1]:%H:%M}, lunch {d['lunch'][0]:%H:%M}-{d['lunch'][1]:%H:%M}"
-    if d.get("end") and w.end_time == d["old_end"]:
-        w.end_time = d["end"]
-        note += f", day now ends {d['end']:%H:%M}"
     if d.get("start") and w.start_time == d["old_start"]:
         w.start_time = d["start"]
         note += f", day now starts {d['start']:%H:%M}"

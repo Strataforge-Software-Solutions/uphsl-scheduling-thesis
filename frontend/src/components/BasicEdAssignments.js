@@ -7,7 +7,7 @@ import { groupOptions, pickerExtras } from "../utils/facultyGroups";
 
 /* SHS / JHS: pin a teacher to a subject of one section (TeachingAssignment). Anything not pinned is assigned by the engine.
    The teacher list comes from the server in three groups (basic_ed/teacher_groups.py). Choosing someone who is not connected to the
-   subject (Principal only, and only when no qualified teacher is free) asks for a reason; the server checks everything again. */
+   subject (Principal only) asks for a reason; the server checks everything again. */
 export default function TeachingAssignmentsPanel({ level }) {
   const [sections, setSections] = useState([]);
   const [sectionId, setSectionId] = useState("");

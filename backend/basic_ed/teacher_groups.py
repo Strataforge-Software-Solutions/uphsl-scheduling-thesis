@@ -3,9 +3,10 @@
   Suggested  -- eligible for the subject (engine.eligible: specialization or department), with enough free periods for the subject's
                 sessions per week, and within their weekly hours. Lightest load first; at most SUGGESTED_MAX.
   Qualified  -- the other eligible teachers. Those who cannot take it are listed but NOT selectable, with the reason.
-  Other available (not connected) -- ONLY when Suggested is empty and only for the Principal of this level: teachers of the SAME level who
+  Other available (not connected) -- for the Principal of this level: teachers of the SAME level who
                 are NOT eligible but have the free periods and the hours. Choosing one is a manual "Assign anyway" with a reason.
-                The Principal never assigns themself. Not-eligible teachers over the limit are named in one muted "Full:" line.
+                This group remains visible alongside eligible groups. The Principal never assigns themself. Not-eligible teachers over
+                the limit are named in one muted "Full:" line.
 
 "Free" uses the SHS engine's own rule (engine._free_for_teacher): inside the windows the teacher marked available (all of the day when
 none were submitted), outside the windows they marked unavailable, inside their preferred start / end, and not booked by another
@@ -99,7 +100,10 @@ def build(user, section, subject, problem=None):
     for r in sorted((r for r in rows if r["qualified"] and r not in free_q), key=lambda r: r["out"]["label"].lower()):
         why = full_text(r) if r["full"] else f"Not enough free periods ({need} needed) inside their availability"
         out_q.append({**r["out"], "group": "qualified", "selectable": False, "not_connected": False, "tag": why})
-    show_other = can_override and not out_s
+    # Principals can see the explicit not-connected fallback even when there
+    # are eligible teachers. Eligibility is a soft rule for a manual pin;
+    # level, availability and workload rules remain enforced.
+    show_other = can_override
     out_o, full_line = [], []
     if show_other:
         for r in sorted((r for r in rows if not r["qualified"]), key=lambda r: (r["projected"], r["out"]["label"].lower())):
@@ -137,8 +141,6 @@ def check_override(user, section, subject, faculty, reason):
     if len(reason) < 3:
         raise OverrideError("Write a short reason for assigning a teacher who is not connected to this subject.")
     groups = build(user, section, subject)
-    if groups["suggested"]:
-        raise OverrideError(f"A qualified teacher can take {subject.code} ({groups['suggested'][0]['full_name']}). Choose from Suggested instead.")
     if not any(o["id"] == faculty.id for o in groups["other"]):
         if any(x["id"] == faculty.id for x in groups["full_line"]):
             raise OverrideError(f"{faculty.full_name} is at the weekly limit.")

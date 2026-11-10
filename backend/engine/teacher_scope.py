@@ -1,7 +1,8 @@
 """Which teachers may be put on a class: ONE rule for every place that saves or suggests a teacher.
 
-* A Dean's MAJOR subject: only faculty of the Dean's own department(s) (User.departments, which includes extra_departments), and only
-  those qualified under engine.qualification.is_qualified (which also requires the teacher to belong to the subject's college).
+* A Dean's MAJOR subject: only faculty of the Dean's own department(s) (User.departments, which includes extra_departments). Normal
+  assignments must be qualified under engine.qualification.is_qualified; the Dean may explicitly approve a not-connected teacher from
+  that same department, subject to the separate availability and workload rules.
   Teachers of other departments are never listed, suggested or accepted.
 * A Gen Ed (minor) subject (the Registrar's): any qualified teacher, as engine.qualification says (unchanged).
 

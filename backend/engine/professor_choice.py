@@ -316,7 +316,10 @@ def free_week(teachers, semester, exclude_ids=()):
     from .models import Schedule, TimeSlot
     mins = lambda t: t.hour * 60 + t.minute
     grid = {}
+    from .college_break import overlaps as overlaps_college_break
     for day, a, b in TimeSlot.objects.values_list("day", "start_time", "end_time"):
+        if overlaps_college_break(a, b):
+            continue
         grid.setdefault(day[:3].title(), []).append([mins(a), mins(b)])
     grid = {d: _merge(v) for d, v in grid.items()}
     ids = [t.id for t in teachers]

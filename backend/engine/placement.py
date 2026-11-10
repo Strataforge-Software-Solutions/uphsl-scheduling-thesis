@@ -114,7 +114,8 @@ class _Ctx:
         from .views import _build_availability_rules
         self.teachers = list(FacultyProfile.objects.select_related("user").prefetch_related("specializations").filter(user__is_active=True))          # a deactivated teacher is never given a class
         self.rooms = list(Room.objects.all())
-        self.timeslots = list(TimeSlot.objects.all())
+        from .college_break import allowed_slots
+        self.timeslots = allowed_slots(list(TimeSlot.objects.all()))
         self.av = _build_availability_rules(self.teachers, self.timeslots, school_year, semester)
         lim = wl.limits()
         self.caps = {t.id: wl.limit_for(t, lim) for t in self.teachers} if lim["policy"] == "strict" else None

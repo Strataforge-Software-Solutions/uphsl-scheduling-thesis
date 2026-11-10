@@ -77,15 +77,16 @@ def validate_curriculum(level, academic_year, grading_period, grade_level=None):
         needed = ("Break",) if level == "SHS" else ("Recess", "Lunch")
         for need in needed:
             if need not in have_breaks:
-                what = "the 30-minute break" if level == "SHS" else need.lower()
+                what = "the 15-minute break" if level == "SHS" else ("the 20-minute recess" if need == "Recess" else need.lower())
                 add("error", "no_break", f"Grade {g}: {what} is not set. Every school day needs {'its break' if level == 'SHS' else 'recess and lunch'} -- set "
                     f"it in Settings > Daily time windows (or run: python manage.py set_basic_ed_breaks).")
         for label, bs, be_ in window_breaks(w):
             if bs < to_min(w.start_time) or be_ > to_min(w.end_time):
                 add("error", "break_outside", f"Grade {g}: the {label.lower()} ({to_time(bs):%H:%M}-{to_time(be_):%H:%M}) is outside the school hours "
                     f"({w.start_time:%H:%M}-{w.end_time:%H:%M}).")
-            if level == "SHS" and be_ - bs != 30:
-                add("error", "break_length", f"Grade {g}: the SHS break must be exactly 30 minutes (it is {be_ - bs}).")
+            expected_break = 15 if level == "SHS" else (20 if label == "Recess" else None)
+            if expected_break is not None and be_ - bs != expected_break:
+                add("error", "break_length", f"Grade {g}: {label.lower()} must be exactly {expected_break} minutes (it is {be_ - bs}).")
         sections = list(Section.objects.filter(level=level, academic_year=academic_year, grade_level=g, is_active=True).select_related("strand"))
         if not sections:
             add("error", "no_sections", f"Grade {g} has no sections.")

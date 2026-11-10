@@ -173,8 +173,8 @@ function AdminOverview({ level, overview, go }) {
     c.rooms ? ["ok", `${c.rooms} room(s) in ${overview.config.building}.`] : ["error", "No rooms yet (Rooms tab)."],
     c.subjects ? ["ok", `${c.subjects} curriculum subject(s).`] : ["error", "No curriculum yet (Curriculum tab)."],
     c.unverified_subjects ? ["warn", `${c.unverified_subjects} subject(s) are not verified against an official DepEd document.`] : ["ok", "Every curriculum subject is verified."],
-    noBreaks.length ? ["error", `${level === "SHS" ? "The 30-minute break" : "Recess/lunch"} is missing for Grade ${noBreaks.map((w) => w.grade_level).join(", ")} (Settings tab). Timetables cannot be generated without them.`]
-      : ["ok", level === "SHS" ? "The 30-minute break is set for every grade level." : "Recess and lunch are set for every grade level."],
+    noBreaks.length ? ["error", `${level === "SHS" ? "The 15-minute break" : "Recess/lunch"} is missing for Grade ${noBreaks.map((w) => w.grade_level).join(", ")} (Settings tab). Timetables cannot be generated without them.`]
+      : ["ok", level === "SHS" ? "The 15-minute break is set for every grade level." : "Recess and lunch are set for every grade level."],
     runs.length ? ["ok", `${runs.length} timetable(s) generated; ${c.pending_review} waiting for the Principal's review.`] : ["warn", "No timetable generated yet. The Principal generates it in the Schedules tab of the principal workspace."],
     c.open_conflicts ? ["warn", `${c.open_conflicts} open conflict(s) in the current timetables. The Principal can press Resolve in the Conflicts tab.`] : ["ok", "No open conflicts."],
   ];
@@ -423,13 +423,17 @@ function SettingsTab({ level, overview, reload }) {
             <input style={inputStyle} placeholder="Curriculum framework" value={w.curriculum_framework} onChange={(e) => setWins(wins.map((x, j) => j === i ? { ...x, curriculum_framework: e.target.value } : x))} />
             <label style={{ fontSize: "13px" }}><input type="checkbox" checked={w.framework_verified} onChange={(e) => setWins(wins.map((x, j) => j === i ? { ...x, framework_verified: e.target.checked } : x))} /> verified</label>
             <div style={{ gridColumn: "1 / -1", display: "flex", gap: "14px", flexWrap: "wrap", alignItems: "center", fontSize: "13px", color: "#374151" }}>
-              {(level === "SHS" ? [["Break (30 min)", "break_start", "break_end"]] : [["Recess", "recess_start", "recess_end"], ["Lunch", "lunch_start", "lunch_end"]]).map(([label, a, b]) => (
+              {(level === "SHS" ? [["Break (15 min)", "break_start", "break_end", 15]] : [["Recess (20 min)", "recess_start", "recess_end", 20], ["Lunch", "lunch_start", "lunch_end", null]]).map(([label, a, b, duration]) => (
                 <span key={label}><b>{label}</b>{" "}
-                  <CustomTimePicker style={inputStyle} value={hhmm(w[a] || "")} onChange={(e) => setWins(wins.map((x, j) => j === i ? { ...x, [a]: e.target.value || null } : x))} aria-label={`${label} start`} />{" – "}
-                  <CustomTimePicker style={inputStyle} value={hhmm(w[b] || "")} onChange={(e) => setWins(wins.map((x, j) => j === i ? { ...x, [b]: e.target.value || null } : x))} aria-label={`${label} end`} /></span>))}
+                  <CustomTimePicker style={inputStyle} value={hhmm(w[a] || "")} onChange={(e) => {
+                    const value = e.target.value || null;
+                    const endValue = value && duration ? (() => { const [h, m] = value.split(":").map(Number); const n = h * 60 + m + duration; return `${String(Math.floor(n / 60)).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`; })() : value ? w[b] : null;
+                    setWins(wins.map((x, j) => j === i ? { ...x, [a]: value, [b]: endValue } : x));
+                  }} aria-label={`${label} start`} />{" – "}
+                  {duration ? <span aria-label={`${label} end`}>{hhmm(w[b] || "") || "--:--"}</span> : <CustomTimePicker style={inputStyle} value={hhmm(w[b] || "")} onChange={(e) => setWins(wins.map((x, j) => j === i ? { ...x, [b]: e.target.value || null } : x))} aria-label={`${label} end`} />}</span>))}
             </div>
           </div>))}
-        <p style={{ color: "#6b7280", fontSize: "13px" }}>{level === "SHS" ? "SHS has one 30-minute break (no separate recess or lunch)." : "Recess and lunch are both kept for JHS."} Breaks are never used for classes and show in the timetable and the printout. Classes are never placed outside a grade level's window. Current: {wins.map((w) => `Grade ${w.grade_level} ${ampm(hhmm(w.start_time))}–${ampm(hhmm(w.end_time))}`).join(" · ")}</p>
+        <p style={{ color: "#6b7280", fontSize: "13px" }}>{level === "SHS" ? "SHS has one 15-minute break (no separate recess or lunch)." : "JHS recess lasts 20 minutes; the configured lunch interval is unchanged."} Breaks are never used for classes and show in the timetable and the printout. Classes are never placed outside a grade level's window. Current: {wins.map((w) => `Grade ${w.grade_level} ${ampm(hhmm(w.start_time))}–${ampm(hhmm(w.end_time))}`).join(" · ")}</p>
       </div>
       {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
       <button style={btnPrimary} disabled={busy} onClick={save}>{busy ? "Saving…" : "Save settings"}</button>

@@ -87,6 +87,14 @@ class GenerationTests(Base):
         self.assertEqual(scan()["total"], 0)
         self.assertEqual(r.data["clashes"]["total"], 0)
 
+    def test_generator_keeps_every_class_out_of_the_college_lunch_break(self):
+        r = self.gen()
+        self.assertEqual(r.status_code, 201, r.data)
+        for row in Schedule.objects.select_related("timeslot"):
+            starts = row.timeslot.start_time.hour * 60 + row.timeslot.start_time.minute
+            ends = row.timeslot.end_time.hour * 60 + row.timeslot.end_time.minute
+            self.assertTrue(ends <= 12 * 60 or starts >= 12 * 60 + 30, row)
+
     def test_repeat_generation_replaces_draft_not_stacks(self):
         self.gen()
         n = Schedule.objects.count()
@@ -159,6 +167,16 @@ class SaveValidationTests(Base):
         ok = self.post(sec=self.sec[1], teacher=self.teachers[1], room=self.rooms[1], h=9)
         self.assertEqual(ok.status_code, 201, ok.data)
         self.assertEqual(Schedule.objects.count(), 2)
+
+    def test_college_lunch_break_rejects_manual_classes_but_allows_adjacent_times(self):
+        inside = self.post(sec=self.sec[0], teacher=self.teachers[0], room=self.rooms[0], h=12)
+        self.assertEqual(inside.status_code, 400, inside.data)
+        self.assertIn("12:00 PM to 12:30 PM", inside.data["detail"])
+        from engine.college_break import is_blocked_slot
+        before = TimeSlot.objects.get_or_create(day="Mon", start_time=dtime(11), end_time=dtime(12))[0]
+        after = TimeSlot.objects.get_or_create(day="Mon", start_time=dtime(12, 30), end_time=dtime(13, 30))[0]
+        self.assertFalse(is_blocked_slot(before))
+        self.assertFalse(is_blocked_slot(after))
 
     def test_update_into_a_conflict_is_refused_and_row_unchanged(self):
         a = self.row()
