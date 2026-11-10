@@ -23,11 +23,25 @@ if IS_VERCEL and SECRET_KEY == "local-development-only-change-before-deploy":
     raise ImproperlyConfigured("DJANGO_SECRET_KEY must not use the local development key in production.")
 
 DEBUG = False if IS_VERCEL else os.environ.get("DJANGO_DEBUG", "true").lower() in {"1", "true", "yes"}
-if IS_VERCEL and not os.environ.get("DJANGO_ALLOWED_HOSTS", "").strip():
-    raise ImproperlyConfigured("Set DJANGO_ALLOWED_HOSTS to the exact production hostnames in Vercel.")
-ALLOWED_HOSTS = [host.strip() for host in os.environ.get(
-    "DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1"
-).split(",") if host.strip()]
+configured_allowed_hosts = os.environ.get("DJANGO_ALLOWED_HOSTS", "").strip()
+if configured_allowed_hosts:
+    ALLOWED_HOSTS = [host.strip().lower() for host in configured_allowed_hosts.split(",") if host.strip()]
+elif IS_VERCEL:
+    # Vercel supplies the exact hostnames for each deployment at runtime. Use
+    # those rather than a wildcard, which would accept unrelated Vercel tenants.
+    vercel_hosts = (
+        os.environ.get("VERCEL_PROJECT_PRODUCTION_URL", ""),
+        os.environ.get("VERCEL_URL", ""),
+        os.environ.get("VERCEL_BRANCH_URL", ""),
+    )
+    ALLOWED_HOSTS = list(dict.fromkeys(host.strip().lower() for host in vercel_hosts if host.strip()))
+    if not ALLOWED_HOSTS:
+        raise ImproperlyConfigured(
+            "Vercel hostnames are unavailable. Enable Vercel system environment variables "
+            "or set DJANGO_ALLOWED_HOSTS to the exact production hostnames."
+        )
+else:
+    ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SESSION_COOKIE_SECURE = IS_VERCEL
 CSRF_COOKIE_SECURE = IS_VERCEL
