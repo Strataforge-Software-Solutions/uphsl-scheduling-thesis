@@ -243,7 +243,8 @@ def suggest(user, *, ids=None, section_id=None, subject_id=None, room_id=None, s
             raise RescheduleError(why_nobody(subject, section, teachers_all, spec), 422, {"replacements": [
                 {"faculty_id": t.id, "name": t.user.get_full_name().strip() or t.user.username, "department": t.user.department or "",
                  "fit": "; ".join(w) + " (not yet a recorded specialization: the Dean can add it in the Faculty tab)"} for _p, t, w in near[:5]]})
-    timeslots = list(TimeSlot.objects.all())
+    from .college_break import allowed_slots as college_allowed_slots
+    timeslots = college_allowed_slots(list(TimeSlot.objects.all()))
     if not S.is_rotc_subject(subject):
         timeslots = [sl for sl in timeslots if sl.day[:3] != "Sun"]
     half_hour_slots_available = any(_mins(sl.end_time) - _mins(sl.start_time) == 30 for sl in timeslots)
@@ -475,6 +476,9 @@ def apply(user, *, key=None, session_keys=None, split_session=False, ids=None, s
     teacher = FacultyProfile.objects.select_related("user").get(pk=opt["teacher_id"])
     room = Room.objects.get(pk=opt["room_id"])
     slots = list(TimeSlot.objects.filter(pk__in=sorted({sid for o in (selected_options or [opt]) for sid in o["slot_ids"]})))
+    from .college_break import is_blocked_slot, message as college_break_message
+    if any(is_blocked_slot(slot) for slot in slots):
+        raise RescheduleError(college_break_message(), 409)
     term = section.semester
     year = school_year or (rows[0].school_year if rows else "") or Schedule.objects.filter(term=term).values_list("school_year", flat=True).first() or ""
     old_ids = [r.id for r in rows] if mode == "move" else []

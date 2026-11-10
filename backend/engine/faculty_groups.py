@@ -6,10 +6,11 @@
   Qualified  -- every other qualified teacher. Free ones are selectable. Those who cannot take the class are listed but NOT selectable,
                 with the reason (busy then, marked unavailable, over the weekly limit). Outside their submitted window is allowed
                 (availability is a preference), marked "Outside preferred time".
-  Other available (not connected) -- ONLY when Suggested is empty, only for a Dean's MAJOR subject, only the Dean's own department:
+  Other available (not connected) -- for a Dean's MAJOR subject, only the Dean's own department:
                 faculty NOT connected to the subject who are free INSIDE their submitted availability (or have submitted none), not
                 marked unavailable, and within their weekly limit. Choosing one is a manual "Assign anyway" with a reason (never done by
-                the engine). Not-connected faculty who are over the limit are named in one muted "Full:" line.
+                the engine). This group remains visible alongside qualified groups. Not-connected faculty who are over the limit are
+                named in one muted "Full:" line.
 
 Every person appears in one group only. Loads are the Workload page numbers (Schedule hours of that semester); in the Generate dialog the
 hours that would remain after Generate replaces this program's drafts are added as "after Generate: X hrs" when they differ.
@@ -131,7 +132,10 @@ def build(user, subject, section, *, term, school_year=None, exact_slots=None, b
 
     grid = {}
     if exact_slots is None:
+        from .college_break import overlaps as overlaps_college_break
         for d, a, b in TimeSlot.objects.values_list("day", "start_time", "end_time"):
+            if overlaps_college_break(a, b):
+                continue
             grid.setdefault(d[:3].title(), []).append([_mins(a), _mins(b)])
         grid = {d: _merge(v) for d, v in grid.items()}
         if day:
@@ -228,7 +232,10 @@ def build(user, subject, section, *, term, school_year=None, exact_slots=None, b
         why = full_text(r) if r["full"] and r["free_any"] else ("Marked unavailable" if r["hit_bad"] else r["busy_text"] or full_text(r))
         out_q.append({**r["out"], "group": "qualified", "selectable": False, "tag": why, "not_connected": False})
     out_o, full_line = [], []
-    show_other = can_override and not out_s
+    # Keep the manual, explicitly approved fallback visible alongside qualified
+    # candidates. Qualification is advisory for this manual choice; department,
+    # availability and workload checks still apply when the Dean confirms it.
+    show_other = can_override
     if show_other:
         for r in sorted((r for r in rows if not r["qualified"]), key=lambda r: (r["projected_hours"], r["out"]["label"].lower())):
             if r["full"]:
@@ -281,9 +288,6 @@ def check_override(user, subject, section, teacher, reason, groups):
         raise OverrideError(f"{name} is not an active account.", 400)
     if len(reason) < 3:
         raise OverrideError("Write a short reason for assigning a faculty member who is not connected to this subject.", 400)
-    if groups["suggested"]:
-        raise OverrideError(f"A qualified faculty member can take {subject.code} ({groups['suggested'][0]['full_name']}). "
-                            "Choose from Suggested instead.", 409)
     if not any(o["id"] == teacher.id for o in groups["other"]):
         full = next((f for f in groups["full_line"] if f["id"] == teacher.id), None)
         if full:

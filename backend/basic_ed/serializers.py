@@ -17,8 +17,16 @@ class GradeWindowSerializer(serializers.ModelSerializer):
         model = m.GradeWindow
         fields = "__all__"
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        from .engine import window_breaks, to_time
+        for label, start, end in window_breaks(instance):
+            end_field = {"Recess": "recess_end", "Lunch": "lunch_end", "Break": "break_end"}[label]
+            data[end_field] = to_time(end).strftime("%H:%M:%S")
+        return data
+
     def validate(self, attrs):
-        """SHS has ONE 30-minute break (no recess / lunch); JHS keeps recess and lunch. Breaks stay inside the school hours."""
+        """SHS has ONE 15-minute break; JHS has a 20-minute recess plus its configured lunch."""
         get = lambda k: attrs.get(k, getattr(self.instance, k, None))
         level = get("level")
         start, end = get("start_time"), get("end_time")
@@ -26,18 +34,33 @@ class GradeWindowSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("The school day must end after it starts.")
         if level == "SHS":
             attrs["recess_start"] = attrs["recess_end"] = attrs["lunch_start"] = attrs["lunch_end"] = None
-            a, b = get("break_start"), get("break_end")
-            if bool(a) != bool(b):
-                raise serializers.ValidationError("Set both the start and the end of the break.")
-            if a and b:
-                if (b.hour * 60 + b.minute) - (a.hour * 60 + a.minute) != 30:
-                    raise serializers.ValidationError("The SHS break must be exactly 30 minutes.")
+            a = get("break_start")
+            b = None
+            if a:
+                from .engine import to_min, to_time
+                if to_min(a) + 15 >= 24 * 60:
+                    raise serializers.ValidationError({"break_start": "The 15-minute break must finish before midnight."})
+                b = to_time(to_min(a) + 15)
+                attrs["break_end"] = b
                 if start and end and (a < start or b > end):
-                    raise serializers.ValidationError("The break must be inside the school hours.")
+                    raise serializers.ValidationError("The 15-minute break must be inside the school hours.")
+            else:
+                attrs["break_end"] = None
         else:
             attrs["break_start"] = attrs["break_end"] = None
+            from .engine import to_min, to_time
+            recess_start = get("recess_start")
+            if recess_start and to_min(recess_start) + 20 >= 24 * 60:
+                raise serializers.ValidationError({"recess_start": "The 20-minute recess must finish before midnight."})
+            recess_end = to_time(to_min(recess_start) + 20) if recess_start else None
+            if recess_start:
+                attrs["recess_end"] = recess_end
+            else:
+                attrs["recess_end"] = None
             for lo, hi, name in (("recess_start", "recess_end", "Recess"), ("lunch_start", "lunch_end", "Lunch")):
                 a, b = get(lo), get(hi)
+                if lo == "recess_start":
+                    b = recess_end
                 if a and b and ((b <= a) or (start and a < start) or (end and b > end)):
                     raise serializers.ValidationError(f"{name} must end after it starts and stay inside the school hours.")
         return attrs

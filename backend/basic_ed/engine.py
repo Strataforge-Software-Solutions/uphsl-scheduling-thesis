@@ -31,13 +31,21 @@ def to_time(m):
     return time(m // 60, m % 60)
 
 
+def _end_after(start, minutes):
+    if start is None:
+        return None
+    end_minute = to_min(start) + minutes
+    return to_time(end_minute) if end_minute < 24 * 60 else None
+
+
 def window_breaks(window):
-    """[(label, start_min, end_min), ...] breaks of a grade level's window (SHS: one "Break"; JHS: "Recess" and "Lunch"), in time order (only valid ones)."""
+    """[(label, start_min, end_min), ...] breaks of a grade level's window (SHS: 15-minute Break; JHS: 20-minute Recess and Lunch)."""
     out = []
-    if window.level == "SHS":            # SHS: a single 30-minute break (no separate recess / lunch)
-        pairs = (("Break", window.break_start, window.break_end),)
+    if window.level == "SHS":            # SHS: a single 15-minute break (no separate recess / lunch)
+        pairs = (("Break", window.break_start, _end_after(window.break_start, 15)),)
     else:                                # JHS: recess and lunch
-        pairs = (("Recess", window.recess_start, window.recess_end), ("Lunch", window.lunch_start, window.lunch_end))
+        pairs = (("Recess", window.recess_start, _end_after(window.recess_start, 20)),
+                 ("Lunch", window.lunch_start, window.lunch_end))
     for label, a, b in pairs:
         if a and b and to_min(b) > to_min(a):
             out.append((label, to_min(a), to_min(b)))

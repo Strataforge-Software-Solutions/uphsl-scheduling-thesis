@@ -69,15 +69,15 @@ class Command(BaseCommand):
         m.SchoolLevelConfig.objects.get_or_create(level="JHS", defaults=dict(
             name="Junior High School", building="Alta Building", floor=4, period_minutes=45, break_minutes=0, break_every=2,
             max_teacher_hours=30, max_periods_per_teacher_day=7,
-            notes="45-minute periods, 8 per day in the 8:00-2:00 window. Recess and lunch are set per grade level in Settings (default recess 10:15, lunch 12:00-12:45, day ends 3:00 PM)."))
+            notes="45-minute periods, up to 7 per day in the 8:00 AM-3:00 PM window after the 20-minute recess and configured lunch. Break start times are set per grade level in Settings."))
         win = [("SHS", 11, time(7, 0), time(12, 30), "Strengthened SHS Curriculum", False,
                 "Confirm whether the school implements the Strengthened SHS curriculum for Grade 11 in SY 2026-2027 (DM 48 s.2025 covered pilot schools only)."),
                ("SHS", 12, time(12, 30), time(18, 30), "Transition: Grade 12 curriculum for SY 2026-2027 not yet published", False,
                 "DepEd had not issued the Grade 12 structure for SY 2026-2027 in the documents found. The subject list is a placeholder to review."),
-               ("JHS", 7, time(8, 0), time(14, 0), "MATATAG Curriculum", True, "MATATAG started in Grade 7 in SY 2024-2025 (DepEd FAQ)."),
-               ("JHS", 8, time(8, 0), time(14, 0), "MATATAG Curriculum (phase-in year not confirmed)", False, "The DepEd FAQ phase-in table could not be read; confirm the year Grade 8 moved to MATATAG."),
-               ("JHS", 9, time(8, 0), time(14, 0), "MATATAG Curriculum (phase-in year not confirmed)", False, "Confirm the year Grade 9 moves to MATATAG."),
-               ("JHS", 10, time(8, 0), time(14, 0), "MATATAG Curriculum (phase-in year not confirmed)", False, "Confirm the year Grade 10 moves to MATATAG.")]
+               ("JHS", 7, time(8, 0), time(15, 0), "MATATAG Curriculum", True, "MATATAG started in Grade 7 in SY 2024-2025 (DepEd FAQ)."),
+               ("JHS", 8, time(8, 0), time(15, 0), "MATATAG Curriculum (phase-in year not confirmed)", False, "The DepEd FAQ phase-in table could not be read; confirm the year Grade 8 moved to MATATAG."),
+               ("JHS", 9, time(8, 0), time(15, 0), "MATATAG Curriculum (phase-in year not confirmed)", False, "Confirm the year Grade 9 moves to MATATAG."),
+               ("JHS", 10, time(8, 0), time(15, 0), "MATATAG Curriculum (phase-in year not confirmed)", False, "Confirm the year Grade 10 moves to MATATAG.")]
         for lv, g, a, b, fw, ver, note in win:
             win, made = m.GradeWindow.objects.get_or_create(level=lv, grade_level=g, defaults=dict(
                 start_time=a, end_time=b, curriculum_framework=fw, framework_verified=ver, framework_note=note))

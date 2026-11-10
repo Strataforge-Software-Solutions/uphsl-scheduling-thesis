@@ -41,7 +41,7 @@ class GradeWindow(models.Model):
     recess_end = models.TimeField(null=True, blank=True)
     lunch_start = models.TimeField(null=True, blank=True)
     lunch_end = models.TimeField(null=True, blank=True)
-    # SHS only: ONE 30-minute break replaces recess + lunch (JHS keeps recess and lunch). No class is placed in it.
+    # SHS only: ONE 15-minute break replaces recess + lunch (JHS keeps a 20-minute recess and lunch). No class is placed in it.
     break_start = models.TimeField(null=True, blank=True)
     break_end = models.TimeField(null=True, blank=True)
     curriculum_framework = models.CharField(max_length=80, blank=True, help_text="Curriculum that applies to this grade, e.g. 'MATATAG'.")

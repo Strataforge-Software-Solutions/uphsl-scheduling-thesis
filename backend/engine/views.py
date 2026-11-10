@@ -243,6 +243,11 @@ class ScheduleViewSet(viewsets.ModelViewSet):
         Reuses the same find_conflicts() already relied on for exams, so
         the policy (hard block for teacher/room, grace-window tolerance for
         section) is identical across the whole system instead of exams-only."""
+        from .college_break import is_blocked_slot, message as college_break_message
+        slot = validated_data.get("timeslot")
+        if slot is not None and is_blocked_slot(slot):
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({"detail": college_break_message()})
         conflicts = find_conflicts(
             teacher=validated_data.get("teacher"),
             room=validated_data.get("room"),
@@ -942,7 +947,8 @@ def generate_schedule_view(request):
 
         teachers = list(FacultyProfile.objects.select_related("user").prefetch_related("specializations").filter(user__is_active=True))   # a deactivated teacher is never given a class
         rooms = list(Room.objects.all())
-        timeslots = list(TimeSlot.objects.all())
+        from .college_break import allowed_slots as _college_slots
+        timeslots = _college_slots(list(TimeSlot.objects.all()))
 
         # Every Schedule row already in the database -- from an earlier
         # Generate click for a different program/year/semester, or a manual
@@ -1452,7 +1458,8 @@ def suggest_substitute_view(request):
         affected = affected.filter(section__semester=absence.semester)
 
     teachers = list(FacultyProfile.objects.select_related("user").prefetch_related("specializations").filter(user__is_active=True))   # never suggest a deactivated teacher
-    timeslots = list(TimeSlot.objects.all())
+    from .college_break import allowed_slots as _college_slots
+    timeslots = _college_slots(list(TimeSlot.objects.all()))
     availability_rules = _build_availability_rules(teachers, timeslots, absence.school_year, absence.semester)
 
     # Current workload = how many periods each teacher is already assigned,
