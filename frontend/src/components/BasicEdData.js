@@ -51,17 +51,17 @@ function useList(level, path, params) {
   return { rows, loading, error, load };
 }
 
-const TH = { textAlign: "left", fontSize: "12px", color: "#6b7280", padding: "8px 10px", borderBottom: "1px solid #e5e7eb" };
+const TH = { textAlign: "left", fontSize: "12px", fontWeight: 700, color: "#fff", padding: "8px 10px", borderBottom: "1px solid #174d82" };
 const TD = { padding: "9px 10px", borderBottom: "1px solid #f3f4f6", fontSize: "13px", verticalAlign: "top" };
 
-function Table({ head, children, empty }) {
+function Table({ head, children, empty, className = "", wrapClassName = "" }) {
   return (
-    <div style={{ overflowX: "auto" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead><tr>{head.map((h) => <th key={h} style={TH}>{h}</th>)}</tr></thead>
+    <div className={wrapClassName} style={{ overflowX: "auto" }}>
+      <table className={className} style={className ? undefined : { width: "100%", borderCollapse: "collapse" }}>
+        <thead><tr>{head.map((h) => <th key={h} style={className ? undefined : TH}>{h}</th>)}</tr></thead>
         <tbody>{children}</tbody>
       </table>
-      {empty && <p style={{ color: "#6b7280", fontSize: "13px", padding: "10px" }}>{empty}</p>}
+      {empty && <p className={className ? "basic-ed-table-empty" : undefined} style={{ color: "#6b7280", fontSize: "13px", padding: "10px" }}>{empty}</p>}
     </div>
   );
 }
@@ -174,6 +174,8 @@ export function FacultyTab({ level }) {
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
   const [q, setQ] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   useEffect(() => { if (level === "SHS") API.get("/basic-ed/strands/", { params: { level } }).then((r) => setStrands(r.data)).catch(reportLoadError("the strands")); }, [level]);
   const fields = [
     { key: "first_name", label: "First name" }, { key: "last_name", label: "Last name" },
@@ -194,30 +196,56 @@ export function FacultyTab({ level }) {
     catch (e) { setErr(errText(e)); } finally { setSaving(false); }
   };
   const shown = faculty.rows.filter((f) => !q || `${f.full_name} ${f.employee_id} ${f.department} ${f.specializations}`.toLowerCase().includes(q.toLowerCase()));
+  const pageCount = Math.max(1, Math.ceil(shown.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const pageRows = shown.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  useEffect(() => { setPage(1); }, [q, pageSize]);
   return (
-    <div style={cardStyle}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", marginBottom: "10px", flexWrap: "wrap" }}>
-        <b>{level} faculty directory</b>
-        <div style={{ display: "flex", gap: "8px" }}>
-          <input style={inputStyle} placeholder="Search name, ID, subject…" value={q} onChange={(e) => setQ(e.target.value)} />
-          <button style={btnPrimary} onClick={() => { setErr(""); setEdit({ max_weekly_hours: 30, is_active: true, strand: "" }); }}>Add teacher</button>
+    <div className="basic-ed-data-card basic-ed-faculty-panel" style={cardStyle}>
+      <div className="basic-ed-directory-heading">
+        <div>
+          <h2 className="basic-ed-panel-title">{level} faculty directory</h2>
+          <p className="basic-ed-panel-subtitle">{shown.length} of {faculty.rows.length} teachers · qualifications, subject areas and teaching load</p>
+        </div>
+        <div className="basic-ed-directory-tools">
+          <label className="basic-ed-search-field">
+            <span className="basic-ed-search-icon" aria-hidden="true">⌕</span>
+            <input aria-label="Search faculty" placeholder="Search name, ID or subject" value={q} onChange={(e) => setQ(e.target.value)} />
+          </label>
+          <button className="basic-ed-primary-action" onClick={() => { setErr(""); setEdit({ max_weekly_hours: 30, is_active: true, strand: "" }); }}>Add teacher</button>
         </div>
       </div>
       {faculty.error && <Notice tone="error">{faculty.error}</Notice>}
-      <Table head={["Teacher", "ID", "Department", "Specializations", "Load", "Availability", "Status", ""]} empty={!faculty.loading && shown.length === 0 ? "No teachers found." : ""}>
-        {shown.map((f) => (
+      <Table className="basic-ed-faculty-table" wrapClassName="basic-ed-table-wrap" head={["Teacher", "ID", "Department", "Specializations", "Weekly load", "Availability", "Status", "Actions"]} empty={!faculty.loading && shown.length === 0 ? "No teachers match this search." : ""}>
+        {pageRows.map((f) => (
           <tr key={f.id}>
-            <td style={TD}><b>{f.full_name}</b><div style={{ fontSize: "12px", color: "#6b7280" }}>{f.qualifications}</div></td>
-            <td style={TD}>{f.employee_id}</td><td style={TD}>{f.department || "—"}</td>
-            <td style={TD}>{f.specializations || "—"}</td>
-            <td style={TD}>{f.weekly_hours} / {f.max_weekly_hours} h</td>
-            <td style={TD}>{statusText({ status: f.availability_status, submitted_at: f.availability_submitted_at })}</td>
-            <td style={TD}>{f.is_active ? <Badge tone="success">Active</Badge> : <Badge>Inactive</Badge>}</td>
-            <td style={TD}><button style={btn} onClick={() => { setErr(""); setEdit({ ...f, strand: f.strand || "" }); }}>Edit</button>{" "}
-</td>
+            <td className="basic-ed-teacher-cell"><strong>{f.full_name}</strong><span>{f.qualifications || "Qualifications not added"}</span></td>
+            <td><span className="basic-ed-code-chip">{f.employee_id}</span></td>
+            <td>{f.department || "—"}</td>
+            <td className="basic-ed-specialization-cell" title={f.specializations || "No specializations added"}>{f.specializations || "—"}</td>
+            <td>
+              {(() => { const max = Number(f.max_weekly_hours) || 30; const hours = Number(f.weekly_hours) || 0; return (
+                <div className="basic-ed-load-meter"><div><strong>{hours.toFixed(1)}</strong><span> / {max} h</span></div><div className="basic-ed-load-track"><span style={{ width: `${Math.min(100, hours / max * 100)}%` }} /></div></div>
+              ); })()}
+            </td>
+            <td><span className="basic-ed-availability-text">{statusText({ status: f.availability_status, submitted_at: f.availability_submitted_at })}</span></td>
+            <td>{f.is_active ? <Badge tone="success">Active</Badge> : <Badge>Inactive</Badge>}</td>
+            <td><button className="basic-ed-secondary-action" onClick={() => { setErr(""); setEdit({ ...f, strand: f.strand || "" }); }}>Edit</button></td>
           </tr>
         ))}
       </Table>
+      {shown.length > 0 && <div className="basic-ed-table-footer">
+        <span>Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, shown.length)} of {shown.length} teachers</span>
+        <label>Rows per page <CustomSelect style={{ ...inputStyle, minWidth: 76 }} value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
+          {[10, 25, 50].map((size) => <option key={size} value={size}>{size}</option>)}
+        </CustomSelect></label>
+        <div className="basic-ed-page-actions">
+          <button type="button" onClick={() => setPage(1)} disabled={currentPage === 1} aria-label="First page">«</button>
+          <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>Previous</button>
+          <span>Page {currentPage} of {pageCount}</span>
+          <button type="button" onClick={() => setPage((p) => Math.min(pageCount, p + 1))} disabled={currentPage >= pageCount}>Next</button>
+        </div>
+      </div>}
       {edit && <FormModal title={edit.id ? "Edit teacher" : "Add teacher"} fields={fields} initial={edit} onSave={save} onClose={() => setEdit(null)} saving={saving} error={err} />}
     </div>
   );
@@ -232,6 +260,9 @@ export function CurriculumTab({ level, windows, periodLabel, structure }) {
   const [grade, setGrade] = useState("");
   const [period, setPeriod] = useState("");
   const [strand, setStrand] = useState("");
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const curr = useList(level, "curriculum/", { grade: grade || undefined, period: period || undefined, strand: strand || undefined });
   const sources = useList(level, "curriculum-sources/");
   const [strands, setStrands] = useState([]);
@@ -284,21 +315,39 @@ export function CurriculumTab({ level, windows, periodLabel, structure }) {
     setTimeout(() => window.URL.revokeObjectURL(url), 5000);
   };
   const unverified = curr.rows.filter((r) => !r.is_verified).length;
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredRows = curr.rows.filter((s) => !normalizedQuery || [s.code, s.name, s.learning_area, s.specialization, s.category, s.strand_code, s.grade_level,
+    s.grading_period === 0 ? "whole year" : periodName(structure, s.grade_level, s.grading_period)].some((v) => String(v ?? "").toLowerCase().includes(normalizedQuery)));
+  const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const pageRows = filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  useEffect(() => { setPage(1); }, [grade, period, strand, query, pageSize]);
   return (
     <div>
-      <div style={cardStyle}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: "10px", flexWrap: "wrap", marginBottom: "10px" }}>
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            <CustomSelect style={inputStyle} value={grade} onChange={(e) => setGrade(e.target.value)}><option value="">All grades</option>{windows.map((w) => <option key={w.grade_level} value={w.grade_level}>Grade {w.grade_level}</option>)}</CustomSelect>
-            <CustomSelect style={inputStyle} value={period} onChange={(e) => setPeriod(e.target.value)}><option value="">All terms / semesters</option>{periodOpts.map(([n, l]) => <option key={n} value={n}>{l}</option>)}</CustomSelect>
-            {level === "SHS" && <CustomSelect style={inputStyle} value={strand} onChange={(e) => setStrand(e.target.value)}><option value="">All strands</option>{strands.map((s) => <option key={s.id} value={s.code}>{s.code}</option>)}</CustomSelect>}
+      <div className="basic-ed-data-card basic-ed-curriculum-panel" style={cardStyle}>
+        <div className="basic-ed-directory-heading">
+          <div>
+            <h2 className="basic-ed-panel-title">Curriculum records</h2>
+            <p className="basic-ed-panel-subtitle">{filteredRows.length} of {curr.rows.length} subjects shown · {unverified} unverified</p>
           </div>
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            <button style={btn} onClick={validate}>Validate curriculum</button>
-            <button style={btn} onClick={downloadTemplate}>Import template</button>
-            <label style={{ ...btn, display: "inline-block" }}>Import file<input type="file" accept=".csv,.xlsx" style={{ display: "none" }} onChange={(e) => { doImport(e.target.files[0]); e.target.value = ""; }} /></label>
-            <button style={btnPrimary} onClick={() => { setErr(""); setEdit({ grade_level: windows[0]?.grade_level, grading_period: 0, category: level === "SHS" ? "core" : "learning_area", sessions_per_week: 4, required_room_type: "classroom", strand: "", is_verified: false }); }}>Add subject</button>
+          <div className="basic-ed-curriculum-actions">
+            <button className="basic-ed-secondary-action" onClick={validate}>Validate curriculum</button>
+            <button className="basic-ed-secondary-action" onClick={downloadTemplate}>Import template</button>
+            <label className="basic-ed-secondary-action basic-ed-file-action">Import file<input type="file" accept=".csv,.xlsx" onChange={(e) => { doImport(e.target.files[0]); e.target.value = ""; }} /></label>
+            <button className="basic-ed-primary-action" onClick={() => { setErr(""); setEdit({ grade_level: windows[0]?.grade_level, grading_period: 0, category: level === "SHS" ? "core" : "learning_area", sessions_per_week: 4, required_room_type: "classroom", strand: "", is_verified: false }); }}>Add subject</button>
           </div>
+        </div>
+        <div className="basic-ed-curriculum-toolbar">
+          <div className="basic-ed-curriculum-filters" aria-label="Filter curriculum">
+            <CustomSelect className="basic-ed-filter-select" style={inputStyle} value={grade} onChange={(e) => setGrade(e.target.value)} aria-label="Filter by grade"><option value="">All grades</option>{windows.map((w) => <option key={w.grade_level} value={w.grade_level}>Grade {w.grade_level}</option>)}</CustomSelect>
+            <CustomSelect className="basic-ed-filter-select" style={inputStyle} value={period} onChange={(e) => setPeriod(e.target.value)} aria-label="Filter by term or semester"><option value="">All terms / semesters</option>{periodOpts.map(([n, l]) => <option key={n} value={n}>{l}</option>)}</CustomSelect>
+            {level === "SHS" && <CustomSelect className="basic-ed-filter-select" style={inputStyle} value={strand} onChange={(e) => setStrand(e.target.value)} aria-label="Filter by strand"><option value="">All strands</option>{strands.map((s) => <option key={s.id} value={s.code}>{s.code}</option>)}</CustomSelect>}
+            {(grade || period || strand || query) && <button className="basic-ed-clear-filters" onClick={() => { setGrade(""); setPeriod(""); setStrand(""); setQuery(""); }}>Clear filters</button>}
+          </div>
+          <label className="basic-ed-search-field basic-ed-curriculum-search">
+            <span className="basic-ed-search-icon" aria-hidden="true">⌕</span>
+            <input aria-label="Search curriculum" placeholder="Search code, subject, strand or specialization" value={query} onChange={(e) => setQuery(e.target.value)} />
+          </label>
         </div>
         {importMsg && <Notice tone={importMsg.tone}>{importMsg.text}</Notice>}
         {issues && (
@@ -311,19 +360,39 @@ export function CurriculumTab({ level, windows, periodLabel, structure }) {
         )}
         {unverified > 0 && <Notice tone="warn">{unverified} line(s) shown are marked <b>unverified</b> — DepEd does not publish them in a form that could be checked (elective names, Grade 12, some Grade 7–10 details). Review and edit them before relying on the schedule.</Notice>}
         {curr.error && <Notice tone="error">{curr.error}</Notice>}
-        <Table head={["Code", "Subject", "Gr.", periodLabel, ...(level === "SHS" ? ["Strand"] : []), "Type", "Periods/wk", "Hours", "Specialization", "Source", ""]} empty={!curr.loading && curr.rows.length === 0 ? "No curriculum records. Import a file or add subjects." : ""}>
-          {curr.rows.map((s) => (
-            <tr key={s.id}>
-              <td style={TD}>{s.code}</td><td style={TD}>{s.name}</td><td style={TD}>{s.grade_level}</td>
-              <td style={TD}>{s.grading_period === 0 ? "Whole year" : periodName(structure, s.grade_level, s.grading_period)}</td>
-              {level === "SHS" && <td style={TD}>{s.strand_code || "All"}</td>}
-              <td style={TD}>{s.category}</td><td style={TD}>{s.sessions_per_week}</td><td style={TD}>{s.total_hours ?? "—"}</td>
-              <td style={TD}>{s.specialization || s.learning_area || "—"}</td>
-              <td style={TD}>{s.is_verified ? <Badge tone="success">Verified</Badge> : <span title={s.verification_note}><Badge tone="warning">Unverified</Badge></span>}</td>
-              <td style={TD}><button style={btn} onClick={() => { setErr(""); setEdit({ ...s, strand: s.strand || "", total_hours: s.total_hours ?? "" }); }}>Edit</button>{" "}<button style={btn} onClick={() => retire(s)}>Retire</button></td>
-            </tr>
-          ))}
+        {curr.loading && <div className="basic-ed-loading-row" role="status">Loading curriculum records…</div>}
+        <Table className="basic-ed-curriculum-table" wrapClassName="basic-ed-table-wrap basic-ed-curriculum-table-wrap"
+          head={["Code", "Subject", "Grade", periodLabel, ...(level === "SHS" ? ["Strand"] : []), "Classification", "Periods / week", "Hours", "Specialization / area", "Source", "Actions"]}
+          empty={!curr.loading && filteredRows.length === 0 ? (query ? "No subjects match your search." : "No curriculum records. Import a file or add subjects.") : ""}>
+          {pageRows.map((s) => {
+            const specializationParts = (s.specialization || s.learning_area || "").split(/[|;]/).map((item) => item.trim()).filter(Boolean);
+            return <tr key={s.id}>
+              <td className="basic-ed-curriculum-code">{s.code}</td>
+              <td className="basic-ed-curriculum-subject"><strong>{s.name}</strong>{s.learning_area && <small>{s.learning_area}</small>}</td>
+              <td><span className="basic-ed-grade-chip">Grade {s.grade_level}</span></td>
+              <td>{s.grading_period === 0 ? <span className="basic-ed-term-chip is-year">Whole year</span> : <span className="basic-ed-term-chip">{periodName(structure, s.grade_level, s.grading_period)}</span>}</td>
+              {level === "SHS" && <td><span className="basic-ed-strand-chip">{s.strand_code || "All strands"}</span></td>}
+              <td><span className="basic-ed-category-label">{String(s.category || "").replace(/_/g, " ")}</span></td>
+              <td className="basic-ed-numeric-cell">{s.sessions_per_week}</td>
+              <td className="basic-ed-numeric-cell">{s.total_hours ?? "—"}</td>
+              <td className="basic-ed-specializations">{specializationParts.length ? specializationParts.map((item, index) => <span key={`${s.id}-${index}`}>{item}</span>) : "—"}</td>
+              <td>{s.is_verified ? <Badge tone="success">Verified</Badge> : <span title={s.verification_note}><Badge tone="warning">Unverified</Badge></span>}</td>
+              <td><div className="basic-ed-table-actions"><button className="basic-ed-secondary-action" onClick={() => { setErr(""); setEdit({ ...s, strand: s.strand || "", total_hours: s.total_hours ?? "" }); }}>Edit</button><button className="basic-ed-danger-action" onClick={() => retire(s)}>Retire</button></div></td>
+            </tr>;
+          })}
         </Table>
+        {filteredRows.length > 0 && <div className="basic-ed-table-footer">
+          <span>Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filteredRows.length)} of {filteredRows.length} subjects</span>
+          <label>Rows per page <CustomSelect style={{ ...inputStyle, minWidth: 76 }} value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
+            {[10, 25, 50, 100].map((size) => <option key={size} value={size}>{size}</option>)}
+          </CustomSelect></label>
+          <div className="basic-ed-page-actions">
+            <button type="button" onClick={() => setPage(1)} disabled={currentPage === 1} aria-label="First page">«</button>
+            <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>Previous</button>
+            <span>Page {currentPage} of {pageCount}</span>
+            <button type="button" onClick={() => setPage((p) => Math.min(pageCount, p + 1))} disabled={currentPage >= pageCount}>Next</button>
+          </div>
+        </div>}
       </div>
       <div style={cardStyle}>
         <b>Curriculum sources</b>

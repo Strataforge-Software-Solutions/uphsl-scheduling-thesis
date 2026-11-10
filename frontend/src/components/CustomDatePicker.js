@@ -78,7 +78,8 @@ export default function CustomDatePicker({ value, defaultValue = "", onChange, o
     const month = viewMonth.getMonth();
     const offset = (new Date(year, month, 1).getDay() + 6) % 7;
     const count = new Date(year, month + 1, 0).getDate();
-    return [...Array(offset).fill(null), ...Array.from({ length: count }, (_, index) => new Date(year, month, index + 1))];
+    const days = [...Array(offset).fill(null), ...Array.from({ length: count }, (_, index) => new Date(year, month, index + 1))];
+    return [...days, ...Array(Math.max(0, 42 - days.length)).fill(null)];
   }, [viewMonth]);
 
   useEffect(() => {

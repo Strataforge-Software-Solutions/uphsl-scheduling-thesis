@@ -18,7 +18,7 @@ import Badge from "./Badge";
 import { StatTile, HBarChart, RecentActivity } from "./Charts";
 import ScheduleEditModal from "./ScheduleEditModal";
 import { RequestMoveModal, GenEdRequestsPanel } from "./GenEdRequests";
-import PrintPreviewButton, { printYears } from "./PrintPreviewButton";
+import PrintPreviewButton, { printYears, printTerms } from "./PrintPreviewButton";
 import { kindLabel, kindFilterOptions } from "../utils/labels";
 import DeanRooms from "./DeanRooms";
 import HowToUse from "./HowToUse";
@@ -32,7 +32,7 @@ import { ReadinessCard, FacultyFitCard, LabCapacityCard, LoadBandsCard, InsightF
 import { useScheduleActions, SelectionBar, RowActions, btnStyle } from "./ScheduleActions";
 import { useConfirmDialog } from "./ConfirmDialog";
 import ClashDialog from "./ClashDialog";
-import ReplacementModal from "./ReplacementModal";
+import ReplacementModal, { prefetchReplacementData } from "./ReplacementModal";
 import ExamSchedulePanel from "./ExamSchedulePanel";
 import GenerateSchedulePanel from "./GenerateSchedulePanel";
 import WorkloadPanel from "./WorkloadPanel";
@@ -612,7 +612,7 @@ function ScheduleManager({ programId, programName = "", departments = [] }) {
         <h3 style={{ margin: 0 }}>Class schedule</h3>
         <div style={{ display: "flex", gap: "8px" }}>
           <PrintPreviewButton disabled={grouped.length === 0} onFixed={load} yearChoices={printYears(byProgram)} defaultYear={yearLevel}
-            params={{ program_id: programId, semester, status: statusFilter, classification: typeFilter }} />
+            termChoices={printTerms(byProgram)} params={{ program_id: programId, semester, status: statusFilter, classification: typeFilter }} />
           <button onClick={() => setShowGenerate(true)} title={`Generate the ${programName || "program"} subject schedule`}
                   style={{ background: "#003366", color: "white" }}>
             Generate Schedule
@@ -1437,6 +1437,8 @@ function CollegeFacultyRoster({ department, departments = [department] }) {
                     <td>{r.availability_days.length ? r.availability_days.join(", ") : "Not submitted yet"}</td>
                     <td>
                       <button onClick={(e) => { e.stopPropagation(); setReplaceFor(r); }}
+                              onPointerEnter={() => prefetchReplacementData(r.faculty_id || r.id)}
+                              onFocus={() => prefetchReplacementData(r.faculty_id || r.id)}
                               title="Find qualified replacements for this teacher's classes"
                               style={{ fontSize: "12px", padding: "5px 10px" }}>
                         Find replacement
@@ -1507,7 +1509,7 @@ function FacultyDetailPanel({ row }) {
         {slots.length === 0 ? (
           <p style={{ margin: 0, fontSize: "13px", color: "#6b7280" }}>Not submitted yet.</p>
         ) : (
-          <table style={{ background: "white", maxWidth: "480px" }}>
+          <table className="faculty-availability-detail-table">
             <thead><tr><th>Day</th><th>Time</th><th>Preference</th></tr></thead>
             <tbody>
               {slots.map((s) => {

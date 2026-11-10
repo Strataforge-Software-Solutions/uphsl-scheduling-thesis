@@ -4,26 +4,59 @@ import API from "../services/api";
 /* Dean / Registrar: a teacher is leaving or unavailable. For each of their classes, show qualified
    replacements ranked by degree / specialization / qualifications, with availability and workload,
    and let the Dean choose one. */
-const chip = { fontSize: "12px", background: "#eef4fb", color: "#003366", borderRadius: 4, padding: "2px 8px" };
+const chip = { fontSize: "12px", background: "var(--replacement-chip-bg, #eef4fb)", color: "var(--replacement-chip-fg, #174a80)", borderRadius: 999, padding: "4px 9px" };
+const replacementPreloads = new Map();
+
+const replacementFacultyId = (faculty) => faculty?.faculty_id || faculty?.id;
+
+export function prefetchReplacementData(facultyId, force = false) {
+  const id = String(facultyId || "");
+  if (!id) return Promise.resolve(null);
+  const cached = replacementPreloads.get(id);
+  if (!force && cached && (cached.expiresAt > Date.now() || cached.promise)) return cached.promise || Promise.resolve(cached.data);
+
+  const promise = API.get("/engine/replacements/teacher/", { params: { faculty_id: id } })
+    .then((response) => {
+      const data = response.data;
+      replacementPreloads.set(id, { data, expiresAt: Date.now() + 30_000 });
+      return data;
+    })
+    .catch(() => {
+      replacementPreloads.delete(id);
+      return null;
+    });
+  replacementPreloads.set(id, { promise, expiresAt: 0 });
+  return promise;
+}
+
+const cachedReplacementData = (facultyId) => {
+  const entry = replacementPreloads.get(String(facultyId || ""));
+  return entry?.expiresAt > Date.now() ? entry.data : null;
+};
 
 export default function ReplacementModal({ faculty, onClose, onChanged }) {
-  const [data, setData] = useState(null);
+  const facultyId = replacementFacultyId(faculty);
+  const [data, setData] = useState(() => cachedReplacementData(facultyId));
   const [error, setError] = useState("");
   const [busyKey, setBusyKey] = useState("");
   const [overload, setOverload] = useState(null);
 
-  const load = () => API.get("/engine/replacements/teacher/", { params: { faculty_id: faculty.faculty_id || faculty.id } })
-    .then((r) => setData(r.data)).catch((e) => setError(e.response?.data?.detail || "Could not load replacements."));
-  // load once when the window opens (load is re-created every render)
+  const load = async (force = false) => {
+    setError("");
+    const result = await prefetchReplacementData(facultyId, force);
+    if (result) setData(result);
+    else setError("Could not load replacements. Please try again.");
+  };
+  // `load` is intentionally recreated, while this request should only initialize for the selected faculty.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { load(); }, []);
+  useEffect(() => { if (!cachedReplacementData(facultyId)) load(); }, [facultyId]);
 
   const assign = async (cls, cand, override = false) => {
     const key = `${cls.schedule_ids[0]}-${cand.faculty_id}`;
     setBusyKey(key); setError(""); setOverload(null);
     try {
       await API.post("/engine/replacements/assign/", { schedule_ids: cls.schedule_ids, teacher: cand.faculty_id, override_workload: override });
-      await load(); onChanged?.();
+      await load(true); onChanged?.();
     } catch (e) {
       const d = e.response?.data;
       if (e.response?.status === 409 && d?.workload_overload) setOverload({ cls, cand, d });
@@ -32,66 +65,82 @@ export default function ReplacementModal({ faculty, onClose, onChanged }) {
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "12px" }}>
-      <div style={{ background: "white", borderRadius: 6, padding: "22px 24px", width: "820px", maxWidth: "100%", maxHeight: "92vh", overflowY: "auto" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+    <div className="replacement-modal-backdrop">
+      <section className="replacement-modal" role="dialog" aria-modal="true" aria-labelledby="replacement-modal-title">
+        <header className="replacement-modal-header">
           <div>
-            <h3 style={{ margin: 0, color: "#003366" }}>Find replacement{data ? ` for ${data.faculty.full_name}` : ""}</h3>
-            <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#6b7280" }}>
-              Ranked by degree, specialization and qualifications, then availability and remaining workload.
-            </p>
+            <div className="replacement-modal-eyebrow">FACULTY COVERAGE</div>
+            <h2 id="replacement-modal-title">Find a replacement</h2>
+            <p>{data ? `Classes assigned to ${data.faculty.full_name}` : "Review available faculty for this teacher’s classes."}</p>
           </div>
-          <button onClick={onClose} aria-label="Close" style={{ border: "1px solid #d1d5db", background: "white", color: "#374151", fontSize: "13px", fontWeight: 600, padding: "6px 12px", borderRadius: 4, cursor: "pointer" }}>Close</button>
-        </div>
-        {error && <p style={{ color: "#b91c1c", fontSize: "13px" }}>{error}</p>}
-        {!data && !error && <p style={{ color: "#6b7280" }}>Loading…</p>}
-        {data && data.classes.length === 0 && <p style={{ color: "#6b7280", marginTop: "16px" }}>This teacher has no classes you can reassign.</p>}
-        {data && data.classes.map((cls) => (
-          <div key={cls.schedule_ids.join("-")} style={{ border: "1px solid #e5e7eb", borderRadius: 6, padding: "12px 14px", marginTop: "14px" }}>
-            <div style={{ fontWeight: 600 }}>{cls.code ? `${cls.code} — ` : ""}{cls.subject} <span style={{ fontWeight: 400, color: "#6b7280" }}>· {cls.section}</span></div>
-            <div style={{ fontSize: "13px", color: "#6b7280", marginTop: "2px" }}>
-              {cls.when} · {cls.hours} h/week{cls.required_field ? ` · Field: ${cls.required_field}` : ""}
-            </div>
-            {cls.suggestions.length === 0 ? (
-              <p style={{ fontSize: "13px", color: "#b91c1c", margin: "10px 0 0" }}>{cls.reason_none || "No qualified faculty is free for this class. Check availability submissions or the workload limits."}</p>
-            ) : cls.suggestions.map((c, i) => (
-              <div key={c.faculty_id} style={{ display: "flex", gap: "12px", justifyContent: "space-between", alignItems: "flex-start", padding: "10px 0", borderTop: i ? "1px solid #f3f4f6" : "none", marginTop: i ? 0 : "10px" }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 600 }}>
-                    {i === 0 && <span style={{ ...chip, background: "#e6f6ec", color: "#1e5f3a", marginRight: "6px" }}>Best match</span>}
-                    {c.full_name} <span style={{ fontWeight: 400, color: "#6b7280", fontSize: "13px" }}>{c.school_id} · {c.faculty_type === "part_time" ? "Part-time" : "Full-time"} · {c.department}</span>
-                  </div>
-                  <div style={{ fontSize: "13px", color: "#374151", marginTop: "3px" }}>
-                    {c.degree ? <>Degree: {c.degree}</> : <span style={{ color: "#6b7280" }}>No degree on file</span>}
-                    {c.specializations.length > 0 && <> · Specialization: {c.specializations.join(", ")}</>}
-                  </div>
-                  {c.qualifications && <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "2px" }}>Qualifications: {c.qualifications}</div>}
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", marginTop: "6px" }}>
-                    {c.reasons.map((r) => <span key={r} style={chip}>{r}</span>)}
-                  </div>
-                  <div style={{ fontSize: "12px", color: "#6b7280", marginTop: "5px" }}>
-                    Load now {c.current_hours} / {c.max_hours} h per week{c.email ? ` · ${c.email}` : ""}
-                  </div>
+          <button className="replacement-close" onClick={onClose} aria-label="Close replacement dialog">×</button>
+        </header>
+        <div className="replacement-modal-body">
+          {error && <div className="replacement-message is-error" role="alert">{error}</div>}
+          {!data && !error && <div className="replacement-message">Loading qualified replacement options…</div>}
+          {data && data.classes.length === 0 && <div className="replacement-message">This teacher has no classes you can reassign.</div>}
+          {data?.classes.map((cls) => (
+            <article className="replacement-class-card" key={cls.schedule_ids.join("-")}>
+              <div className="replacement-class-heading">
+                <div className="replacement-class-title">
+                  <span className="replacement-subject-code">{cls.code || "Class"}</span>
+                  <h3>{cls.subject}</h3>
                 </div>
-                <button onClick={() => assign(cls, c)} disabled={!!busyKey}
-                        style={{ background: "#003366", color: "white", border: "none", padding: "8px 14px", borderRadius: "6px", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
-                  {busyKey === `${cls.schedule_ids[0]}-${c.faculty_id}` ? "Assigning…" : "Assign"}
-                </button>
+                <span className="replacement-section">{cls.section}</span>
               </div>
-            ))}
-          </div>
-        ))}
-      </div>
-      {overload && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.35)", zIndex: 1100, display: "flex", alignItems: "center", justifyContent: "center", padding: "12px" }}>
-          <div role="alertdialog" style={{ background: "white", borderRadius: 6, padding: "22px", width: "460px", maxWidth: "100%", borderTop: "5px solid #d97706" }}>
-            <h3 style={{ margin: 0, color: "#92400e" }}>Workload warning</h3>
-            <p style={{ fontSize: "14px" }}>{overload.d.detail}</p>
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
-              <button onClick={() => setOverload(null)} style={{ background: "white", color: "#111827", border: "1px solid #d1d5db", padding: "8px 16px", borderRadius: "6px", cursor: "pointer" }}>Choose someone else</button>
-              {overload.d.can_override && (
-                <button onClick={() => assign(overload.cls, overload.cand, true)} style={{ background: "#b45309", color: "white", border: "none", padding: "8px 16px", borderRadius: "6px", fontWeight: 600, cursor: "pointer" }}>Assign anyway</button>
+              <div className="replacement-class-meta">
+                <span>{cls.when}</span><span>{cls.hours} h/week</span>
+                {cls.required_field && <span>{cls.required_field}</span>}
+              </div>
+              {cls.suggestions.length === 0 ? (
+                <div className="replacement-message is-empty">{cls.reason_none || "No qualified faculty is currently free for this class."}</div>
+              ) : (
+                <div className="replacement-candidate-list">
+                  {cls.suggestions.map((c, i) => {
+                    const loadPct = Math.min(100, Math.max(0, (Number(c.current_hours || 0) / Math.max(Number(c.max_hours || 0), 1)) * 100));
+                    return (
+                      <div className="replacement-candidate" key={c.faculty_id}>
+                        <div className="replacement-candidate-main">
+                          <div className="replacement-candidate-name-row">
+                            <h4>{c.full_name}</h4>
+                            {i === 0 && <span className="replacement-best-match">Best match</span>}
+                          </div>
+                          <div className="replacement-candidate-identity">
+                            {[c.school_id, c.faculty_type === "part_time" ? "Part-time" : "Full-time", c.department].filter(Boolean).join(" · ")}
+                          </div>
+                          <div className="replacement-candidate-credentials">
+                            {c.degree || "No degree on file"}
+                            {c.specializations?.length > 0 && <> <span aria-hidden="true">·</span> {c.specializations.join(", ")}</>}
+                            {c.qualifications && <> <span aria-hidden="true">·</span> {c.qualifications}</>}
+                          </div>
+                          <div className="replacement-reason-list">
+                            {c.reasons.map((reason) => <span key={reason} style={chip}>{reason}</span>)}
+                          </div>
+                          <div className="replacement-workload">
+                            <div className="replacement-workload-label"><span>Weekly workload</span><strong>{c.current_hours} / {c.max_hours} h</strong></div>
+                            <div className="replacement-workload-track"><span style={{ width: `${loadPct}%` }} /></div>
+                          </div>
+                        </div>
+                        <button className="replacement-assign" onClick={() => assign(cls, c)} disabled={!!busyKey}>
+                          {busyKey === `${cls.schedule_ids[0]}-${c.faculty_id}` ? "Assigning…" : "Assign"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
+            </article>
+          ))}
+        </div>
+      </section>
+      {overload && (
+        <div className="replacement-warning-backdrop">
+          <div className="replacement-warning" role="alertdialog" aria-labelledby="replacement-warning-title">
+            <h3 id="replacement-warning-title">Workload limit warning</h3>
+            <p>{overload.d.detail}</p>
+            <div className="replacement-warning-actions">
+              <button className="replacement-close-action" onClick={() => setOverload(null)}>Choose someone else</button>
+              {overload.d.can_override && <button className="replacement-override" onClick={() => assign(overload.cls, overload.cand, true)}>Assign anyway</button>}
             </div>
           </div>
         </div>

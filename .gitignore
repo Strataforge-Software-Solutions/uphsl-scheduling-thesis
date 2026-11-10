@@ -6,6 +6,9 @@
 serviceAccount*.json
 *.pem
 
+# local database backups contain private application records; keep them out of Git
+database_backups/
+
 # python / django
 __pycache__/
 *.pyc

@@ -12,6 +12,12 @@ const btnPrimary = { ...btn, background: "#003366", color: "white", fontWeight: 
 const DAY_ORDER = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
 const DAY_NAME = { Mon: "Monday", Tue: "Tuesday", Wed: "Wednesday", Thu: "Thursday", Fri: "Friday", Sat: "Saturday", Sun: "Sunday" };
 const dayOf = (o) => String(o.day || o.label || "").slice(0, 3);
+const displayTime = (value) => {
+  const [hours, minutes] = String(value || "").split(":").map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return value || "";
+  const date = new Date(2000, 0, 1, hours, minutes);
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+};
 // Monday first ... Saturday last, then by start time; same time keeps the server's order (best first)
 const byDay = (opts) => opts.map((o, i) => [o, i]).sort(([a, i], [b, j]) =>
   (DAY_ORDER[dayOf(a)] ?? 9) - (DAY_ORDER[dayOf(b)] ?? 9) || String(a.start || "").localeCompare(String(b.start || "")) || i - j).map(([o]) => o);
@@ -42,59 +48,74 @@ export function RequestMoveModal({ group, onClose, onDone }) {
     setBusy(false);
   };
   return (
-    <div role="dialog" aria-label="Request a Gen Ed schedule change" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.45)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-      <div style={{ background: "white", borderRadius: 6, width: "min(640px, 100%)", maxHeight: "90vh", overflow: "auto", padding: "16px 18px", boxShadow: "var(--shadow-pop)" }}>
-        <h3 style={{ margin: "0 0 4px", color: "#003366" }}>Request a Gen Ed schedule change</h3>
-        <p style={{ margin: "0 0 10px", fontSize: 13, color: "#4b5563" }}>
-          {group.subject_code} — {group.subject_title} · {group.section_name}. Gen Ed classes belong to the Registrar: pick the time you would like
-          it moved to (for example to free its current time for a major subject). Nothing changes until the Registrar approves.
-        </p>
-        {error && <p role="alert" style={{ color: "#b91c1c", fontSize: 13 }}>{error}</p>}
-        {done ? (
-          <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 6, padding: "10px 12px", fontSize: 13, color: "#166534" }}>
-            <b>Request sent.</b> {done.subject}: {done.current} → {done.target}. The Registrar was notified; you will be notified of the decision.
-            <div style={{ textAlign: "right", marginTop: 8 }}><button style={btnPrimary} onClick={onClose}>OK</button></div>
+    <div className="gened-move-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <section className="gened-move-modal" role="dialog" aria-modal="true" aria-labelledby="gened-move-title">
+        <header className="gened-move-header">
+          <div>
+            <div className="gened-move-eyebrow">SCHEDULE CHANGE REQUEST</div>
+            <h2 id="gened-move-title">Request a Gen Ed schedule change</h2>
+            <p>Choose an available time. The schedule changes only after the Registrar approves.</p>
           </div>
-        ) : !data ? (!error && <p style={{ fontSize: 13, color: "#6b7280" }}>Loading the possible times…</p>) : (
-          <>
-            {data.note && <p style={{ fontSize: 13, color: "#92400e", margin: "0 0 8px" }}>{data.note}</p>}
-            <div style={{ fontSize: 13, color: "#374151", marginBottom: 6 }}>Now: <b>{data.class.when}</b> · {data.class.room} · {data.class.teacher}</div>
-            {data.options.length === 0 ? (
-              <p style={{ fontSize: 13, color: "#b91c1c" }}>{data.reason || "There is no other free time for this class right now."}</p>
-            ) : (
-              <div role="radiogroup" aria-label="New time" style={{ maxHeight: 260, overflowY: "auto", border: "1px solid #e5e7eb", borderRadius: 6, padding: 6 }}>
-                {byDay(data.options).map((o, i, all) => (
-                  <React.Fragment key={o.key}>
-                  {(i === 0 || dayOf(all[i - 1]) !== dayOf(o)) && (
-                    <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", padding: i === 0 ? "2px 6px 4px" : "8px 6px 4px",
-                      borderTop: i === 0 ? "none" : "1px solid #f3f4f6" }}>{DAY_NAME[dayOf(o)] || dayOf(o)}</div>
-                  )}
-                  <label style={{ display: "flex", gap: 8, alignItems: "center", padding: "5px 6px", borderRadius: 6, cursor: "pointer",
-                    background: key === o.key ? "#eff6ff" : "white", fontSize: 13 }}>
-                    <input type="radio" name="gened-time" checked={key === o.key} onChange={() => setKey(o.key)} />
-                    <span>{o.label} <span style={{ color: "#6b7280", fontSize: 12 }}>· {o.room} · {o.teacher}</span></span>
-                  </label>
-                  </React.Fragment>
-                ))}
-              </div>
-            )}
-            <label style={{ display: "block", marginTop: 10, fontSize: 13, color: "#374151" }}>Reason (for the Registrar)
-              <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} maxLength={500}
-                placeholder="e.g. to free Monday 7:00-10:00 AM for CS3119"
-                style={{ display: "block", width: "100%", boxSizing: "border-box", marginTop: 4, fontSize: 13, padding: 6, borderRadius: 6, border: "1px solid #d1d5db" }} />
-            </label>
-            <p style={{ fontSize: 12, color: "#6b7280", margin: "8px 0 0" }}>
-              When approved, only this Gen Ed class moves (all of its sections if it is shared). Every other class, including other colleges',
-              stays exactly where it is; if the time was taken in the meantime, nothing changes and you are told.
-            </p>
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 10 }}>
-              <button style={btn} onClick={onClose}>Cancel</button>
-              <button style={btnPrimary} onClick={send} disabled={!key || busy}>{busy ? "Sending…" : "Send request"}</button>
+          <button className="gened-move-close" onClick={onClose} aria-label="Close request">×</button>
+        </header>
+        <div className="gened-move-content">
+          <div className="gened-move-subject">
+            <span>{group.subject_code}</span>
+            <strong>{group.subject_title}</strong>
+            <small>{group.section_name}</small>
+          </div>
+          {error && <div className="gened-move-alert" role="alert">{error}</div>}
+          {done ? (
+            <div className="gened-move-success">
+              <strong>Request sent</strong>
+              <p>{done.subject}: {done.current} → {done.target}</p>
+              <span>The Registrar was notified. You’ll receive a notification when a decision is made.</span>
+              <div className="gened-move-actions"><button className="gened-move-primary" onClick={onClose}>Done</button></div>
             </div>
-          </>
-        )}
-      </div>
+          ) : !data ? (!error && <div className="gened-move-loading">Loading available times…</div>) : (
+            <>
+              {data.note && <div className="gened-move-notice">{data.note}</div>}
+              <div className="gened-current-time">
+                <span>Current schedule</span>
+                <strong>{data.class.when}</strong>
+                <small>{data.class.room} <i>·</i> {data.class.teacher}</small>
+              </div>
+              <div className="gened-time-section-heading">
+                <div><h3>Choose a new time</h3><p>Only conflict free options are shown.</p></div>
+                <span>{data.options.length} options</span>
+              </div>
+              {data.options.length === 0 ? (
+                <div className="gened-move-alert">{data.reason || "There is no other free time for this class right now."}</div>
+              ) : (
+                <div className="gened-time-list" role="radiogroup" aria-label="New time">
+                  {byDay(data.options).map((o, i, all) => (
+                    <React.Fragment key={o.key}>
+                      {(i === 0 || dayOf(all[i - 1]) !== dayOf(o)) && <div className="gened-time-day">{DAY_NAME[dayOf(o)] || dayOf(o)}</div>}
+                      <label className={`gened-time-option${key === o.key ? " is-selected" : ""}`}>
+                        <input type="radio" name="gened-time" checked={key === o.key} onChange={() => setKey(o.key)} />
+                        <span className="gened-time-option-main">
+                          <strong>{displayTime(o.start)} – {displayTime(o.end)}</strong>
+                          <small>{[o.room, o.teacher].filter(Boolean).join(" · ")}</small>
+                        </span>
+                        <span className="gened-time-check" aria-hidden="true">✓</span>
+                      </label>
+                    </React.Fragment>
+                  ))}
+                </div>
+              )}
+              <label className="gened-move-reason">Reason <span>Optional</span>
+                <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} maxLength={500}
+                  placeholder="For example, request this time to make room for a major subject" />
+              </label>
+              <p className="gened-move-footnote">If approved, only this Gen Ed class moves. If the selected time becomes unavailable, nothing else is changed.</p>
+              <footer className="gened-move-actions">
+                <button className="gened-move-secondary" onClick={onClose}>Cancel</button>
+                <button className="gened-move-primary" onClick={send} disabled={!key || busy}>{busy ? "Sending…" : "Send request"}</button>
+              </footer>
+            </>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
