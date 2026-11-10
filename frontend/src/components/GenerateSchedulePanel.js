@@ -19,6 +19,7 @@ import { ResolverWindow, notifyWorkloadChanged } from "./OverloadResolver";
 import { toMin, timeWindowProblem, startOptions, endOptions, pickStart, pickEnd, needHint, needMinutes, professorFits, freeText as profFreeText,
   DAY_START, DAY_END } from "../utils/timeWindow";
 import { formatTime } from "../utils/formatDateTime";
+import { SimplifiedGuide } from "./HowToUse";
 
 /* Generate Schedule -- shared by the Registrar (minor / Gen Ed subjects) and the Dean (major subjects). */
 const STANDARD_YEARS = ["1st Year", "2nd Year", "3rd Year", "4th Year", "5th Year"];
@@ -245,13 +246,19 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
   };
 
   return (
-    <div>
+    <div className="workflow-page generate-schedule-page">
+      <div className="generate-intro-grid">
+      <section className="coverage-panel generate-intro-panel">
       {!hideTitle && <h3>{isRegistrar ? "Generate Schedule — Gen Ed Subjects" : `Generate Schedule — ${progName()} Subjects`}</h3>}
       <p style={{ fontSize: "13px", color: "#4b5563", maxWidth: "760px", marginTop: 0 }}>
         {isRegistrar
           ? "You generate the Gen Ed subjects. The Dean of each college then generates the program subjects and they are placed around yours in the same weekly schedule. You can edit and approve Gen Ed subjects only."
           : `You generate the ${progName()} subjects. They are placed around the Registrar's Gen Ed subjects in the same weekly schedule. You can edit, remove and approve ${progName()} subjects only; the Gen Ed subjects are view-only.`}
       </p>
+      </section>
+      <SimplifiedGuide steps={["Choose the program, year level, and semester.", "Review the subjects, room, and faculty settings.", "Generate, then review any conflicts or classes that need attention."]} />
+      </div>
+      <section className="coverage-panel generate-controls-panel">
       <div className="generate-schedule-controls">
         <CustomSelect className="generate-program-select" value={programId} onChange={(e) => setProgramId(e.target.value)}>
           <option value="">-- Program --</option>
@@ -271,6 +278,7 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
         <button onClick={() => run(false)} disabled={running || !programId || !yearLevel || !semester || badRows.length > 0}
           style={{ color: "white" }} title={badRows.length ? `Fix the Start / End Time of ${badRows.join(", ")} first.` : undefined}>{running ? "Generating…" : "Generate"}</button>
       </div>
+      </section>
 
       {!loadingCombos && programId && combos.length === 0 && (
         <p style={{ color: "red", marginTop: "10px" }}>

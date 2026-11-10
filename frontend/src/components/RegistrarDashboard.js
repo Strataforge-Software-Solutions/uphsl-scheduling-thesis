@@ -1,13 +1,14 @@
 import CustomSelect from "./CustomSelect";
 import CustomDatePicker from "./CustomDatePicker";
-import HowToUse from "./HowToUse";
+import HowToUse, { SimplifiedGuide } from "./HowToUse";
 import { reportLoadError } from "../services/loadError";
 import { RegistrarHome } from "./HomeWrappers";
 import React, { useState, useEffect } from "react";
 import { onJump } from "../services/jump";
 import { useLandingTab } from "../services/preferences";
-import { getCachedCurriculumData, loadCurriculumData, prefetchCurriculumData, updateCurriculumCache } from "../services/curriculumCache";
-import API, { getCurrentUser, logout } from "../services/api";
+import { getCachedCurriculumData, loadCurriculumData, updateCurriculumCache } from "../services/curriculumCache";
+import { prefetchDashboardPage } from "../services/pagePrefetch";
+import API, { getCurrentUser, getSchedules, logout } from "../services/api";
 import { formatSchedule } from "../utils/formatSchedule";
 import { LecLabTag, buildLecLabIndex } from "../utils/lecLab";
 import { mergeSchedulesByDay, sortByDayTime } from "../utils/mergeSchedules";
@@ -112,7 +113,7 @@ function RegistrarDashboard() {
         items={NAV_ITEMS}
         activeKey={activeTab}
         onSelect={setActiveTab}
-        onPrefetch={prefetchCurriculumData}
+        onPrefetch={(page) => prefetchDashboardPage(page, "registrar", { programId })}
         userName={user?.username || "Registrar"}
         userRole="Registrar staff"
         onSignOut={handleLogout}
@@ -195,11 +196,13 @@ function SchedulesTab() {
   const [yearLevel, setYearLevel] = useState("");
   const [semester, setSemester] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
+  const [schedulePage, setSchedulePage] = useState(1);
+  const [schedulePageSize, setSchedulePageSize] = useState(25);
 
   const load = () => {
     setLoading(true);
     Promise.allSettled([
-      API.get("/engine/schedules/"),
+      getSchedules(),
       API.get("/rooms/"),
       API.get("/faculty/profiles/"),
     ])
@@ -252,7 +255,12 @@ function SchedulesTab() {
     return true;
   });
   const grouped = sortByDayTime(mergeSchedulesByDay(filtered));
+  const schedulePageCount = Math.max(1, Math.ceil(grouped.length / schedulePageSize));
+  const pageGroups = grouped.slice((schedulePage - 1) * schedulePageSize, schedulePage * schedulePageSize);
   const lecLabIndex = buildLecLabIndex(grouped);
+
+  useEffect(() => { setSchedulePage(1); }, [search, collegeFilter, programFilter, statusFilter, yearLevel, semester, typeFilter, schedulePageSize]);
+  useEffect(() => { if (schedulePage > schedulePageCount) setSchedulePage(schedulePageCount); }, [schedulePage, schedulePageCount]);
 
   const resetFilters = () => {
     setSearch(""); setCollegeFilter(""); setProgramFilter(""); setStatusFilter(""); setYearLevel(""); setSemester(""); setTypeFilter("");
@@ -360,28 +368,30 @@ function SchedulesTab() {
   };
 
   return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
-        <div>
-          <h3 style={{ marginBottom: "2px" }}>Class schedule</h3>
-          <p style={{ fontSize: "13px", color: "#6b7280", margin: 0 }}>
-            {filtered.length} entries shown
-            {collegeFilter && ` · ${collegeFilter}`}{programFilter && ` · ${(programOptions.find(([id]) => String(id) === String(programFilter)) || [])[1] || ""}`}{yearLevel && ` · ${yearLevel}`}{semester && ` · ${semester}`}
-            {draftCount > 0 && ` · ${draftCount} Draft`}{approvedCount > 0 && ` · ${approvedCount} Approved`}
-          </p>
+    <div className="workflow-page schedules-page">
+      <div className="schedule-intro-grid">
+      <section className="coverage-panel schedule-overview-panel">
+      <div className="schedule-overview-heading">
+        <div className="schedule-overview-title">
+          <span className="coverage-panel-icon" aria-hidden="true"><svg className="coverage-icon" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18M8 14h3m-3 3h7"/></svg></span>
+          <div><h3>Class schedule</h3><p>Review and manage class entries across colleges and programs.</p></div>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
-          {/* the PDF follows the filters below (college, program, year level, semester, status, Gen Ed / program subjects) */}
-          <PrintPreviewButton disabled={grouped.length === 0} onFixed={load} yearChoices={printYears(schedules)} defaultYear={yearLevel}
-            params={{ department: collegeFilter, program_id: programFilter, semester, status: statusFilter, classification: typeFilter }} />
-          <p style={{ fontSize: "13px", color: "#4b5563", margin: 0, maxWidth: 360, textAlign: "right" }}>
-            Tick the Gen Ed classes to approve, publish or remove (the top box selects every one shown by this filter).
-          </p>
-        </div>
+        {/* the PDF follows the filters below (college, program, year level, semester, status, Gen Ed / program subjects) */}
+        <PrintPreviewButton disabled={grouped.length === 0} onFixed={load} yearChoices={printYears(schedules)} defaultYear={yearLevel}
+          params={{ department: collegeFilter, program_id: programFilter, semester, status: statusFilter, classification: typeFilter }} />
+      </div>
+      <div className="schedule-overview-stats" aria-label="Schedule summary">
+        <div><strong>{filtered.length}</strong><span>Entries shown</span></div>
+        <div><strong>{draftCount}</strong><span>Gen Ed drafts</span></div>
+        <div><strong>{approvedCount}</strong><span>Gen Ed approved</span></div>
+      </div>
+      <div className="schedule-overview-note"><span aria-hidden="true">i</span><p>Select Gen Ed rows below to approve, publish, return to draft, or remove. The table checkbox selects every Gen Ed row currently shown by your filters.</p></div>
+      </section>
+      <SimplifiedGuide steps={["Search or filter by college, program, year, semester, or status.", "Select Gen Ed rows to approve, publish, return to draft, or remove.", "Use Edit for schedule changes and Preview / Print for the current filters."]} />
       </div>
       <GenEdRequestsPanel role="registrar" onChanged={load} />
 
-      <div style={{
+      <div className="coverage-panel schedule-filter-panel" style={{
         display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "center",
         background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "12px 14px", marginBottom: "16px",
       }}>
@@ -421,6 +431,7 @@ function SchedulesTab() {
         <button onClick={resetFilters} style={{ ...filterInputStyle, color: "#111827" }}>Reset</button>
       </div>
 
+      <section className="coverage-panel schedule-table-panel"><div className="coverage-table-wrap">
       <table className="sched-compact schedule-list-table">
         <thead>
           <tr>
@@ -432,7 +443,7 @@ function SchedulesTab() {
           </tr>
         </thead>
         <tbody>
-          {grouped.map((g) => (
+          {pageGroups.map((g) => (
             <tr key={g.key} style={selected.includes(g.key) ? { background: "#eef6ff" } : undefined}>
               <td>{isMine(g) && <input type="checkbox" aria-label={`Select ${g.subject_code} ${g.section_name}`} checked={selected.includes(g.key)} onChange={() => toggle(g.key)} />}</td>
               <td>{g.subject_code} — {g.subject_title}<LecLabTag row={g} index={lecLabIndex} /></td>
@@ -462,8 +473,26 @@ function SchedulesTab() {
               </td>
             </tr>
           ))}
+          {pageGroups.length === 0 && <tr><td colSpan={9} className="coverage-empty">No schedule entries match these filters.</td></tr>}
         </tbody>
       </table>
+      </div>
+      <div className="schedule-pagination" aria-label="Schedule table pagination">
+        <span>{grouped.length ? `${(schedulePage - 1) * schedulePageSize + 1}–${Math.min(schedulePage * schedulePageSize, grouped.length)} of ${grouped.length} rows` : "0 rows"}</span>
+        <label>Rows per page
+          <CustomSelect aria-label="Rows per page" value={schedulePageSize} onChange={(e) => setSchedulePageSize(Number(e.target.value))}>
+            <option value={10}>10</option><option value={25}>25</option><option value={50}>50</option><option value={100}>100</option>
+          </CustomSelect>
+        </label>
+        <div>
+          <button type="button" onClick={() => setSchedulePage(1)} disabled={schedulePage === 1} aria-label="First page">«</button>
+          <button type="button" onClick={() => setSchedulePage((page) => Math.max(1, page - 1))} disabled={schedulePage === 1}>Previous</button>
+          <span>Page {schedulePage} of {schedulePageCount}</span>
+          <button type="button" onClick={() => setSchedulePage((page) => Math.min(schedulePageCount, page + 1))} disabled={schedulePage >= schedulePageCount}>Next</button>
+          <button type="button" onClick={() => setSchedulePage(schedulePageCount)} disabled={schedulePage >= schedulePageCount} aria-label="Last page">»</button>
+        </div>
+      </div>
+      </section>
 
       <SelectionBar groups={selectedGroups} busy={actions.busy}
         onApprove={() => actions.changeStatus(idsOf(selectedGroups.filter((g) => g.status === "draft")), "approved")}
@@ -525,6 +554,8 @@ function CurriculumTab({ programs, programId, defaultProgram }) {
   const [newFieldName, setNewFieldName] = useState("");
   const [selectedIds, setSelectedIds] = useState([]);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const [form, setForm] = useState({
     code: "", title: "", lec_units: 0, lab_units: 0,
@@ -542,10 +573,13 @@ function CurriculumTab({ programs, programId, defaultProgram }) {
   }, [defaultProgram]);
 
   const filtered = programId ? subjects.filter((s) => String(s.program) === String(programId)) : subjects;
-  const visibleIds = filtered.map((subject) => subject.id);
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paginatedSubjects = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const visibleIds = paginatedSubjects.map((subject) => subject.id);
   const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
 
-  useEffect(() => { setSelectedIds([]); }, [programId]);
+  useEffect(() => { setSelectedIds([]); setCurrentPage(1); }, [programId]);
+  useEffect(() => { if (currentPage > pageCount) setCurrentPage(pageCount); }, [currentPage, pageCount]);
 
   const addSubject = async () => {
     if (!form.code || !form.title || !form.program) return;
@@ -580,7 +614,7 @@ function CurriculumTab({ programs, programId, defaultProgram }) {
   };
 
   const removeSelected = async () => {
-    const ids = visibleIds.filter((id) => selectedIds.includes(id));
+    const ids = filtered.map((subject) => subject.id).filter((id) => selectedIds.includes(id));
     if (!ids.length || bulkDeleting) return;
     if (!(await confirmDialog({
       title: `Remove ${ids.length} selected subject${ids.length === 1 ? "" : "s"}?`,
@@ -644,16 +678,46 @@ function CurriculumTab({ programs, programId, defaultProgram }) {
   if (loading) return <p>Loading curriculum…</p>;
 
   return (
-    <div>
-      <h3>Curriculum Management — {programs.find((p) => String(p.id) === String(programId))?.name || ""}</h3>
-
-      <div style={{ marginBottom: "10px" }}>
-        <input placeholder="New academic field (e.g. Computer Science)" value={newFieldName}
-               onChange={(e) => setNewFieldName(e.target.value)} style={{ width: "260px" }} />
-        <button onClick={addAcademicField}>Add Field</button>
+    <div className="curriculum-dashboard">
+      <div className="curriculum-intro-grid">
+        <section className="coverage-panel curriculum-overview-panel">
+          <div className="coverage-panel-heading">
+            <span className="coverage-panel-icon" aria-hidden="true"><svg className="coverage-icon" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z" /><path d="m3 12 9 5 9-5M3 16l9 5 9-5" /></svg></span>
+            <div>
+              <h3>Curriculum Management</h3>
+              <p>{programs.find((p) => String(p.id) === String(programId))?.name || "All programs"} · Keep subject details and academic fields up to date.</p>
+            </div>
+          </div>
+          <div className="curriculum-overview-stats">
+            <div><strong>{filtered.length}</strong><span>Subjects in this program</span></div>
+            <div><strong>{academicFields.length}</strong><span>Academic fields</span></div>
+            <div><strong>{programs.length}</strong><span>Programs available</span></div>
+          </div>
+          <div className="curriculum-field-create">
+            <div><strong>Academic fields</strong><span>Add a reusable field for subject classification.</span></div>
+            <input aria-label="New academic field" placeholder="e.g., Computer Science" value={newFieldName}
+              onChange={(e) => setNewFieldName(e.target.value)} />
+            <button onClick={addAcademicField} disabled={!newFieldName.trim()}>Add Field</button>
+          </div>
+        </section>
+        <section className="coverage-panel coverage-howto-panel curriculum-guide-panel">
+          <div className="coverage-panel-heading">
+            <span className="coverage-panel-icon"><svg className="coverage-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></svg></span>
+            <div><h3>How to use this tab (Simplified)</h3></div>
+          </div>
+          <div className="coverage-steps">
+            <div><b>1</b><span>Choose a college and program above.</span></div><i>›</i>
+            <div><b>2</b><span>Review subjects and use pagination to browse the list.</span></div><i>›</i>
+            <div><b>3</b><span>Add or update subjects and fields, then regenerate affected schedules.</span></div>
+          </div>
+        </section>
       </div>
 
-      <div className="curriculum-add-form" style={{ marginBottom: "20px" }}>
+      <section className="coverage-panel curriculum-subject-panel">
+        <div className="coverage-panel-heading curriculum-section-heading">
+          <div><h3>Add a subject</h3><p>Enter the subject details below. Required fields are code, title, and program.</p></div>
+        </div>
+        <div className="curriculum-add-form">
         <label className="curriculum-add-field curriculum-add-code"><span>Subject code</span>
           <input aria-label="Subject code" placeholder="e.g., CS1101" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
         </label>
@@ -695,14 +759,27 @@ function CurriculumTab({ programs, programId, defaultProgram }) {
           </CustomSelect>
         </div>
         <button onClick={addSubject}>Add Subject</button>
-      </div>
+        </div>
+      </section>
 
-      <table>
+      <section className="coverage-panel curriculum-list-panel">
+        <div className="coverage-panel-heading curriculum-list-heading">
+          <div><h3>Subjects</h3><p>{filtered.length} {filtered.length === 1 ? "subject" : "subjects"} in the selected program</p></div>
+          <label className="curriculum-page-size">Rows per page
+            <CustomSelect aria-label="Rows per page" value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setCurrentPage(1); }}>
+              <option value={10}>10</option><option value={25}>25</option><option value={50}>50</option>
+            </CustomSelect>
+          </label>
+        </div>
+        <div className="coverage-table-wrap curriculum-table-wrap">
+      <table className="coverage-table curriculum-table">
         <thead>
           <tr>
             <th><label style={{ display: "flex", alignItems: "center", gap: 5 }}>
-              <input type="checkbox" aria-label="Select all visible subjects" checked={allVisibleSelected} disabled={bulkDeleting}
-                onChange={(event) => setSelectedIds(event.target.checked ? visibleIds : [])} />Select all
+              <input type="checkbox" aria-label="Select all subjects on this page" checked={allVisibleSelected} disabled={bulkDeleting}
+                onChange={(event) => setSelectedIds((current) => event.target.checked
+                  ? [...new Set([...current, ...visibleIds])]
+                  : current.filter((id) => !visibleIds.includes(id)))} />Select all
             </label></th>
             <th>Code</th><th>Title</th><th>Lec</th><th>Lab</th><th>Type</th><th>Department</th><th>Field</th><th>Actions</th>
           </tr>
@@ -716,7 +793,7 @@ function CurriculumTab({ programs, programId, defaultProgram }) {
               </button>
             </td>
           </tr>}
-          {filtered.map((s) => (
+          {paginatedSubjects.map((s) => (
             <tr key={s.id}>
               <td><input type="checkbox" aria-label={`Select ${s.code}`} checked={selectedIds.includes(s.id)} disabled={bulkDeleting}
                 onChange={(event) => setSelectedIds((current) => event.target.checked
@@ -733,8 +810,21 @@ function CurriculumTab({ programs, programId, defaultProgram }) {
               <td><button className="curriculum-remove-button" disabled={bulkDeleting} onClick={() => remove(s.id)}>Remove</button></td>
             </tr>
           ))}
+          {paginatedSubjects.length === 0 && <tr><td colSpan={9} className="coverage-empty">No subjects found for this program yet. Add one using the form above.</td></tr>}
         </tbody>
       </table>
+        </div>
+        <div className="curriculum-pagination" aria-label="Subject table pagination">
+          <span>{filtered.length ? `${(currentPage - 1) * pageSize + 1}–${Math.min(currentPage * pageSize, filtered.length)} of ${filtered.length}` : "0 subjects"}</span>
+          <div>
+            <button type="button" onClick={() => setCurrentPage(1)} disabled={currentPage === 1} aria-label="First page">«</button>
+            <button type="button" onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} disabled={currentPage === 1}>Previous</button>
+            <span>Page {currentPage} of {pageCount}</span>
+            <button type="button" onClick={() => setCurrentPage((page) => Math.min(pageCount, page + 1))} disabled={currentPage >= pageCount}>Next</button>
+            <button type="button" onClick={() => setCurrentPage(pageCount)} disabled={currentPage >= pageCount} aria-label="Last page">»</button>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
@@ -1015,7 +1105,7 @@ function CoverageTab() {
           <section className="coverage-panel coverage-howto-panel">
             <div className="coverage-panel-heading">
               <span className="coverage-panel-icon"><CoverageIcon type="info" /></span>
-              <div><h3>How to use this tab</h3></div>
+              <div><h3>How to use this tab (Simplified)</h3></div>
             </div>
             <div className="coverage-steps">
               <div><b>1</b><span>Report an absence with the date and reason.</span></div><i>›</i>

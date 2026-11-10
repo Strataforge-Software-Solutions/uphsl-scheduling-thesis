@@ -19,12 +19,21 @@ except ImportError:   # python-dotenv not installed in this Python: run  pip ins
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "" if IS_VERCEL else "local-development-only-change-before-deploy")
 if not SECRET_KEY:
     raise ImproperlyConfigured("Set DJANGO_SECRET_KEY in the deployment environment.")
+if IS_VERCEL and SECRET_KEY == "local-development-only-change-before-deploy":
+    raise ImproperlyConfigured("DJANGO_SECRET_KEY must not use the local development key in production.")
 
-DEBUG = os.environ.get("DJANGO_DEBUG", "false" if IS_VERCEL else "true").lower() in {"1", "true", "yes"}
+DEBUG = False if IS_VERCEL else os.environ.get("DJANGO_DEBUG", "true").lower() in {"1", "true", "yes"}
+if IS_VERCEL and not os.environ.get("DJANGO_ALLOWED_HOSTS", "").strip():
+    raise ImproperlyConfigured("Set DJANGO_ALLOWED_HOSTS to the exact production hostnames in Vercel.")
 ALLOWED_HOSTS = [host.strip() for host in os.environ.get(
-    "DJANGO_ALLOWED_HOSTS", ".vercel.app,localhost,127.0.0.1"
+    "DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1"
 ).split(",") if host.strip()]
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SESSION_COOKIE_SECURE = IS_VERCEL
+CSRF_COOKIE_SECURE = IS_VERCEL
+SECURE_HSTS_SECONDS = 31_536_000 if IS_VERCEL else 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+SECURE_HSTS_PRELOAD = False
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -95,6 +104,12 @@ DATABASES = {
         # keepalives stop wifi / the Supabase pooler from silently dropping a long-running command
         "OPTIONS": {"connect_timeout": 15, "keepalives": 1, "keepalives_idle": 30,
                     "keepalives_interval": 10, "keepalives_count": 5},
+        # Local runserver talks to Supabase over a remote connection. Reusing
+        # that connection avoids a TLS/database handshake on every API call.
+        # Keep the serverless default at zero so Vercel does not retain one
+        # database connection per warm function instance.
+        "CONN_MAX_AGE": int(os.environ.get("DB_CONN_MAX_AGE", "0" if IS_VERCEL else "60")),
+        "CONN_HEALTH_CHECKS": True,
     }
 }
 # --- Using local MySQL instead of Supabase? Comment out the block above and use this: ---
@@ -123,7 +138,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "accounts.authentication.PasswordChangeRequiredJWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",

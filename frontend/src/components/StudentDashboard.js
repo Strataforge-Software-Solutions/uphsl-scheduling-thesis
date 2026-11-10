@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { reportLoadError } from "../services/loadError";
-import API, { getCurrentUser, logout } from "../services/api";
+import API, { getCurrentUser, getSchedules, logout } from "../services/api";
 import { formatSchedule } from "../utils/formatSchedule";
 import { LecLabTag, buildLecLabIndex } from "../utils/lecLab";
 import { mergeSchedulesByDay } from "../utils/mergeSchedules";
@@ -17,7 +17,7 @@ function StudentDashboard({ studentId }) {
   const user = getCurrentUser();
 
   useEffect(() => {
-    API.get("/engine/schedules/")
+    getSchedules()
       .then((res) => setClasses(res.data))
       .catch(reportLoadError("your classes"))
       .finally(() => setLoading(false));

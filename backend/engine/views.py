@@ -1,4 +1,5 @@
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework.exceptions import PermissionDenied
 from rest_framework import viewsets, permissions, status
@@ -196,6 +197,25 @@ class ScheduleViewSet(viewsets.ModelViewSet):
             "subject", "subject__field", "teacher__user", "room", "section", "section__program",
             "timeslot", "approved_by",
         )
+        if getattr(self, "action", None) == "list":
+            # The schedule list is the largest recurring response. Keep the
+            # joins needed by ScheduleSerializer, but avoid transferring unused
+            # columns (for example room equipment and faculty qualifications)
+            # from the hosted database on every list request.
+            qs = qs.only(
+                "id", "subject_id", "teacher_id", "room_id", "section_id", "timeslot_id",
+                "is_substitution", "original_teacher_id", "is_manual_override", "school_year",
+                "generated_at", "status", "approved_by_id", "approved_at", "merge_key",
+                "qualification_override",
+                "subject__code", "subject__title", "subject__classification", "subject__field_id",
+                "subject__field__name",
+                "teacher__user__first_name", "teacher__user__last_name",
+                "room__name",
+                "section__name", "section__program_id", "section__year_level", "section__semester",
+                "section__student_count", "section__program__name", "section__program__department",
+                "timeslot__day", "timeslot__start_time", "timeslot__end_time",
+                "approved_by__username",
+            )
         user = self.request.user
         if user.role == "faculty" and user.faculty_type in ("full_time", "part_time"):
             return qs.filter(teacher__user=user)          # faculty sees only their own classes
@@ -561,12 +581,59 @@ class LogViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = LogSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+    def get_queryset(self):
+        user = self.request.user
+        qs = Log.objects.select_related("user").order_by("-timestamp")
+        if user.is_it_admin or user.role == "registrar":
+            return qs
+        if user.role == "faculty" and user.faculty_type == "dean":
+            schedule_ids = Schedule.objects.filter(
+                section__program__department__in=user.departments
+            ).values_list("pk", flat=True)
+            return qs.filter(schedule_id__in=schedule_ids)
+        return qs.none()
+
 
 class ConflictLogViewSet(viewsets.ModelViewSet):
     """Also the landing point for historical conflict data requested from IT (2021-2026)."""
     queryset = ConflictLog.objects.select_related("section", "teacher__user", "room").order_by("-occurred_at")
     serializer_class = ConflictLogSerializer
     permission_classes = [ReadOnlyOrRegistrarDean]
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = ConflictLog.objects.select_related("section", "teacher__user", "room").order_by("-occurred_at")
+        if user.is_it_admin or user.role == "registrar":
+            return qs
+        if user.role == "faculty" and user.faculty_type == "dean":
+            return qs.filter(
+                Q(section__program__department__in=user.departments)
+                | Q(teacher__user__department__in=user.departments)
+            )
+        return qs.none()
+
+    def _check_dean_scope(self, section, teacher):
+        user = self.request.user
+        if user.role != "faculty" or user.faculty_type != "dean":
+            return
+        if section is None and teacher is None:
+            raise PermissionDenied("A conflict must be linked to a record in your college.")
+        if section is not None and section.program.department not in user.departments:
+            raise PermissionDenied("You can only manage conflicts in your own college.")
+        if teacher is not None and teacher.user.department not in user.departments:
+            raise PermissionDenied("You can only manage conflicts in your own college.")
+
+    def perform_create(self, serializer):
+        self._check_dean_scope(serializer.validated_data.get("section"), serializer.validated_data.get("teacher"))
+        serializer.save()
+
+    def perform_update(self, serializer):
+        current = self.get_object()
+        self._check_dean_scope(
+            serializer.validated_data.get("section", current.section),
+            serializer.validated_data.get("teacher", current.teacher),
+        )
+        serializer.save()
 
 
 def _build_availability_rules(teachers, timeslots, school_year=None, semester=None):

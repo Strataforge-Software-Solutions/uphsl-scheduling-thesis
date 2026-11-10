@@ -1,4 +1,5 @@
 from engine.models import Schedule
+from django.db.models import Count
 
 
 def _time_bucket(t):
@@ -62,9 +63,10 @@ def compute_analytics(department=None, semester=None):
     qs = Schedule.objects.all()
     if department:
         qs = qs.filter(section__program__department__in=department)
-    counts = {}
-    for sem in qs.values_list("section__semester", flat=True):
-        counts[sem] = counts.get(sem, 0) + 1
+    counts = {
+        row["section__semester"]: row["count"]
+        for row in qs.values("section__semester").annotate(count=Count("id"))
+    }
     semesters = sorted(counts)
     if semester not in counts:
         semester = max(counts, key=lambda k: (counts[k], k == "1st Sem")) if counts else None
@@ -156,7 +158,11 @@ def compute_recent_activity(department=None, limit=15):
 
     events = []
 
-    sched = Schedule.objects.select_related("section__program", "approved_by").order_by("-generated_at")
+    sched = Schedule.objects.select_related("section__program", "approved_by").only(
+        "generated_at", "section__year_level", "section__semester", "section__program__name",
+        "approved_at", "approved_by_id", "approved_by__first_name", "approved_by__last_name",
+        "approved_by__username", "status",
+    ).order_by("-generated_at")
     if department:
         sched = sched.filter(section__program__department__in=department)
     groups = OrderedDict()

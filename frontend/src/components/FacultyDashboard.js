@@ -5,8 +5,9 @@ import React, { useState, useEffect } from "react";
 import { onJump } from "../services/jump";
 import { useLandingTab } from "../services/preferences";
 import { reportLoadError } from "../services/loadError";
-import { getCachedCurriculumData, loadCurriculumData, prefetchCurriculumData, updateCurriculumCache } from "../services/curriculumCache";
-import API, { getCurrentUser, logout, displayName } from "../services/api";
+import { getCachedCurriculumData, loadCurriculumData, updateCurriculumCache } from "../services/curriculumCache";
+import { prefetchDashboardPage } from "../services/pagePrefetch";
+import API, { getCurrentUser, getSchedules, logout, displayName } from "../services/api";
 import { formatSchedule } from "../utils/formatSchedule";
 import { LecLabTag, buildLecLabIndex } from "../utils/lecLab";
 import { mergeSchedulesByDay, sortByDayTime } from "../utils/mergeSchedules";
@@ -124,7 +125,7 @@ function FacultyDashboard({ name, department, departments = [department], facult
         items={navItems}
         activeKey={activeTab}
         onSelect={setActiveTab}
-        onPrefetch={facultyType === "dean" ? prefetchCurriculumData : undefined}
+        onPrefetch={(page) => prefetchDashboardPage(page, facultyType === "dean" ? "dean" : facultyType)}
         userName={facultyType === "dean" ? displayName(user) : name}
         userRole={facultyType === "dean" ? "College dean" : facultyType === "part_time" ? "Part-time faculty" : "Full-time faculty"}
         onSignOut={handleLogout}
@@ -168,7 +169,7 @@ function WorkloadSummary({ username }) {
       const mine = res.data.find((p) => p.username === username);
       setProfile(mine || null);
     }).catch(reportLoadError("your faculty profile"));
-    API.get("/engine/schedules/").then((res) => {
+    getSchedules().then((res) => {
       setClassCount(res.data.length);
       const hours = res.data.reduce((sum, s) => {
         if (!s.timeslot_start || !s.timeslot_end) return sum;
@@ -470,7 +471,7 @@ function ScheduleManager({ programId, programName = "", departments = [] }) {
   const [statusFilter, setStatusFilter] = useState("");
 
   const load = () => {
-    API.get("/engine/schedules/").then((res) => setSchedules(res.data));
+    getSchedules().then((res) => setSchedules(res.data));
     API.get("/rooms/").then((res) => setRooms(res.data));
     API.get("/rooms/dean/overview/", { params: { program_id: programId || undefined } }).then((res) => {
       const m = {};
@@ -1537,7 +1538,7 @@ function ScheduleView() {
   const [rosterSection, setRosterSection] = useState(null);
 
   React.useEffect(() => {
-    API.get("/engine/schedules/").then((res) => setClasses(res.data)).catch(reportLoadError("the classes"));
+    getSchedules().then((res) => setClasses(res.data)).catch(reportLoadError("the classes"));
     API.get("/engine/students/").then((res) => setStudents(res.data)).catch(reportLoadError("the students"));
   }, []);
 

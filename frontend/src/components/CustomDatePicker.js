@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import "./DashboardTheme.css";
 
 const toISODate = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -13,6 +14,7 @@ const sameDay = (a, b) => !!a && !!b && a.getFullYear() === b.getFullYear() && a
 export default function CustomDatePicker({ value, defaultValue = "", onChange, onBlur, className = "", style, disabled = false, min, max, "aria-label": ariaLabel = "Choose date" }) {
   const rootRef = useRef(null);
   const triggerRef = useRef(null);
+  const calendarRef = useRef(null);
   const dayRefs = useRef([]);
   const dialogId = React.useId();
   const [uncontrolledValue, setUncontrolledValue] = useState(defaultValue);
@@ -22,12 +24,41 @@ export default function CustomDatePicker({ value, defaultValue = "", onChange, o
   const maxDate = useMemo(() => parseISODate(max), [max]);
   const today = useMemo(() => new Date(), []);
   const [open, setOpen] = useState(false);
+  const [calendarPosition, setCalendarPosition] = useState(null);
   const [viewMonth, setViewMonth] = useState(() => new Date((selectedDate || today).getFullYear(), (selectedDate || today).getMonth(), 1));
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setCalendarPosition(null);
+      return undefined;
+    }
+    const updateCalendarPosition = () => {
+      const trigger = triggerRef.current;
+      const calendar = calendarRef.current;
+      if (!trigger || !calendar) return;
+      const triggerRect = trigger.getBoundingClientRect();
+      const calendarRect = calendar.getBoundingClientRect();
+      const centeredLeft = triggerRect.left + (triggerRect.width - calendarRect.width) / 2;
+      const left = Math.max(8, Math.min(centeredLeft, window.innerWidth - calendarRect.width - 8));
+      const below = triggerRect.bottom + 7;
+      const above = triggerRect.top - calendarRect.height - 7;
+      const preferredTop = below + calendarRect.height <= window.innerHeight - 8 || above < 8 ? below : above;
+      const top = Math.max(8, Math.min(preferredTop, window.innerHeight - calendarRect.height - 8));
+      setCalendarPosition({ left, top });
+    };
+    updateCalendarPosition();
+    window.addEventListener("resize", updateCalendarPosition);
+    window.addEventListener("scroll", updateCalendarPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateCalendarPosition);
+      window.removeEventListener("scroll", updateCalendarPosition, true);
+    };
+  }, [open, viewMonth]);
 
   useEffect(() => {
     if (!open) return undefined;
     const closeOutside = (event) => {
-      if (!rootRef.current?.contains(event.target)) {
+      if (!rootRef.current?.contains(event.target) && !calendarRef.current?.contains(event.target)) {
         setOpen(false);
         onBlur?.({ target: { value: selectedValue }, currentTarget: { value: selectedValue } });
       }
@@ -97,14 +128,15 @@ export default function CustomDatePicker({ value, defaultValue = "", onChange, o
           setOpen((wasOpen) => !wasOpen);
         }}
         onKeyDown={handleTriggerKeyDown}
-        onBlur={(event) => { if (!rootRef.current?.contains(event.relatedTarget)) onBlur?.({ target: { value: selectedValue }, currentTarget: { value: selectedValue } }); }}
+        onBlur={(event) => { if (!rootRef.current?.contains(event.relatedTarget) && !calendarRef.current?.contains(event.relatedTarget)) onBlur?.({ target: { value: selectedValue }, currentTarget: { value: selectedValue } }); }}
       >
         <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4" width="14" height="13" rx="2" /><path d="M6.5 2.5v3M13.5 2.5v3M3.5 8h13" /></svg>
         <span>{selectedDate ? selectedDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "Choose date"}</span>
         <svg className="custom-date-chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7 5 5 5-5" /></svg>
       </button>
-      {open && (
-        <div id={dialogId} className="custom-calendar" role="dialog" aria-label="Choose a date">
+      {open && createPortal(
+        <div ref={calendarRef} id={dialogId} className="custom-calendar" role="dialog" aria-label="Choose a date"
+          style={{ position: "fixed", left: calendarPosition?.left ?? 8, top: calendarPosition?.top ?? 8, visibility: calendarPosition ? "visible" : "hidden" }}>
           <div className="custom-calendar-header">
             <button type="button" className="custom-calendar-nav" aria-label="Previous month" onClick={() => shiftMonth(-1)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m12 4-6 6 6 6" /></svg></button>
             <strong>{monthLabel}</strong>
@@ -137,7 +169,7 @@ export default function CustomDatePicker({ value, defaultValue = "", onChange, o
             <button type="button" onClick={() => changeDate(null)} disabled={!value}>Clear</button>
             <button type="button" onClick={() => changeDate(today)} disabled={!!dateIsDisabled(today)}>Today</button>
           </div>
-        </div>
+        </div>, document.body
       )}
     </div>
   );

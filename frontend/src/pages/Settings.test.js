@@ -80,10 +80,11 @@ test("Appearance saves, applies at once, is cached, and resets to defaults", asy
   expect(document.documentElement.getAttribute("data-text-size")).toBe("medium");
   expect(box.textContent).toContain("Reset to defaults and saved.");
   expect([...box.querySelectorAll(".settings-theme-option")].some((el) => el.textContent.includes("Dark"))).toBe(true);
-  await pickOption("Royal");
+  expect([...box.querySelectorAll(".settings-theme-option")].some((el) => el.textContent.includes("Royal"))).toBe(false);
+  await pickOption("Dark");
   await press("Save");
-  expect(document.documentElement.getAttribute("data-theme")).toBe("royal");     // applied at once, no reload
-  expect(JSON.parse(window.localStorage.getItem("ufast_display")).theme).toBe("royal");
+  expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+  expect(JSON.parse(window.localStorage.getItem("ufast_display")).theme).toBe("dark");
   await press("Reset to defaults");
   expect(document.documentElement.getAttribute("data-theme")).toBe("light");
 });

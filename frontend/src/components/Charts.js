@@ -146,7 +146,7 @@ export function HistoricalHint({ day, startTime, endTime, roomName }) {
         params: { day, start_time: startTime, end_time: endTime || undefined, room: roomName || undefined },
       })
         .then((res) => { if (!cancelled) setResults(res.data.results); })
-        .catch(() => { if (!cancelled) setResults(null); })
+        .catch((err) => { if (!cancelled) setResults(err.response?.status === 403 ? "forbidden" : null); })
         .finally(() => { if (!cancelled) setLoading(false); });
     }, 300); // light debounce so it doesn't fire on every keystroke
     return () => { cancelled = true; clearTimeout(t); };
@@ -161,7 +161,9 @@ export function HistoricalHint({ day, startTime, endTime, roomName }) {
     }}>
       <strong style={{ fontWeight: 600 }}>Historical reference:</strong>{" "}
       {loading ? "checking 2021–2026 records…" : (
-        !results || results.length === 0 ? (
+        results === "forbidden" ? (
+          <span>Historical reference is available to the Registrar and IT admin.</span>
+        ) : !results || results.length === 0 ? (
           <span>No historical record for this day/time{roomName ? ` in ${roomName}` : ""}.</span>
         ) : (
           <span>

@@ -10,6 +10,7 @@ import { kindLabel } from "../utils/labels";
 import ExamConflictDialog from "./ExamConflictDialog";
 import { formatDate, formatTimeRange } from "../utils/formatDateTime";
 import { useConfirmDialog } from "./ConfirmDialog";
+import { SimplifiedGuide } from "./HowToUse";
 
 /* Exam Schedule -- shared by the Registrar and the Dean.
      Registrar : sees and prints MINOR subjects only, can edit their date and time.
@@ -57,6 +58,8 @@ function ExamSchedulePanel({ role, programId }) {
   const [period, setPeriod] = useState("");
   const [sectionId, setSectionId] = useState("");
   const [yearLevel, setYearLevel] = useState("");
+  const [examPage, setExamPage] = useState(1);
+  const [examPageSize, setExamPageSize] = useState(25);
 
   const [form, setForm] = useState({
     subject: "", section: "", proctor: "", room: "", exam_date: "",
@@ -104,12 +107,15 @@ function ExamSchedulePanel({ role, programId }) {
   });
   const sortKey = (e) => `${e.exam_date || "9999-99-99"} ${e.timeslot_start || "99:99"} ${e.room_name}`;
   const sorted = [...filtered].sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
-  const byDate = [];
-  sorted.forEach((e) => {
-    const last = byDate[byDate.length - 1];
+  const examPageCount = Math.max(1, Math.ceil(sorted.length / examPageSize));
+  const pagedByDate = [];
+  sorted.slice((examPage - 1) * examPageSize, examPage * examPageSize).forEach((e) => {
+    const last = pagedByDate[pagedByDate.length - 1];
     if (last && last.date === (e.exam_date || "")) last.items.push(e);
-    else byDate.push({ date: e.exam_date || "", items: [e] });
+    else pagedByDate.push({ date: e.exam_date || "", items: [e] });
   });
+  useEffect(() => { setExamPage(1); }, [search, period, sectionId, yearLevel, examPageSize]);
+  useEffect(() => { if (examPage > examPageCount) setExamPage(examPageCount); }, [examPage, examPageCount]);
 
   const sectionMap = {};
   exams.forEach((e) => { sectionMap[e.section] = `${e.section_name} · ${e.program_name} · ${e.semester}`; });
@@ -210,17 +216,22 @@ function ExamSchedulePanel({ role, programId }) {
   const cols = isRegistrar ? 6 : 7;          // visible columns incl. the Edit/Remove column
 
   return (
-    <div>
-      <h3 style={{ color: "#003366", marginTop: 0 }}>
+    <div className="workflow-page exam-schedule-page">
+      <div className="exam-intro-grid">
+      <section className="coverage-panel exam-intro-panel">
+      <h3>
         {isRegistrar ? "Exam Schedule — Gen Ed Subjects" : "Exam Schedule — Program & Gen Ed Subjects"}
       </h3>
-      <p style={{ fontSize: "13px", color: "#4b5563", marginTop: 0 }}>
+      <p>
         {isRegistrar
           ? "You generate, edit and print the Gen Ed exams. Everything is checked against class schedules and the other exams automatically."
           : "You can see the Registrar's Gen Ed exams, but you generate, edit and print only the program-subject exams of your college(s)."}
       </p>
+      </section>
+      <SimplifiedGuide steps={["Choose the semester, exam period, and exam week.", "Generate exams and review any validation or conflict notices.", "Search, filter, edit, or print the exam schedule below."]} />
+      </div>
 
-      <div style={card}>
+      <div className="exam-panel exam-generate-panel" style={card}>
         <h4 style={{ marginTop: 0, marginBottom: "4px", color: "#003366" }}>Generate Exam Schedule</h4>
         <p style={{ fontSize: "13px", color: "#6b7280", marginTop: 0, marginBottom: "18px", maxWidth: "680px" }}>
           Auto-assigns room, proctor and time for every {ownKind} subject in the chosen semester, all year levels at once,
@@ -359,7 +370,7 @@ function ExamSchedulePanel({ role, programId }) {
       {loadError && <p style={{ color: "red" }}>{loadError} <button style={smallBtn} onClick={load}>Try again</button></p>}
 
       {/* ---------- table ---------- */}
-      <div style={{ ...card, padding: 0, overflow: "hidden" }}>
+      <div className="exam-panel exam-table-panel" style={{ ...card, padding: 0, overflow: "hidden" }}>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
@@ -371,12 +382,12 @@ function ExamSchedulePanel({ role, programId }) {
               </tr>
             </thead>
             <tbody>
-              {byDate.length === 0 && (
+              {pagedByDate.length === 0 && (
                 <tr><td style={{ ...td, textAlign: "center", color: "#6b7280", padding: "26px" }} colSpan={cols}>
                   {exams.length === 0 ? "No exam schedule yet. Use Generate above." : "No exams match these filters."}
                 </td></tr>
               )}
-              {byDate.map((g) => (
+              {pagedByDate.map((g) => (
                 <React.Fragment key={g.date || "none"}>
                   <tr>
                     <td colSpan={cols} style={{ background: "#e8eef6", color: "#003366", fontWeight: 600, fontSize: "13px", padding: "8px 12px", borderBottom: "1px solid #d5dfec" }}>
@@ -439,11 +450,25 @@ function ExamSchedulePanel({ role, programId }) {
             </tbody>
           </table>
         </div>
+        <div className="schedule-pagination exam-pagination" aria-label="Exam table pagination">
+          <span>{filtered.length ? `${(examPage - 1) * examPageSize + 1}–${Math.min(examPage * examPageSize, filtered.length)} of ${filtered.length} exam rows` : "0 exam rows"}</span>
+          <label>Rows per page
+            <CustomSelect aria-label="Exam rows per page" value={examPageSize} onChange={(e) => setExamPageSize(Number(e.target.value))}>
+              <option value={10}>10</option><option value={25}>25</option><option value={50}>50</option><option value={100}>100</option>
+            </CustomSelect>
+          </label>
+          <div>
+            <button type="button" onClick={() => setExamPage(1)} disabled={examPage === 1} aria-label="First page">«</button>
+            <button type="button" onClick={() => setExamPage((page) => Math.max(1, page - 1))} disabled={examPage === 1}>Previous</button>
+            <span>Page {examPage} of {examPageCount}</span>
+            <button type="button" onClick={() => setExamPage((page) => Math.min(examPageCount, page + 1))} disabled={examPage >= examPageCount}>Next</button>
+            <button type="button" onClick={() => setExamPage(examPageCount)} disabled={examPage >= examPageCount} aria-label="Last page">»</button>
+          </div>
+        </div>
       </div>
-      <p style={{ fontSize: "12px", color: "#6b7280" }}>{filtered.length} exam row(s) shown{filtered.length !== exams.length ? ` of ${exams.length}` : ""}.</p>
 
       {/* ---------- manual add ---------- */}
-      <div style={card}>
+      <div className="exam-panel exam-manual-panel" style={card}>
         <button style={{ ...smallBtn, marginBottom: showManual ? "12px" : 0 }} onClick={() => setShowManual(!showManual)}>
           {showManual ? "▾ Hide manual entry" : "▸ Add one exam by hand"}
         </button>

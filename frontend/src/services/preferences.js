@@ -29,17 +29,18 @@ function writeCache(p) {
   } catch (e) { /* private window or blocked storage: the server copy still applies */ }
 }
 
-// Themes: "light" = Default, "royal" = Royal, "dark" = site-wide dark colors.
+// Themes: "light" = Default and "dark" = site-wide dark colors.
 export function resolveTheme(theme) {
-  return ["royal", "dark"].includes(theme) ? theme : "light";
+  return theme === "dark" ? "dark" : "light";
 }
 
 // put the display settings on <html>; DashboardTheme.css reads these attributes (never in print)
 export function applyPreferences(p) {
   const prefs = { ...DEFAULT_PREFS, ...(p || {}) };
   const el = document.documentElement;
-  el.setAttribute("data-theme-pref", prefs.theme);
-  el.setAttribute("data-theme", resolveTheme(prefs.theme));
+  const theme = resolveTheme(prefs.theme);
+  el.setAttribute("data-theme-pref", theme);
+  el.setAttribute("data-theme", theme);
   el.setAttribute("data-text-size", prefs.text_size);
   el.setAttribute("data-density", prefs.table_density);
   el.setAttribute("data-reduce-motion", prefs.reduce_motion);

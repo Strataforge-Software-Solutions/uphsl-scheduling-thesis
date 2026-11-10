@@ -6,9 +6,18 @@ program (same year level and section name); rows that cannot be matched are repo
 import csv
 import io
 import re
+import zipfile
 from collections import Counter
 
 from .models import Section, Schedule, Student
+
+MAX_IMPORT_BYTES = 4 * 1024 * 1024
+MAX_IMPORT_ROWS = 10_000
+MAX_IMPORT_COLUMNS = 40
+MAX_CELL_CHARACTERS = 500
+MAX_XLSX_UNCOMPRESSED_BYTES = 32 * 1024 * 1024
+MAX_XLSX_MEMBER_BYTES = 16 * 1024 * 1024
+MAX_XLSX_COMPRESSION_RATIO = 100
 
 ORD = {1: "1st Year", 2: "2nd Year", 3: "3rd Year", 4: "4th Year", 5: "5th Year", 6: "6th Year"}
 WORDS = {"first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5, "sixth": 6}
@@ -32,18 +41,63 @@ def name_key(v):
 
 def read_rows(upload):
     """[(row number, [cells])] from a .csv or .xlsx upload."""
+    if upload.size > MAX_IMPORT_BYTES:
+        raise ValueError("The class list is larger than 4 MB. Choose a smaller file.")
     name = (upload.name or "").lower()
-    data = upload.read()
+    data = upload.read(MAX_IMPORT_BYTES + 1)
+    if len(data) > MAX_IMPORT_BYTES:
+        raise ValueError("The class list is larger than 4 MB. Choose a smaller file.")
     if name.endswith((".xlsx", ".xlsm")):
         from openpyxl import load_workbook
-        ws = load_workbook(io.BytesIO(data), read_only=True, data_only=True).active
-        return [(i, ["" if c is None else str(c).strip() for c in row]) for i, row in enumerate(ws.iter_rows(values_only=True), 1)]
+        # XLSX is a ZIP archive. Reject highly compressed or oversized members
+        # before openpyxl expands XML/shared-string data into memory.
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            members = archive.infolist()
+            expanded_size = sum(member.file_size for member in members)
+            if expanded_size > MAX_XLSX_UNCOMPRESSED_BYTES:
+                raise ValueError("The Excel workbook expands beyond the 32 MB import limit.")
+            if any(member.file_size > MAX_XLSX_MEMBER_BYTES
+                   or (member.file_size and not member.compress_size)
+                   or (member.compress_size and member.file_size / member.compress_size > MAX_XLSX_COMPRESSION_RATIO)
+                   for member in members):
+                raise ValueError("The Excel workbook uses an unsupported compression ratio or file size.")
+        workbook = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+        try:
+            ws = workbook.active
+            # Do not trust worksheet dimensions from an uploaded workbook. Bound
+            # both axes and reject sheets that exceed the import's supported size.
+            if ((ws.max_row or 0) > MAX_IMPORT_ROWS
+                    or (ws.max_column or 0) > MAX_IMPORT_COLUMNS):
+                raise ValueError("The class list may contain at most 10,000 rows and 40 columns.")
+            rows = []
+            for i, row in enumerate(ws.iter_rows(
+                    min_row=1, max_row=MAX_IMPORT_ROWS + 1,
+                    min_col=1, max_col=MAX_IMPORT_COLUMNS, values_only=True), 1):
+                if i > MAX_IMPORT_ROWS:
+                    raise ValueError("The class list may contain at most 10,000 rows.")
+                cells = ["" if c is None else str(c).strip() for c in row]
+                if any(len(cell) > MAX_CELL_CHARACTERS for cell in cells):
+                    raise ValueError("Each class-list cell must be 500 characters or fewer.")
+                rows.append((i, cells))
+            return rows
+        finally:
+            workbook.close()
     if name.endswith((".csv", ".txt")):
         try:
             text = data.decode("utf-8-sig")
         except UnicodeDecodeError:
             text = data.decode("cp1252")
-        return [(i, [c.strip() for c in row]) for i, row in enumerate(csv.reader(io.StringIO(text)), 1)]
+        rows = []
+        for i, row in enumerate(csv.reader(io.StringIO(text)), 1):
+            if i > MAX_IMPORT_ROWS:
+                raise ValueError("The class list may contain at most 10,000 rows.")
+            if len(row) > MAX_IMPORT_COLUMNS:
+                raise ValueError("The class list may contain at most 40 columns.")
+            cells = [c.strip() for c in row]
+            if any(len(cell) > MAX_CELL_CHARACTERS for cell in cells):
+                raise ValueError("Each class-list cell must be 500 characters or fewer.")
+            rows.append((i, cells))
+        return rows
     raise ValueError("Upload a .csv or .xlsx file.")
 
 

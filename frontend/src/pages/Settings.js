@@ -249,7 +249,7 @@ function AppearanceSection({ headingRef }) {
   const { data } = usePreferences();
   const s = usePrefSection(["theme", "text_size", "table_density", "reduce_motion"]);
   const ch = data?.choices || {};
-  const themes = ch.theme || [["light", "Default"], ["royal", "Royal"], ["dark", "Dark"]];
+  const themes = ch.theme || [["light", "Default"], ["dark", "Dark"]];
   const motionOn = s.form.reduce_motion === "on";
   return (
     <Section id="appearance" title="Appearance" icon="palette" headingRef={headingRef}

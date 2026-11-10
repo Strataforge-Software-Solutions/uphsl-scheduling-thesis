@@ -2,8 +2,12 @@
 Nothing is saved: the result only pre-fills the Add Faculty form for the Dean to review and edit."""
 import io
 import re
+import zipfile
 
 MAX_BYTES = 5 * 1024 * 1024
+MAX_DOCX_UNCOMPRESSED_BYTES = 32 * 1024 * 1024
+MAX_DOCX_MEMBER_BYTES = 16 * 1024 * 1024
+MAX_DOCX_COMPRESSION_RATIO = 100
 TITLES = r"(?:dr|engr|prof|atty|mr|mrs|ms|mx|arch|rev|sir|ma'am)\.?"
 SUFFIX = re.compile(r",?\s+(?:ph\.?d|ed\.?d|mit|mba|mba|maed|man|ms|ma|lpt|cpa|rn|rmt|phd|jr|sr|ii|iii)\.?\s*$", re.I)
 DEGREE = re.compile(r"\b(bachelor(?:'s)? of [A-Za-z ,&\-]+|master(?:'s)? of [A-Za-z ,&\-]+|doctor(?:ate)? (?:of|in) [A-Za-z ,&\-]+|"
@@ -23,6 +27,17 @@ def extract_text(name, data):
         r = PdfReader(io.BytesIO(data))
         return "\n".join((p.extract_text() or "") for p in r.pages[:15])
     if name.endswith(".docx"):
+        # DOCX is a ZIP archive; reject oversized or highly-compressed members
+        # before python-docx expands the document XML into memory.
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            members = archive.infolist()
+            if sum(member.file_size for member in members) > MAX_DOCX_UNCOMPRESSED_BYTES:
+                raise ValueError("The Word document expands beyond the 32 MB resume limit.")
+            if any(member.file_size > MAX_DOCX_MEMBER_BYTES
+                   or (member.file_size and not member.compress_size)
+                   or (member.compress_size and member.file_size / member.compress_size > MAX_DOCX_COMPRESSION_RATIO)
+                   for member in members):
+                raise ValueError("The Word document uses an unsupported compression ratio or file size.")
         import docx
         d = docx.Document(io.BytesIO(data))
         parts = [p.text for p in d.paragraphs]

@@ -112,7 +112,7 @@ export const HOWTO = {
     },
     curriculum: {
       summary: "Manage subjects and curriculum for every college.",
-      steps: ["Pick a college and program.", "Browse or search subjects.", "Add or edit a subject (units, hours, field).", "Regenerate affected schedules afterwards."],
+      steps: ["Choose a college and program from the selectors above.", "Review the subject list and use the page controls to move through larger curricula.", "Add a subject with its units, year, semester, type, and optional academic field.", "Use Select all or the row checkboxes to remove subjects, and update an academic field from the subject row.", "Regenerate affected schedules after curriculum changes."],
     },
     coverage: {
       summary: "Report absences and apply a coverage recommendation.",

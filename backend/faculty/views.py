@@ -17,6 +17,12 @@ from engine.permissions import ReadOnlyOrRegistrarDean
 DAY_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 
+def _check_dean_faculty_scope(user, faculty_user):
+    if (user.role == "faculty" and user.faculty_type == "dean"
+            and faculty_user.department not in user.departments):
+        raise PermissionDenied("You can only manage faculty in your own college.")
+
+
 class FacultyProfileViewSet(viewsets.ModelViewSet):
     queryset = FacultyProfile.objects.select_related("user").prefetch_related(
         "availability_slots", "specializations"
@@ -26,6 +32,30 @@ class FacultyProfileViewSet(viewsets.ModelViewSet):
     # FacultyProfile, which cascades to that teacher's Schedule rows,
     # Availability, Absence, and WorkloadRecord. Writes are Registrar/Dean only.
     permission_classes = [ReadOnlyOrRegistrarDean]
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = FacultyProfile.objects.select_related("user").prefetch_related(
+            "availability_slots", "specializations"
+        )
+        if user.is_it_admin or user.role == "registrar":
+            return qs
+        if user.role == "faculty" and user.faculty_type == "dean":
+            return qs.filter(user__department__in=user.departments)
+        if user.role == "faculty":
+            return qs.filter(user=user)
+        return qs.none()
+
+    def perform_create(self, serializer):
+        faculty_user = serializer.validated_data.get("user")
+        if faculty_user is not None:
+            _check_dean_faculty_scope(self.request.user, faculty_user)
+        serializer.save()
+
+    def perform_update(self, serializer):
+        faculty_user = serializer.validated_data.get("user", self.get_object().user)
+        _check_dean_faculty_scope(self.request.user, faculty_user)
+        serializer.save()
 
     @action(detail=False, methods=["get"])
     def roster(self, request):
@@ -45,9 +75,11 @@ class FacultyProfileViewSet(viewsets.ModelViewSet):
         qs = FacultyProfile.objects.select_related("user").prefetch_related(
             "availability_slots", "specializations"
         )
-        if user.role == "faculty" and user.faculty_type == "dean":
+        if user.is_it_admin or user.role == "registrar":
+            pass
+        elif user.role == "faculty" and user.faculty_type == "dean":
             qs = qs.filter(user__department__in=user.departments)
-        elif user.role != "registrar":
+        else:
             raise PermissionDenied("Only the Registrar or a Dean may view the faculty roster.")
 
         from engine import workload as wl
@@ -117,8 +149,10 @@ class AvailabilityViewSet(viewsets.ModelViewSet):
         # privacy-leak pattern fixed earlier for students/schedules.
         if user.role == "faculty" and user.faculty_type in ("part_time", "full_time"):
             return qs.filter(faculty__user=user)
-        if user.role == "registrar" or (user.role == "faculty" and user.faculty_type == "dean"):
-            return qs  # Dean/Registrar review tab — scope further by department if needed
+        if user.is_it_admin or user.role == "registrar":
+            return qs
+        if user.role == "faculty" and user.faculty_type == "dean":
+            return qs.filter(faculty__user__department__in=user.departments)
         # Anything else (e.g. a Student account) gets nothing -- this is
         # faculty-facing data, not something every authenticated user should see.
         return qs.none()
@@ -140,6 +174,26 @@ class AbsenceViewSet(viewsets.ModelViewSet):
     serializer_class = AbsenceSerializer
     permission_classes = [ReadOnlyOrRegistrarDean]
 
+    def get_queryset(self):
+        user = self.request.user
+        qs = Absence.objects.select_related("faculty__user")
+        if user.is_it_admin or user.role == "registrar":
+            return qs
+        if user.role == "faculty" and user.faculty_type == "dean":
+            return qs.filter(faculty__user__department__in=user.departments)
+        if user.role == "faculty":
+            return qs.filter(faculty__user=user)
+        return qs.none()
+
+    def perform_create(self, serializer):
+        _check_dean_faculty_scope(self.request.user, serializer.validated_data["faculty"].user)
+        serializer.save()
+
+    def perform_update(self, serializer):
+        faculty = serializer.validated_data.get("faculty", self.get_object().faculty)
+        _check_dean_faculty_scope(self.request.user, faculty.user)
+        serializer.save()
+
 
 class WorkloadRecordViewSet(viewsets.ModelViewSet):
     """Per-faculty, per-semester total hours + overload flag -- also the landing
@@ -147,6 +201,26 @@ class WorkloadRecordViewSet(viewsets.ModelViewSet):
     queryset = WorkloadRecord.objects.select_related("faculty__user").all()
     serializer_class = WorkloadRecordSerializer
     permission_classes = [ReadOnlyOrRegistrarDean]
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = WorkloadRecord.objects.select_related("faculty__user")
+        if user.is_it_admin or user.role == "registrar":
+            return qs
+        if user.role == "faculty" and user.faculty_type == "dean":
+            return qs.filter(faculty__user__department__in=user.departments)
+        if user.role == "faculty":
+            return qs.filter(faculty__user=user)
+        return qs.none()
+
+    def perform_create(self, serializer):
+        _check_dean_faculty_scope(self.request.user, serializer.validated_data["faculty"].user)
+        serializer.save()
+
+    def perform_update(self, serializer):
+        faculty = serializer.validated_data.get("faculty", self.get_object().faculty)
+        _check_dean_faculty_scope(self.request.user, faculty.user)
+        serializer.save()
 
 
 class CoverageSuggestionViewSet(viewsets.ReadOnlyModelViewSet):
@@ -159,3 +233,14 @@ class CoverageSuggestionViewSet(viewsets.ReadOnlyModelViewSet):
     ).order_by("-created_at")
     serializer_class = CoverageSuggestionSerializer
     permission_classes = [ReadOnlyOrRegistrarDean]
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = CoverageSuggestion.objects.select_related(
+            "absence__faculty__user", "schedule", "suggested_faculty__user"
+        ).order_by("-created_at")
+        if user.is_it_admin or user.role == "registrar":
+            return qs
+        if user.role == "faculty" and user.faculty_type == "dean":
+            return qs.filter(schedule__section__program__department__in=user.departments)
+        return qs.none()

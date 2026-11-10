@@ -21,9 +21,12 @@ function Login({ onLoginSuccess }) {
   const [username, setUsername] = useState("");   // e.g. UPHM-12345
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
     setError("");
     try {
       const user = await login(username, password);
@@ -42,6 +45,8 @@ function Login({ onLoginSuccess }) {
       } else {
         setError(`Sign-in failed (server error ${err.response.status}). Check the server log.`);
       }
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -89,7 +94,9 @@ function Login({ onLoginSuccess }) {
               /></div>
             </div>
             {error && <p className="login-error" role="alert">{error}</p>}
-            <button className="login-submit" type="submit"><LoginIcon name="signin" />Sign in</button>
+            <button className="login-submit" type="submit" disabled={submitting} aria-busy={submitting}>
+              {submitting ? <><span className="login-submit-spinner" aria-hidden="true" />Signing in…</> : <><LoginIcon name="signin" />Sign in</>}
+            </button>
             <div className="login-forgot"><p><LoginIcon name="key" /><strong>Forgot your password?</strong></p><span>Ask the IT Admin to reset it to your school ID.</span></div>
           </form>
           <footer className="login-footer">© 2026 UPHSL Manila · U-FAST</footer>

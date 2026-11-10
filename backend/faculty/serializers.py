@@ -70,6 +70,12 @@ class AbsenceSerializer(serializers.ModelSerializer):
         inst = self.instance
         faculty = attrs.get("faculty", getattr(inst, "faculty", None))
         date = attrs.get("date", getattr(inst, "date", None))
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if (faculty is not None and user is not None and user.is_authenticated
+                and user.role == "faculty" and user.faculty_type == "dean"
+                and faculty.user.department not in user.departments):
+            raise serializers.ValidationError("You can only manage absences in your own college.")
         if faculty is not None and date is not None:
             dup = Absence.objects.filter(faculty=faculty, date=date).exclude(status="denied")
             if inst is not None:

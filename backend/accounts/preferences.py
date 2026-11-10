@@ -27,7 +27,7 @@ from .models import UserPreference
 User = get_user_model()
 
 # ---------------------------------------------------------------- allowed values
-THEMES = [("light", "Default"), ("royal", "Royal"), ("dark", "Dark")]  # "light" is the stored value of Default
+THEMES = [("light", "Default"), ("dark", "Dark")]  # "light" is the stored value of Default
 TEXT_SIZES = [("small", "Small"), ("medium", "Medium"), ("large", "Large")]
 DENSITIES = [("comfortable", "Comfortable"), ("compact", "Compact")]
 MOTION = [("system", "Follow device"), ("on", "On"), ("off", "Off")]
@@ -134,7 +134,7 @@ def _out(user, pref):
     data = {f: getattr(pref, f) for f in PREF_FIELDS}
     data["landing_page"] = landing
     if data["theme"] not in dict(THEMES):
-        data["theme"] = "light"                  # a theme that is no longer offered (Dark, Follow device) reads as Default
+        data["theme"] = "light"                  # an old or unsupported theme reads as Default
     return {
         "profile": {
             "first_name": user.first_name, "last_name": user.last_name, "email": user.email or "", "phone": pref.phone,
@@ -186,6 +186,7 @@ def my_preferences(request):
 # ---------------------------------------------------------------- profile picture
 MAX_PICTURE_BYTES = 2 * 1024 * 1024
 MAX_SIDE = 512
+MAX_IMAGE_PIXELS = 12_000_000
 _FORMATS = {"JPEG": (".jpg", "image/jpeg"), "PNG": (".png", "image/png"), "WEBP": (".webp", "image/webp")}
 _EXT_TYPE = {ext: ctype for ext, ctype in _FORMATS.values()}
 
@@ -217,10 +218,12 @@ def clean_picture(upload):
     raw = upload.read(MAX_PICTURE_BYTES + 1)
     if len(raw) > MAX_PICTURE_BYTES:
         raise PictureError("The picture is larger than 2 MB. Choose a smaller file.")
-    Image.MAX_IMAGE_PIXELS = 40_000_000          # refuses "decompression bomb" files
+    Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS    # Pillow's hard-error threshold is twice this value
     try:
         probe = Image.open(io.BytesIO(raw))
         fmt = probe.format
+        if probe.width * probe.height > MAX_IMAGE_PIXELS:
+            raise PictureError("The picture dimensions are too large. Choose an image with 12 megapixels or fewer.")
         probe.verify()
         if fmt not in _FORMATS:
             raise PictureError("Use a JPG, PNG or WebP picture. Other types (such as GIF or SVG) are not accepted.")

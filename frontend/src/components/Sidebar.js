@@ -47,15 +47,14 @@ function Sidebar({ brandLabel, workspaceLabel, items, activeKey, onSelect, onPre
   });
 
   const toggleGroup = (group) => setCollapsedGroups((old) => ({ ...old, [group]: !old[group] }));
-  const prefetch = (item) => { if (item.key === "curriculum") onPrefetch?.(item.key); };
+  const prefetch = (item) => onPrefetch?.(item.key);
   const navItem = (item) => (
     <li key={item.key}>
       <button
         type="button"
         className={activeKey === item.key ? "app-nav-item active" : "app-nav-item"}
         aria-current={activeKey === item.key ? "page" : undefined}
-        onMouseEnter={() => prefetch(item)}
-        onFocus={() => prefetch(item)}
+        onMouseEnter={() => { if (item.key === "curriculum") prefetch(item); }}
         onClick={() => { prefetch(item); onSelect(item.key); }}
       >
         {item.label}

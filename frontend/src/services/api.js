@@ -15,6 +15,54 @@ const API = axios.create({
                   // computation, not just a hung connection -- still fails cleanly if truly dead.
 });
 
+// Share matching JSON GETs while they are in flight. Page preloading and the
+// page's own effect can then use the same response instead of sending two
+// requests. Settled responses are never cached, so later visits stay fresh.
+const pendingJsonGets = new Map();
+const stableValue = (value) => {
+  if (Array.isArray(value)) return value.map(stableValue);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stableValue(value[key])]));
+  }
+  return value;
+};
+const axiosGet = API.get.bind(API);
+API.get = (url, config = {}) => {
+  const canShare = !config.signal && !config.cancelToken && !config.headers
+    && (!config.responseType || config.responseType === "json");
+  if (!canShare) return axiosGet(url, config);
+
+  const token = sessionStorage.getItem("access_token") || "";
+  const key = JSON.stringify([url, stableValue(config.params || {}), token]);
+  const pending = pendingJsonGets.get(key);
+  if (pending) return pending;
+
+  const request = axiosGet(url, config);
+  pendingJsonGets.set(key, request);
+  const clear = () => { if (pendingJsonGets.get(key) === request) pendingJsonGets.delete(key); };
+  request.then(clear, clear);
+  return request;
+};
+
+// Several dashboard widgets can mount together and request the same full
+// schedule list. Share only the request already in flight; later refreshes
+// still go to the server and always see current data.
+let schedulesRequest = null;
+let schedulesRequestToken = null;
+export function getSchedules() {
+  const token = sessionStorage.getItem("access_token");
+  if (schedulesRequest && schedulesRequestToken === token) return schedulesRequest;
+  schedulesRequestToken = token;
+  const request = API.get("/engine/schedules/").finally(() => {
+    if (schedulesRequest === request) {
+      schedulesRequest = null;
+      schedulesRequestToken = null;
+    }
+  });
+  schedulesRequest = request;
+  return request;
+}
+
 // Attach the JWT to every request once logged in.
 API.interceptors.request.use((config) => {
   const token = sessionStorage.getItem("access_token");

@@ -2,6 +2,7 @@ import CustomSelect from "./CustomSelect";
 import React, { useCallback, useEffect, useState } from "react";
 import API from "../services/api";
 import UnplacedResolve from "./UnplacedResolve";
+import { SimplifiedGuide } from "./HowToUse";
 
 /* Generate All Minor Schedules: Gen Ed (minor) subjects of CCS, RadTech, Nursing and BAComm in one validated action,
    the departments' minor schedules side by side (shared / separate section, conflicts), and a conflict report. */
@@ -38,9 +39,9 @@ function Cell({ c }) {
   return (
     <div style={{ border: `1px solid ${bad ? "#fca5a5" : "#e5e7eb"}`, borderLeft: `4px solid ${bad ? "#dc2626" : c.mode === "shared" ? "#22c55e" : "#6b7280"}`,
       background: bad ? "#fef2f2" : "#fff", borderRadius: 6, padding: "9px 11px", marginBottom: 8, lineHeight: 1.45 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
-        <span style={{ fontWeight: 600, color: "#111827", overflowWrap: "anywhere" }}>{c.program.replace(/^BS |^BA /, "")} {c.section}</span>
-        <span style={{ color: "#6b7280", fontSize: 12, whiteSpace: "nowrap" }}>{c.students} student{c.students === 1 ? "" : "s"}</span>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 6, alignItems: "baseline" }}>
+        <span style={{ minWidth: 0, fontWeight: 600, color: "#111827", overflowWrap: "anywhere" }}>{c.program.replace(/^BS |^BA /, "")} {c.section}</span>
+        <span style={{ color: "#6b7280", fontSize: 11, textAlign: "right" }}>{c.students} student{c.students === 1 ? "" : "s"}</span>
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 5, margin: "6px 0" }}>
         <Tag bg={m.bg} fg={m.fg}>{c.mode === "shared" ? "Shared section" : c.mode === "separate" ? "Separate section" : "Not scheduled"}</Tag>
@@ -63,29 +64,57 @@ function Cell({ c }) {
 }
 
 export function Comparison({ data }) {
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  useEffect(() => { setPage(1); }, [data]);
   if (!data) return null;
   if (!data.groups.length) return <p style={{ fontSize: 13, color: "#6b7280" }}>No minor subjects found for this semester and year level.</p>;
   const cols = data.departments.length ? data.departments : DEPTS;
-  const SUBJ_W = 230, DEPT_W = 250;
-  const head = { ...th, position: "sticky", top: 0, zIndex: 2, padding: "11px 12px", background: "#e8eef6", color: "#003366", borderBottom: "2px solid #d1d5db" };
+  const pageCount = Math.max(1, Math.ceil(data.groups.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const startIndex = (currentPage - 1) * pageSize;
+  const visibleGroups = data.groups.slice(startIndex, startIndex + pageSize);
+  const firstRow = startIndex + 1;
+  const lastRow = Math.min(startIndex + pageSize, data.groups.length);
+  const subjectWidth = 16;
+  const departmentWidth = (100 - subjectWidth) / cols.length;
+  const head = { ...th, padding: "10px 8px", background: "#e8eef6", color: "#003366", borderBottom: "2px solid #d1d5db", fontSize: 12 };
   return (
-    <div style={{ overflow: "auto", maxHeight: "75vh", border: "1px solid #e5e7eb", borderRadius: 6 }}>
-      <table style={{ borderCollapse: "separate", borderSpacing: 0, width: "100%", minWidth: SUBJ_W + cols.length * DEPT_W, tableLayout: "fixed" }}>
-        <colgroup><col style={{ width: SUBJ_W }} />{cols.map((d) => <col key={d} style={{ width: DEPT_W }} />)}</colgroup>
-        <thead>
-          <tr>
-            <th style={{ ...head, left: 0, zIndex: 3 }}>Subject</th>
-            {cols.map((d) => <th key={d} style={head}>{DEPT_NAME[d] || d}</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {data.groups.map((g, i) => {
+    <div className="minor-comparison">
+      <div className="minor-comparison-pagination">
+        <span className="minor-comparison-count">Showing {firstRow}–{lastRow} of {data.groups.length} subjects</span>
+        <div className="minor-comparison-controls">
+          <div className="minor-comparison-page-actions">
+            <button type="button" onClick={() => setPage(1)} disabled={currentPage === 1} aria-label="First page">«</button>
+            <button type="button" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={currentPage === 1}>Previous</button>
+            <span>Page {currentPage} of {pageCount}</span>
+            <button type="button" onClick={() => setPage((value) => Math.min(pageCount, value + 1))} disabled={currentPage >= pageCount}>Next</button>
+            <button type="button" onClick={() => setPage(pageCount)} disabled={currentPage >= pageCount} aria-label="Last page">»</button>
+          </div>
+          <label className="minor-comparison-page-size">Rows per page
+            <CustomSelect aria-label="Rows per page" value={pageSize} onChange={(event) => { setPageSize(Number(event.target.value)); setPage(1); }}>
+              <option value={5}>5</option><option value={10}>10</option><option value={20}>20</option>
+            </CustomSelect>
+          </label>
+        </div>
+      </div>
+      <div className="minor-comparison-table-wrap">
+        <table className="minor-schedule-table minor-comparison-table" style={{ borderCollapse: "separate", borderSpacing: 0, width: "100%", tableLayout: "fixed" }}>
+          <colgroup><col style={{ width: `${subjectWidth}%` }} />{cols.map((d) => <col key={d} style={{ width: `${departmentWidth}%` }} />)}</colgroup>
+          <thead>
+            <tr>
+              <th style={head}>Subject</th>
+              {cols.map((d) => <th key={d} style={head}>{DEPT_NAME[d] || d}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+          {visibleGroups.map((g, i) => {
             const m = MODE[g.mode] || MODE.separate;
-            const bg = i % 2 ? "#f9fafb" : "#ffffff";
-            const cell = { ...td, padding: "12px", background: bg, borderBottom: "1px solid #e5e7eb", verticalAlign: "top" };
+            const bg = (startIndex + i) % 2 ? "#f9fafb" : "#ffffff";
+            const cell = { ...td, padding: "9px 7px", background: bg, borderBottom: "1px solid #e5e7eb", verticalAlign: "top", overflowWrap: "anywhere" };
             return (
               <tr key={i}>
-                <td style={{ ...cell, position: "sticky", left: 0, zIndex: 1, borderRight: "1px solid #e5e7eb" }}>
+                <td style={{ ...cell, borderRight: "1px solid #e5e7eb" }}>
                   <div style={{ fontWeight: 600, color: "#111827", overflowWrap: "anywhere" }}>{g.code}</div>
                   <div style={{ color: "#111827", margin: "2px 0 4px", overflowWrap: "anywhere" }}>{g.title}</div>
                   <div style={{ color: "#6b7280", fontSize: 12, marginBottom: 6 }}>{g.year_level} · {g.units} unit{g.units === 1 ? "" : "s"}</div>
@@ -105,8 +134,9 @@ export function Comparison({ data }) {
               </tr>
             );
           })}
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -120,7 +150,7 @@ export function ConflictTable({ conflicts }) {
   const cell = { ...td, padding: "10px 12px", overflowWrap: "anywhere", borderBottom: "1px solid #e5e7eb" };
   return (
     <div style={{ overflowX: "auto", border: "1px solid #e5e7eb", borderRadius: 6 }}>
-      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1000, tableLayout: "fixed" }}>
+      <table className="minor-schedule-table" style={{ borderCollapse: "collapse", width: "100%", minWidth: 1000, tableLayout: "fixed" }}>
         <colgroup>{w.map((x, i) => <col key={i} style={{ width: x }} />)}</colgroup>
         <thead><tr>{heads.map((h) => <th key={h} style={{ ...th, padding: "10px 12px" }}>{h}</th>)}</tr></thead>
         <tbody>
@@ -191,34 +221,37 @@ export default function MinorSchedulesPanel() {
   const ok = result && !result.blocked && result.validated;
 
   return (
-    <div>
-      <div style={card}>
-        <p style={{ fontSize: 13, color: "#4b5563", marginTop: 0, maxWidth: 820 }}>
-          Generates the Gen Ed (minor) subjects of <strong>CCS, RadTech, Nursing, BAComm, Allied Health, IHM and BA</strong> in one action. Equivalent subjects
-          (same code, units and title) share one section when their combined students fit the room and everyone is free; otherwise each department
-          gets its own section. The result is re-checked against every schedule (including major subjects) and is only kept when it has no teacher, room or student conflict.
-        </p>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <label style={{ fontSize: 13, color: "#4b5563" }}>Academic year<br />
-            <input value={schoolYear} onChange={(e) => setSchoolYear(e.target.value)} placeholder="2026-2027" style={{ ...sel, width: 120 }} aria-label="Academic year" />
+    <div className="workflow-page minor-schedules-page">
+      <div className="minor-intro-grid">
+      <div className="minor-panel minor-generate-panel" style={card}>
+        <div className="minor-generate-heading">
+          <span className="coverage-panel-icon" aria-hidden="true"><svg className="coverage-icon" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5"/></svg></span>
+          <div><h3>Generate minor schedules</h3><p>Create Gen Ed schedules for CCS, RadTech, Nursing, BAComm, Allied Health, IHM, and BA in one run.</p></div>
+        </div>
+        <p className="minor-generate-description">Equivalent subjects can share a section when room capacity and student availability allow; otherwise they receive separate sections. The generated schedule is checked against major and minor classes before it is saved.</p>
+        <div className="minor-generate-controls">
+          <label>Academic year
+            <input value={schoolYear} onChange={(e) => setSchoolYear(e.target.value)} placeholder="2026-2027" aria-label="Academic year" />
           </label>
-          <label style={{ fontSize: 13, color: "#4b5563" }}>Semester<br />
-            <CustomSelect value={semester} onChange={(e) => setSemester(e.target.value)} style={{ ...sel, width: 136 }} aria-label="Semester">{SEMS.map((s) => <option key={s}>{s}</option>)}</CustomSelect>
+          <label>Semester
+            <CustomSelect value={semester} onChange={(e) => setSemester(e.target.value)} aria-label="Semester">{SEMS.map((s) => <option key={s}>{s}</option>)}</CustomSelect>
           </label>
-          <label style={{ fontSize: 13, color: "#4b5563" }}>Year level<br />
-            <CustomSelect value={yearLevel} onChange={(e) => setYearLevel(e.target.value)} style={{ ...sel, width: 152 }} aria-label="Year level">
+          <label>Year level
+            <CustomSelect value={yearLevel} onChange={(e) => setYearLevel(e.target.value)} aria-label="Year level">
               <option value="All">All year levels</option>{YEARS.map((y) => <option key={y}>{y}</option>)}
             </CustomSelect>
           </label>
-          <button onClick={generate} disabled={busy || !schoolYear.trim()} style={{ alignSelf: "flex-end" }}>{busy ? "Generating…" : "Generate All Minor Schedules"}</button>
+          <button onClick={generate} disabled={busy || !schoolYear.trim()}>{busy ? "Generating…" : "Generate schedules"}</button>
         </div>
-        <p style={{ fontSize: 12, color: "#6b7280", marginBottom: 0 }}>Running it again replaces the earlier draft minor classes of this semester and year level (no duplicates). Approved or published classes are never changed.</p>
+        <div className="minor-generate-note"><span aria-hidden="true">i</span><p>Running again replaces matching draft minor classes for this school year, semester, and year level. Approved and published classes stay unchanged.</p></div>
+      </div>
+      <SimplifiedGuide steps={["Choose the academic year, semester, and year level.", "Generate the minor schedules for all departments.", "Review sharing, conflicts, and classes that could not be placed."]} />
       </div>
 
       {error && <p style={{ color: "#b91c1c", fontSize: 13 }}>{error}</p>}
 
       {result && result.blocked && (
-        <div style={{ ...card, borderColor: "#fecaca", background: "#fef2f2" }}>
+        <div className="minor-panel minor-result-panel" style={{ ...card, borderColor: "#fecaca", background: "#fef2f2" }}>
           <strong style={{ color: "#991b1b" }}>Not saved: {result.detail}</strong>
           <p style={{ fontSize: 13, color: "#7f1d1d" }}>The existing schedule was left unchanged. Conflicts found in the new schedule:</p>
           <ConflictTable conflicts={result.conflicts} />
@@ -226,7 +259,7 @@ export default function MinorSchedulesPanel() {
       )}
 
       {result && !result.blocked && (
-        <div style={{ ...card, borderColor: ok ? "#a7f3d0" : "#fde68a", background: ok ? "#f0fdf4" : "#fffbeb" }}>
+        <div className="minor-panel minor-result-panel" style={{ ...card, borderColor: ok ? "#a7f3d0" : "#fde68a", background: ok ? "#f0fdf4" : "#fffbeb" }}>
           <div style={{ fontWeight: 600, color: ok ? "#166534" : "#92400e", marginBottom: 10 }}>{result.message}</div>
           <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 12 }}>
             {stat("Conflicts detected before generating", result.conflicts_before)}
@@ -262,13 +295,13 @@ export default function MinorSchedulesPanel() {
         </div>
       )}
 
-      <div style={card}>
+      <div className="minor-panel" style={card}>
         <h3 style={{ margin: "0 0 4px", fontSize: 16 }}>Minor schedule comparison</h3>
         <p style={{ fontSize: 13, color: "#6b7280", marginTop: 0 }}>Each subject is shown for every department that takes it, with its day, time, room and teacher, and whether the students share one section or have separate ones.</p>
         <Comparison data={cmp} />
       </div>
 
-      <div style={card}>
+      <div className="minor-panel" style={card}>
         <h3 style={{ margin: "0 0 6px", fontSize: 16 }}>Conflict report</h3>
         {live && (
           <p style={{ fontSize: 13, color: scoped.length ? "#991b1b" : "#166534", marginTop: 0 }}>

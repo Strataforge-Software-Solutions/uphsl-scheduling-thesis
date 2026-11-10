@@ -7,6 +7,7 @@ import BasicEdTeacher from "./BasicEdTeacher";
 import React, { useState } from "react";
 import { refreshCurrentUser } from "../services/api";
 import { usePreferences } from "../services/preferences";
+import "./DashboardTheme.css";
 
 /* IT admin: a clear school-level selector (College / SHS / JHS). Each level keeps its own data and dashboard. */
 function AdminWithLevelSelector() {
@@ -37,7 +38,12 @@ function Dashboard({ user: signedInUser }) {
   const departments = (user.departments && user.departments.length ? user.departments : [user.department]).filter(Boolean);
   const department = departments.join(" & ");
 
-  if (!ready) return <p style={{ padding: 24, color: "#6b7280", fontSize: 14 }}>Loading…</p>;
+  if (!ready) return (
+    <main className="app-loading-screen" role="status" aria-live="polite" aria-label="Loading your workspace">
+      <span className="app-loading-spinner" aria-hidden="true" />
+      <span>Loading…</span>
+    </main>
+  );
   switch (role) {
     case "registrar":
       return <RegistrarDashboard />;

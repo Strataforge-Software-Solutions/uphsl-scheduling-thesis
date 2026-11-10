@@ -8,7 +8,6 @@ import recentNotificationsImage from "../assets/recent-notifications-illustratio
 /* Homepage shown first on the Dean, Registrar and SHS / JHS Principal dashboards.
    Props: role ("dean" | "registrar" | "principal"), name, scope (e.g. college or school level), nav (sidebar items),
    onNavigate(tabKey), stats [{label, value, accent}], tasks [{text, tab, tone}], status [text], extra (optional node). */
-const card = { background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "12px 16px", marginBottom: 16 };
 const ROLE = { dean: "Dean", registrar: "Registrar", principal: "Principal" };
 
 function StatIcon({ label }) {
@@ -89,9 +88,9 @@ export default function HomePage({ role, name, scope, nav = [], onNavigate, stat
   const tabs = nav.filter((i) => i.key && !skip.includes(i.key) && HOWTO[role]?.[i.key]);
   const visibleScope = scope && scope.toLowerCase() !== ROLE[role]?.toLowerCase() ? scope : null;
   return (
-    <div>
-      {!hideIntro && <p style={{ margin: "0 0 16px", fontSize: 13, lineHeight: 1.55, color: "#6b7280", maxWidth: 1040 }}>
-        {name && <strong style={{ fontWeight: 600, color: "#111827" }}>{name}</strong>}
+    <div className="home-dashboard">
+      {!hideIntro && <p className="home-intro">
+        {name && <strong className="home-intro-name">{name}</strong>}
         {ROLE[role] && <span>{name ? " · " : ""}{ROLE[role]}</span>}
         {visibleScope && <span> · {visibleScope}</span>}
         {(name || ROLE[role] || visibleScope) && " · "}{HOME_INTRO[role]}
@@ -99,13 +98,13 @@ export default function HomePage({ role, name, scope, nav = [], onNavigate, stat
 
       {stats.length > 0 && (
         // one compact summary line (label above value), separated by thin rules -- not a row of big tiles
-        <div aria-label="Summary" style={{ ...card, display: "flex", flexWrap: "wrap", padding: 0 }}>
+        <div className="home-summary-card" aria-label="Summary">
           {stats.map((s, i) => (
-            <div className="home-stat-item" key={s.label} style={{ borderLeft: i ? "1px solid #e5e7eb" : "none" }}>
+            <div className="home-stat-item" key={s.label}>
               <div className="home-stat-icon"><StatIcon label={s.label} /></div>
               <div className="home-stat-copy">
                 <div className="home-stat-label">{s.label}</div>
-                <div className="home-stat-value" style={{ color: s.accent && s.accent !== "#15803d" ? s.accent : "#111827" }}>{s.value ?? "…"}</div>
+                <div className="home-stat-value" style={s.accent && s.accent !== "#15803d" ? { color: s.accent } : undefined}>{s.value ?? "…"}</div>
               </div>
             </div>
           ))}
@@ -119,8 +118,8 @@ export default function HomePage({ role, name, scope, nav = [], onNavigate, stat
             <ul className="home-task-list" style={{ paddingLeft: 0, listStyle: "none", fontSize: 13 }}>
               {tasks.map((t, i) => (
                 <li key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid #f3f4f6" }}>
-                  <span style={{ color: t.tone === "bad" ? "#b91c1c" : "#111827" }}>{t.text}</span>
-                  {t.tab && <button type="button" onClick={() => onNavigate(t.tab)} style={{ border: "1px solid #d1d5db", background: "white", color: "#374151", borderRadius: 4, padding: "3px 10px", cursor: "pointer", fontSize: 12 }}>Open</button>}
+                  <span className={t.tone === "bad" ? "is-bad" : ""}>{t.text}</span>
+                  {t.tab && <button className="home-task-open" type="button" onClick={() => onNavigate(t.tab)}>Open</button>}
                 </li>
               ))}
             </ul>

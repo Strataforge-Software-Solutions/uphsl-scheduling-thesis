@@ -81,13 +81,12 @@ export function downloadCsv(name, columns, rows) {
 export function Metric({ label, value, tone, onClick, active }) {
   const cardTitle = React.useContext(CardTitle);
   const analyticsMetric = ANALYTICS_INSIGHT_TITLES.has(cardTitle);
-  const color = tone === "bad" ? C.bad : tone === "warn" ? C.warn : tone === "ok" ? C.ok : C.navy;
   return (
     <button className={analyticsMetric ? "analytics-insight-metric" : undefined} type="button" onClick={onClick} disabled={!onClick}
       style={{ textAlign: "left", background: active ? "#eef6ff" : "#f9fafb", color: "#111827", border: `1px solid ${active ? C.navy : C.line}`,
         borderRadius: 6, padding: "10px 14px", minWidth: 140, flex: "1 1 140px", cursor: onClick ? "pointer" : "default", boxShadow: "none" }}>
-      <div style={{ fontSize: 18, fontWeight: 600, color, fontVariantNumeric: "tabular-nums" }}>{value}</div>
-      <div style={{ fontSize: 12, color: C.muted }}>{label}</div>
+      <div className={`analytics-insight-metric-value tone-${tone || "default"}`}>{value}</div>
+      <div className="analytics-insight-metric-label">{label}</div>
     </button>
   );
 }
@@ -589,7 +588,7 @@ export function InsightFilters({ value, onChange, showCollege = true }) {
         {(opts?.semesters?.length ? opts.semesters : ["1st Sem", "2nd Sem"]).map((x) => <option key={x} value={x}>{x}</option>)}
       </CustomSelect>
       {showCollege && (opts?.departments || []).length > 1 && (
-        <CustomSelect value={value.department || ""} onChange={(e) => set("department", e.target.value)} aria-label="College" style={selStyle}>
+        <CustomSelect value={value.department || ""} onChange={(e) => set("department", e.target.value)} aria-label="College" className="insight-college-select" style={selStyle}>
           <option value="">All colleges</option>
           {opts.departments.map((x) => <option key={x} value={x}>{x}</option>)}
         </CustomSelect>
