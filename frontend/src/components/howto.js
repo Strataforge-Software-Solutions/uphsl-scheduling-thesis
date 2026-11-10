@@ -100,7 +100,7 @@ export const HOWTO = {
     },
     schedules: {
       summary: "Browse, edit and approve schedules across every college.",
-      steps: ["Use the filters (search, college, status, year, semester).", "A shared class (Shared with ...) can be edited: Edit changes the teacher, room or day/time of ALL its sections together, so it stays shared (the room must seat everyone).", "Print / Preview opens the classes shown by the filters as a PDF (college, program, year, semester, status, Gen Ed / program subjects; the search box is not used). A table with conflicts is not printed until you fix them or choose Print anyway (marked NOT FINAL).", "Open a class to change its teacher, room, day or time; the system warns about workload and conflicts.", "Tick Gen Ed classes (or the top box for all shown). The bar acts on the ticked classes only: Approve (conflicts checked first: 'X ready, Y blocked' with reasons), Publish, Back to draft, Remove, Clear.", "Remove lists exactly what goes and allows Undo for 5 minutes; approved or published classes must go Back to draft first.", "Edit (drafts only) picks a new day and time from the free times only and shows what changed; edited classes are kept by Generate (they show 'Edited'). Per row: Approve / Publish and Edit are buttons; Back to draft, Remove and History are in the ⋯ menu (Approve and Remove are greyed out while classes are ticked). Program subjects are view only."],
+      steps: ["Use the filters (search, college, status, year, semester).", "A shared class (Shared with ...) can be edited: Edit changes the teacher, room or day/time of ALL its sections together, so it stays shared (the room must seat everyone).", "Print Report opens the schedule report options. Choose semester or term, year level, and PDF, XLSX, or CSV. The college, program, year, semester, status, and Gen Ed / program filters are applied; search text is not. A report with conflicts is paused until you fix them or choose Export anyway (marked NOT FINAL).", "Open a class to change its teacher, room, day or time; the system warns about workload and conflicts.", "Tick Gen Ed classes (or the top box for all shown). The bar acts on the ticked classes only: Approve (conflicts checked first: 'X ready, Y blocked' with reasons), Publish, Back to draft, Remove, Clear.", "Remove lists exactly what goes and allows Undo for 5 minutes; approved or published classes must go Back to draft first.", "Edit (drafts only) picks a new day and time from the free times only and shows what changed; edited classes are kept by Generate (they show 'Edited'). Per row: Approve / Publish and Edit are buttons; Back to draft, Remove and History are in the ⋯ menu (Approve and Remove are greyed out while classes are ticked). Program subjects are view only."],
     },
     exams: {
       summary: "Create Gen Ed exam schedules, checked against every other schedule.",
@@ -183,7 +183,7 @@ export const HELP_STEPS = {
     "Gen Ed move requests from the Deans appear at the top of Schedules. Approve or reject each one.",
     "Conflicts lists teacher, room and student clashes. Fix them before you publish.",
     "Exam Schedule: generate the exam schedule and print it.",
-    "Print / Preview makes a PDF that follows the filters you set.",
+    "Print Report lets you choose a semester or term and export the schedule as PDF, XLSX, or CSV.",
   ],
   dean: [
     "Home lists the pending tasks of your college.",

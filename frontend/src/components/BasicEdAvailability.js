@@ -188,7 +188,7 @@ export function FacultyAvailability({ level }) {
       {msg && <p role="status" style={{ fontSize: 13, color: msg.ok ? "#166534" : "#b91c1c" }}>{msg.text}</p>}
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
         <thead><tr>{["Teacher", "Status", "Load / limit", "Preferred hours (school)", ""].map((h) => (
-          <th key={h} style={{ textAlign: "left", padding: "8px 10px", borderBottom: "1px solid #e5e7eb", color: "#374151", fontWeight: 600 }}>{h}</th>))}</tr></thead>
+          <th key={h} style={{ textAlign: "left", padding: "8px 10px", borderBottom: "1px solid #174d82", color: "#fff", background: "#0a3b71", fontWeight: 700 }}>{h}</th>))}</tr></thead>
         <tbody>
           {list.teachers.map((t) => (
             <tr key={t.faculty_id} style={{ background: open === t.faculty_id ? "#eef4fb" : "white" }}>

@@ -20,7 +20,7 @@ import { StatTile, HBarChart, RecentActivity } from "./Charts";
 import { kindLabel } from "../utils/labels";
 import ScheduleEditModal from "./ScheduleEditModal";
 import ScheduleProblemsModal from "./ScheduleProblemsModal";
-import PrintPreviewButton, { printYears } from "./PrintPreviewButton";
+import PrintPreviewButton, { printYears, printTerms } from "./PrintPreviewButton";
 import { GenEdRequestsPanel } from "./GenEdRequests";
 import { useScheduleActions, SelectionBar, RowActions, btnStyle } from "./ScheduleActions";
 import { GenEdCoverageCard, RoomHeatmapCard, DependenciesCard, CapacityCard, InsightFilters } from "./InsightCards";
@@ -378,7 +378,7 @@ function SchedulesTab() {
         </div>
         {/* the PDF follows the filters below (college, program, year level, semester, status, Gen Ed / program subjects) */}
         <PrintPreviewButton disabled={grouped.length === 0} onFixed={load} yearChoices={printYears(schedules)} defaultYear={yearLevel}
-          params={{ department: collegeFilter, program_id: programFilter, semester, status: statusFilter, classification: typeFilter }} />
+          termChoices={printTerms(schedules)} params={{ department: collegeFilter, program_id: programFilter, semester, status: statusFilter, classification: typeFilter }} />
       </div>
       <div className="schedule-overview-stats" aria-label="Schedule summary">
         <div><strong>{filtered.length}</strong><span>Entries shown</span></div>

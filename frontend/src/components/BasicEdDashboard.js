@@ -297,12 +297,32 @@ function Overview({ level, overview, go, hideStats = false }) {
               <td><Badge tone={STATUS_TONE[r.status]}>{STATUS_LABEL[r.status]}</Badge></td><td>{r.entry_count} periods</td><td>{r.validation?.errors ? `${r.validation.errors} conflict(s)` : "No conflicts"}</td></tr>))}
           </tbody></table>)}
       </div>
-      <div style={cardStyle}>
-        <b>Recent activity</b>
-        <ul style={{ maxHeight: "220px", overflowY: "auto", margin: "8px 0 0", paddingLeft: "18px", fontSize: "13px", lineHeight: 1.7 }}>
-          {overview.recent.length === 0 && <li style={{ color: "#6b7280" }}>No activity yet.</li>}
-          {overview.recent.map((e) => <li key={e.id}><b>{e.action.replace(/_/g, " ")}</b> — {e.actor_name || "system"} · {formatDateTime(e.created_at)}</li>)}
-        </ul>
+      <div className="shs-activity-card" style={cardStyle}>
+        <div className="shs-activity-heading">
+          <div className="shs-activity-heading-copy">
+            <span className="shs-activity-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M12 7v5l3 2M20 12a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z" /></svg>
+            </span>
+            <div><h2>Recent activity</h2><p>Latest timetable changes and who made them.</p></div>
+          </div>
+          <span className="shs-activity-count">{overview.recent.length} {overview.recent.length === 1 ? "event" : "events"}</span>
+        </div>
+        {overview.recent.length === 0 ? (
+          <div className="shs-activity-empty"><span aria-hidden="true">✓</span><div><strong>No activity yet</strong><p>Schedule generation and review events will appear here.</p></div></div>
+        ) : (
+          <ul className="shs-activity-list" aria-label="Recent timetable activity">
+            {overview.recent.map((e) => {
+              const action = String(e.action || "activity");
+              const actionLabel = action.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+              const tone = action === "generated" ? "generated" : ["approved", "published"].includes(action) ? "complete" : action === "superseded" ? "superseded" : "default";
+              return <li className="shs-activity-item" key={e.id}>
+                <span className={`shs-activity-marker is-${tone}`} aria-hidden="true" />
+                <span className={`shs-activity-kind is-${tone}`}>{actionLabel}</span>
+                <div className="shs-activity-detail"><strong>{e.actor_name || "System"}</strong><time dateTime={e.created_at}>{formatDateTime(e.created_at)}</time></div>
+              </li>;
+            })}
+          </ul>
+        )}
       </div>
     </div>
   );
@@ -368,7 +388,7 @@ function CalendarTab({ level, overview, periodLabel, reload }) {
         <Modal title="Add calendar entry" onClose={() => setEdit(null)}>
           {err && <Notice tone="error">{err}</Notice>}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-            <Field label="Type"><CustomSelect style={{ ...inputStyle, width: "100%" }} value={edit.kind} onChange={(e) => setEdit({ ...edit, kind: e.target.value })}>
+            <Field label="Type"><CustomSelect style={{ ...inputStyle, width: "100%" }} value={edit.kind} onChange={(e) => setEdit({ ...edit, kind: e.target.value })} portalMenu>
               {[["holiday", "Holiday"], ["exam", "Examination period"], ["suspension", "Class suspension"], ["break", "Break"], ["other", "Other (no classes)"]].map((o) => <option key={o[0]} value={o[0]}>{o[1]}</option>)}</CustomSelect></Field>
             <Field label="Name"><input style={{ ...inputStyle, width: "100%" }} value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /></Field>
             <Field label="From"><CustomDatePicker style={{ ...inputStyle, width: "100%" }} value={edit.start_date} onChange={(e) => setEdit({ ...edit, start_date: e.target.value, end_date: edit.end_date || e.target.value })} aria-label="Event start date" /></Field>
@@ -401,16 +421,14 @@ function SettingsTab({ level, overview, reload }) {
       setMsg({ tone: "ok", text: "Saved. New schedules use these settings; existing versions are unchanged." }); reload();
     } catch (e) { setMsg({ tone: "error", text: errText(e) }); } finally { setBusy(false); }
   };
-  const n = (k, label) => <Field label={label}><input style={{ ...inputStyle, width: "100%" }} type="number" value={cfg[k] ?? ""} onChange={(e) => setCfg({ ...cfg, [k]: e.target.value })} /></Field>;
+  const n = (k, label) => <label className="shs-config-field" key={k}><span>{label}</span><input type="number" value={cfg[k] ?? ""} onChange={(e) => setCfg({ ...cfg, [k]: e.target.value })} /></label>;
+  const updateWindow = (index, patch) => setWins(wins.map((w, i) => i === index ? { ...w, ...patch } : w));
   return (
-    <div>
-      <div style={cardStyle}>
-        <b>{LEVEL_NAME[level]} configuration</b>
-        {cfg.notes && <p style={{ color: "#6b7280", fontSize: "13px" }}>{cfg.notes}</p>}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "12px", marginTop: "10px" }}>
-          <Field label="Building"><input style={{ ...inputStyle, width: "100%" }} value={cfg.building} onChange={(e) => setCfg({ ...cfg, building: e.target.value })} /></Field>
-          {n("floor", "Floor (blank = whole building)")}{n("period_minutes", "Minutes per class period")}{n("break_minutes", "Break minutes (0 = none)")}{n("break_every", "Break after every N periods")}
-          {n("max_teacher_hours", "Default teacher load (h / week)")}{n("max_periods_per_teacher_day", "Max periods per teacher per day")}
+    <div className="shs-settings-page">
+      <section className="shs-settings-card shs-settings-config" style={cardStyle}>
+        <div className="shs-settings-heading">
+          <span className="shs-settings-step" aria-hidden="true">01</span>
+          <div><h2>{LEVEL_NAME[level]} configuration</h2><p>Set the building, class period, breaks and teacher workload limits.</p></div>
         </div>
       </div>
       <div style={cardStyle}>
@@ -437,6 +455,46 @@ function SettingsTab({ level, overview, reload }) {
       </div>
       {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
       <button style={btnPrimary} disabled={busy} onClick={save}>{busy ? "Saving…" : "Save settings"}</button>
+        {cfg.notes && <p className="shs-config-note">{cfg.notes}</p>}
+        <div className="shs-config-grid">
+          <label className="shs-config-field"><span>Building</span><input value={cfg.building || ""} onChange={(e) => setCfg({ ...cfg, building: e.target.value })} /></label>
+          <label className="shs-config-field"><span>Floor <small>Leave blank for the whole building</small></span><input type="number" value={cfg.floor ?? ""} onChange={(e) => setCfg({ ...cfg, floor: e.target.value })} /></label>
+          {n("period_minutes", "Minutes per class period")}{n("break_minutes", "Break minutes (0 = none)")}{n("break_every", "Break after every N periods")}
+          {n("max_teacher_hours", "Default teacher load (hours / week)")}{n("max_periods_per_teacher_day", "Max periods per teacher per day")}
+        </div>
+      </section>
+      <section className="shs-settings-card shs-window-settings" style={cardStyle}>
+        <div className="shs-settings-heading">
+          <span className="shs-settings-step" aria-hidden="true">02</span>
+          <div><h2>Daily time windows</h2><p>Classes stay within each grade’s hours. Add the curriculum framework used for that grade.</p></div>
+        </div>
+        <div className="shs-window-list">
+          {wins.map((w, i) => (
+            <article className="shs-window-card" key={w.id}>
+              <div className="shs-window-heading">
+                <div><span className="shs-grade-label">Grade {w.grade_level}</span><span className="shs-window-caption">Class day and framework</span></div>
+                <label className="shs-framework-verified"><input type="checkbox" checked={w.framework_verified} onChange={(e) => updateWindow(i, { framework_verified: e.target.checked })} /> Framework verified</label>
+              </div>
+              <div className="shs-window-fields">
+                <div className="shs-window-field"><span>Classes start</span><CustomTimePicker className="shs-window-time-picker" style={{ width: "100%" }} value={hhmm(w.start_time)} onChange={(e) => updateWindow(i, { start_time: e.target.value })} aria-label={`Grade ${w.grade_level} starts at`} /></div>
+                <span className="shs-window-range-separator" aria-hidden="true">to</span>
+                <div className="shs-window-field"><span>Classes end</span><CustomTimePicker className="shs-window-time-picker" style={{ width: "100%" }} value={hhmm(w.end_time)} onChange={(e) => updateWindow(i, { end_time: e.target.value })} aria-label={`Grade ${w.grade_level} ends at`} /></div>
+                <label className="shs-window-field shs-framework-field"><span>Curriculum framework</span><input value={w.curriculum_framework || ""} onChange={(e) => updateWindow(i, { curriculum_framework: e.target.value })} placeholder="Enter framework name" /></label>
+              </div>
+              <div className="shs-window-breaks">
+                {(level === "SHS" ? [["Break (30 min)", "break_start", "break_end"]] : [["Recess", "recess_start", "recess_end"], ["Lunch", "lunch_start", "lunch_end"]]).map(([label, a, b]) => (
+                  <div className="shs-window-break-range" key={label}>
+                    <strong>{label}</strong>
+                    <div className="shs-window-break-time"><span>Start</span><CustomTimePicker className="shs-window-time-picker" style={{ width: "100%" }} value={hhmm(w[a] || "")} onChange={(e) => updateWindow(i, { [a]: e.target.value || null })} aria-label={`${label} start`} /></div>
+                    <span className="shs-window-range-separator" aria-hidden="true">to</span>
+                    <div className="shs-window-break-time"><span>End</span><CustomTimePicker className="shs-window-time-picker" style={{ width: "100%" }} value={hhmm(w[b] || "")} onChange={(e) => updateWindow(i, { [b]: e.target.value || null })} aria-label={`${label} end`} /></div>
+                  </div>))}
+              </div>
+            </article>))}
+        </div>
+        <p className="shs-window-note">{level === "SHS" ? "SHS has one 30-minute break (no separate recess or lunch)." : "Recess and lunch are both kept for JHS."} Breaks are never used for classes and appear in timetables and printouts. Classes are never placed outside a grade’s window. <strong>Current:</strong> {wins.map((w) => `Grade ${w.grade_level} ${ampm(hhmm(w.start_time))}–${ampm(hhmm(w.end_time))}`).join(" · ")}</p>
+      </section>
+      <div className="shs-settings-save-row">{msg && <Notice tone={msg.tone}>{msg.text}</Notice>}<button className="shs-save-settings" disabled={busy} onClick={save}>{busy ? "Saving settings…" : "Save settings"}</button></div>
     </div>
   );
 }

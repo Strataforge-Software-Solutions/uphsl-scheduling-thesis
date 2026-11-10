@@ -22,6 +22,7 @@ urlpatterns = router.urls + [
     path("gened-requests/options/", views.gened_request_options_view, name="gened_request_options"),
     path("gened-requests/<int:req_id>/<str:action>/", views.gened_request_decide_view, name="gened_request_decide"),
     path("export-pdf/", views.export_schedule_pdf, name="export_schedule_pdf"),
+    path("export-report/", views.export_schedule_pdf, name="export_schedule_report"),
     path("scheduling-config/", views.SchedulingConfigView.as_view({"get": "list", "patch": "partial_update"}), name="scheduling_config"),
     path("workload/", views.workload_list, name="workload_list"),
     path("workload/check/", views.workload_check, name="workload_check"),

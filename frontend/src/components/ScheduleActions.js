@@ -52,27 +52,25 @@ export function SelectionBar({ groups, busy, onApprove, onPublish, onDraft, onRe
   );
 }
 
-/* Compact per-row actions are explicit so no action is hidden behind a three-dot menu. */
-const small = (bg, fg = "#ffffff", border) => ({ ...btnStyle(bg, fg, border), padding: "3px 9px", fontSize: 12, lineHeight: "18px", borderRadius: 5 });
-
+/* Keep every row action visible, but group them into a clear, consistent grid. */
 export function RowActions({ group, actions, onEdit, selecting }) {
   const g = group;
   const lockTitle = selecting ? "Rows are selected: use the bar at the bottom (or clear the selection)" : undefined;
   const off = actions.busy || selecting;
   return (
-    <div style={{ display: "flex", gap: 4, alignItems: "center", position: "relative", whiteSpace: "nowrap" }}>
+    <div className="schedule-row-actions" role="group" aria-label={`Actions for ${g.subject_code} ${g.section_name}`}>
       {g.status === "draft" && (
         <button onClick={() => actions.changeStatus(g.ids, "approved")} disabled={off} title={lockTitle || "Approve this class (checked for conflicts first)"}
-          style={{ ...small("#16a34a"), opacity: off ? 0.45 : 1 }}>Approve</button>
+          className="schedule-row-action is-approve">Approve</button>
       )}
       {g.status === "approved" && (
         <button onClick={() => actions.changeStatus(g.ids, "published")} disabled={off} title={lockTitle || "Publish this class (checked for conflicts first)"}
-          style={{ ...small("#2563eb"), opacity: off ? 0.45 : 1 }}>Publish</button>
+          className="schedule-row-action is-publish">Publish</button>
       )}
-      {g.status === "draft" && <button onClick={() => onEdit(g)} style={small("#003366")} title="Edit teacher / room, or choose a new free day and time">Edit</button>}
-      {g.status === "approved" && <button onClick={() => actions.changeStatus(g.ids, "draft")} disabled={off} style={{ ...small("#ffffff", "#003366", "1px solid #cbd9ec"), opacity: off ? 0.5 : 1 }} title={lockTitle || "Move this class back to draft"}>Draft</button>}
-      {g.status === "draft" && <button onClick={() => actions.askRemove(g.ids)} disabled={off} style={{ ...small("#ffffff", "#b42318", "1px solid #f2c6c3"), opacity: off ? 0.5 : 1 }} title={lockTitle || "Remove this draft class"}>Remove</button>}
-      <button onClick={() => actions.showHistory(g.ids, `${g.subject_code} ${g.section_name}`)} style={small("#ffffff", "#374151", "1px solid #d1d5db")} title="View change history">History</button>
+      {g.status === "draft" && <button onClick={() => onEdit(g)} className="schedule-row-action is-edit" title="Edit teacher, room, or choose a new free day and time">Edit</button>}
+      {g.status === "approved" && <button onClick={() => actions.changeStatus(g.ids, "draft")} disabled={off} className="schedule-row-action is-draft" title={lockTitle || "Move this class back to draft"}>Draft</button>}
+      {g.status === "draft" && <button onClick={() => actions.askRemove(g.ids)} disabled={off} className="schedule-row-action is-remove" title={lockTitle || "Remove this draft class"}>Remove</button>}
+      <button onClick={() => actions.showHistory(g.ids, `${g.subject_code} ${g.section_name}`)} className="schedule-row-action is-history" title="View change history">History</button>
     </div>
   );
 }

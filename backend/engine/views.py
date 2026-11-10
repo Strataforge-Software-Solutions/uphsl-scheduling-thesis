@@ -1603,6 +1603,9 @@ def export_schedule_pdf(request):
     department = request.query_params.get("department")
     status_filter = request.query_params.get("status")
     classification = request.query_params.get("classification")     # "major" | "minor" | "" (both)
+    export_format = (request.query_params.get("format") or "pdf").lower()
+    if export_format not in {"pdf", "xlsx", "csv"}:
+        return Response({"detail": "Choose pdf, xlsx, or csv for the report format."}, status=status.HTTP_400_BAD_REQUEST)
 
     qs = Schedule.objects.select_related("subject", "teacher__user", "room", "section", "timeslot", "section__program")
     if classification in ("major", "minor"):
@@ -1658,6 +1661,56 @@ def export_schedule_pdf(request):
     if _clash["total"]:
         subtitle = (f'<font color="#b91c1c"><b>NOT FINAL: {_clash["total"]} unresolved conflict(s) in this table. '
                     "Resolve them in the Conflicts tab and print again.</b></font>")
+
+    if export_format in {"xlsx", "csv"}:
+        headers = ["Semester / Term", "Year Level", "College", "Program", "Section", "Subject Code", "Subject",
+                   "Subject Type", "Day", "Start Time", "End Time", "Room", "Faculty", "Status", "Report Note"]
+        report_note = f"NOT FINAL: {_clash['total']} unresolved conflict(s)" if _clash["total"] else ""
+        rows = [[s.section.semester, s.section.year_level, s.section.program.department or "", s.section.program.name,
+                 s.section.name, s.subject.code, s.subject.title, s.subject.classification,
+                 s.timeslot.day, s.timeslot.start_time.strftime("%I:%M %p"), s.timeslot.end_time.strftime("%I:%M %p"),
+                 s.room.name, s.teacher.user.get_full_name().strip() or s.teacher.user.username, s.status, report_note]
+                for s in qs.order_by("section__semester", "section__program__name", "section__year_level", "section__name",
+                                     "timeslot__day", "timeslot__start_time", "subject__code")]
+        if export_format == "csv":
+            import csv
+            import io
+            output = io.StringIO(newline="")
+            writer = csv.writer(output)
+            writer.writerow(headers)
+            def csv_safe(value):
+                value = str(value or "")
+                return "'" + value if value.lstrip().startswith(("=", "+", "-", "@")) else value
+            writer.writerows([[csv_safe(value) for value in row] for row in rows])
+            response = HttpResponse("\ufeff" + output.getvalue(), content_type="text/csv; charset=utf-8")
+            response["Content-Disposition"] = 'attachment; filename="class_schedule.csv"'
+            return response
+
+        from io import BytesIO
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "Class Schedule"
+        sheet.append(headers)
+        for cell in sheet[1]:
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill("solid", fgColor="003366")
+        for row in rows:
+            sheet.append(row)
+            for cell in sheet[sheet.max_row]:
+                if isinstance(cell.value, str):
+                    cell.data_type = "s"
+        sheet.freeze_panes = "A2"
+        sheet.auto_filter.ref = sheet.dimensions
+        for column in sheet.columns:
+            letter = column[0].column_letter
+            sheet.column_dimensions[letter].width = min(max(max(len(str(cell.value or "")) for cell in column) + 2, 12), 36)
+        output = BytesIO()
+        workbook.save(output)
+        response = HttpResponse(output.getvalue(), content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        response["Content-Disposition"] = 'attachment; filename="class_schedule.xlsx"'
+        return response
 
     departments = sorted({d for d in qs.values_list("section__program__department", flat=True).distinct() if d})
     pdf_buffer = build_schedule_pdf(
