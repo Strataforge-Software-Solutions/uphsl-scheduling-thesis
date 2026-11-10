@@ -841,22 +841,6 @@ function CurriculumTab({ programs, programId, defaultProgram }) {
               </button>
             </td>
           </tr>}
-          {paginatedSubjects.map((s) => (
-            <tr key={s.id}>
-              <td><input type="checkbox" aria-label={`Select ${s.code}`} checked={selectedIds.includes(s.id)} disabled={bulkDeleting}
-                onChange={(event) => setSelectedIds((current) => event.target.checked
-                  ? [...current, s.id] : current.filter((id) => id !== s.id))} /></td>
-              <td>{s.code}</td><td>{s.title}</td><td>{s.lec_units}</td><td>{s.lab_units}</td>
-              <td>{kindLabel(s.classification, s.program_name)}</td>
-              <td>{s.department}</td>
-              <td>
-                <CustomSelect className="curriculum-field-select" value={s.field || ""} onChange={(e) => updateSubjectField(s.id, e.target.value)}>
-                  <option value="">-- none --</option>
-                  {academicFields.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-                </CustomSelect>
-              </td>
-              <td><button className="curriculum-remove-button" disabled={bulkDeleting} onClick={() => remove(s.id)}>Remove</button></td>
-            </tr>
           {filtered.map((s) => (
             <React.Fragment key={s.id}>
               <tr>
