@@ -195,6 +195,18 @@ class MySettingsTests(TestCase):
         self.assertEqual(self.c.get("/api/notifications/unread_count/").data["unread_count"], 1)
         self.assertEqual(Notification.objects.filter(recipient=self.fac).count(), 2)       # nothing deleted
 
+    def test_notification_list_limit_returns_only_the_newest_for_the_current_user(self):
+        from notifications.models import Notification
+        Notification.objects.create(recipient=self.fac, notif_type="schedule_update", message="first")
+        Notification.objects.create(recipient=self.fac, notif_type="schedule_update", message="second")
+        Notification.objects.create(recipient=self.fac, notif_type="schedule_update", message="newest")
+        Notification.objects.create(recipient=self.reg, notif_type="schedule_update", message="other user")
+
+        response = self.c.get("/api/notifications/", {"limit": 2})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([item["message"] for item in response.data], ["newest", "second"])
+        self.assertEqual(self.c.get("/api/notifications/", {"limit": 0}).status_code, 400)
+
     # ---- picture
     def _files(self):
         d = _os.path.join(self.media, "profile_pictures")

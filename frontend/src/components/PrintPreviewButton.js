@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import API from "../services/api";
 import ScheduleProblemsModal from "./ScheduleProblemsModal";
 
@@ -19,27 +19,51 @@ export function printYears(rows) {
 
 export default function PrintPreviewButton({ params, disabled = false, onFixed, yearChoices = null, defaultYear = "" }) {
   const [busy, setBusy] = useState(false);
+  const [download, setDownload] = useState(null);
   const [clash, setClash] = useState(null);
   const [fixing, setFixing] = useState(false);
   const [asking, setAsking] = useState(false);
   const [year, setYear] = useState(defaultYear || ALL);
   const [usedYear, setUsedYear] = useState(null);      // the choice of the last print (Print anyway reuses it)
+  useEffect(() => () => { if (download) window.URL.revokeObjectURL(download.url); }, [download]);
   const clean = Object.fromEntries(Object.entries(params || {}).filter(([, v]) => v !== "" && v != null));
   const years = (yearChoices || []).filter(Boolean);
   const allLabel = years.length > 1 ? `All year levels (${years[0].split(" ")[0]} - ${years[years.length - 1].split(" ")[0]})` : "All year levels";
 
   const print = async (allowConflicts = false, yearChoice = usedYear) => {
+    // Reserve a tab synchronously during the click. Opening it after the PDF request
+    // resolves is commonly blocked because the user activation has expired.
+    let previewWindow = null;
+    try {
+      previewWindow = window.open("", "_blank");
+      if (previewWindow) {
+        try {
+          previewWindow.document.title = "Preparing schedule PDF";
+          previewWindow.document.body.textContent = "Preparing your schedule PDF…";
+        } catch (_e) { /* The tab may still accept the PDF URL even if its placeholder cannot be written. */ }
+      }
+    } catch (_e) { /* A blocked popup falls back to an explicit download link. */ }
+
     setBusy(true);
     setAsking(false);
     setUsedYear(yearChoice);
+    setDownload(null);
     const yp = yearChoice === null ? {} : { year_level: yearChoice === ALL ? undefined : yearChoice };
     try {
       const res = await API.get("/engine/export-pdf/", { params: { ...clean, ...yp, allow_conflicts: allowConflicts ? 1 : undefined }, responseType: "blob" });
       setClash(null);
       const url = window.URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
-      window.open(url, "_blank");
-      setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+      let opened = false;
+      try {
+        if (previewWindow && !previewWindow.closed) {
+          previewWindow.location.href = url;
+          opened = true;
+        }
+      } catch (_e) { /* Fall back to a download link if navigating the reserved tab fails. */ }
+      if (!opened) setDownload({ url, filename: "class_schedule.pdf" });
+      else setTimeout(() => window.URL.revokeObjectURL(url), 60000);
     } catch (err) {
+      try { if (previewWindow && !previewWindow.closed) previewWindow.close(); } catch (_e) { /* Ignore a tab already closed by the user. */ }
       const st = err.response?.status;
       if (st === 409) {
         try { setClash(JSON.parse(await err.response.data.text())); }
@@ -85,6 +109,13 @@ export default function PrintPreviewButton({ params, disabled = false, onFixed, 
           </div>
         )}
       </span>
+      {download && (
+        <div role="status" style={{ display: "inline-flex", alignItems: "center", gap: 8, marginLeft: 8, fontSize: 13, color: "#374151" }}>
+          <span>Your browser blocked the preview tab.</span>
+          <a href={download.url} download={download.filename} onClick={() => setTimeout(() => setDownload((current) => current?.url === download.url ? null : current), 60000)}
+            style={{ color: "#003366", fontWeight: 600 }}>Download PDF</a>
+        </div>
+      )}
       {clash && !fixing && (
         <div role="alertdialog" aria-label="Conflicts before printing" style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
           <div style={{ background: "white", borderRadius: 6, maxWidth: 560, width: "100%", padding: "18px 20px", boxShadow: "var(--shadow-pop)", borderTop: "5px solid #b91c1c" }}>

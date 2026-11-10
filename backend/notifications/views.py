@@ -21,6 +21,21 @@ class NotificationViewSet(viewsets.ModelViewSet):
                 qs = qs.exclude(notif_type__in=off)
         return qs
 
+    def list(self, request, *args, **kwargs):
+        """Allow dashboard clients to request only the newest notifications they display."""
+        queryset = self.filter_queryset(self.get_queryset()).order_by("-created_at", "-pk")
+        raw_limit = request.query_params.get("limit")
+        if raw_limit is not None:
+            try:
+                limit = int(raw_limit)
+            except (TypeError, ValueError):
+                return Response({"detail": "limit must be a positive integer."}, status=400)
+            if limit < 1:
+                return Response({"detail": "limit must be a positive integer."}, status=400)
+            queryset = queryset[:min(limit, 100)]
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
     @action(detail=False, methods=["get"])
     def unread_count(self, request):
         """GET /api/notifications/unread_count/ -- lightweight poll target for

@@ -52,6 +52,7 @@ function NotificationBell() {
   const wrapRef = useRef(null);
 
   const refreshCount = () => {
+    if (document.visibilityState !== "visible") return;
     API.get("/notifications/unread_count/")
       .then((res) => setUnreadCount(res.data.unread_count))
       .catch(() => {});
@@ -59,8 +60,11 @@ function NotificationBell() {
 
   useEffect(() => {
     refreshCount();
-    const t = setInterval(refreshCount, 30000);
-    return () => clearInterval(t);
+    const vis = () => { if (document.visibilityState === "visible") refreshCount(); };
+    document.addEventListener("visibilitychange", vis);
+    window.addEventListener("focus", refreshCount);
+    const t = setInterval(refreshCount, 120000);
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", vis); window.removeEventListener("focus", refreshCount); };
   }, []);
 
   useEffect(() => {
@@ -76,7 +80,7 @@ function NotificationBell() {
     setOpen(next);
     if (next) {
       setLoading(true);
-      API.get("/notifications/")
+      API.get("/notifications/", { params: { limit: 50 } })
         .then((res) => setItems(res.data))
         .catch(reportLoadError("the notifications"))
         .finally(() => setLoading(false));

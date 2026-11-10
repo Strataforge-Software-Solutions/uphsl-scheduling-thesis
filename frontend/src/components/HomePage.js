@@ -68,10 +68,18 @@ function useNotifications() {
   const [items, setItems] = useState(null);
   useEffect(() => {
     let live = true;
-    const load = () => API.get("/notifications/").then((r) => live && setItems((r.data || []).slice(0, 5))).catch(() => live && setItems([]));
+    const load = () => {
+      if (document.visibilityState !== "visible") return;
+      API.get("/notifications/", { params: { limit: 5 } })
+        .then((r) => live && setItems(r.data || []))
+        .catch(() => live && setItems([]));
+    };
     load();
-    const off = onSchedulesChanged(load), t = setInterval(load, 30000);
-    return () => { live = false; off(); clearInterval(t); };
+    const off = onSchedulesChanged(load), vis = () => { if (document.visibilityState === "visible") load(); };
+    document.addEventListener("visibilitychange", vis);
+    window.addEventListener("focus", load);
+    const t = setInterval(load, 120000);
+    return () => { live = false; off(); document.removeEventListener("visibilitychange", vis); window.removeEventListener("focus", load); clearInterval(t); };
   }, []);
   return items;
 }

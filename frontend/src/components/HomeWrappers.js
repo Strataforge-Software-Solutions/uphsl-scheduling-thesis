@@ -5,26 +5,27 @@ import HomePage from "./HomePage";
 
 /* Role-specific data for the Homepage, using endpoints that already exist. Every call is optional: a failure just leaves that number out. */
 
-/* Live numbers from /engine/dashboard-stats/ (counted in the database on every call). Refreshed when the tab opens, whenever any schedule
-   is generated / edited / approved / deleted (schedules-changed), when the window regains focus, and every 30 seconds. */
+/* Live numbers from /engine/dashboard-stats/. Refresh on schedule changes and while the dashboard is visible. */
 function useClassData() {
   const [d, setD] = useState(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
-    let live = true, seq = 0;
-    const load = () => {
+    let live = true, seq = 0, lastRequestAt = 0;
+    const load = (force = false) => {
+      if (document.visibilityState !== "visible" || (!force && Date.now() - lastRequestAt < 3000)) return;
+      lastRequestAt = Date.now();
       const mine = ++seq;
-      API.get("/engine/dashboard-stats/", { params: { _: Date.now() } })
+      API.get("/engine/dashboard-stats/")
         .then((r) => { if (live && mine === seq) { setD(r.data); setFailed(false); } })
         .catch(() => { if (live && mine === seq) setFailed(true); });
     };
     load();
-    const off = onSchedulesChanged(load), off2 = onWorkloadChanged(load);
+    const off = onSchedulesChanged(() => load(true)), off2 = onWorkloadChanged(() => load(true));
     const vis = () => { if (document.visibilityState === "visible") load(); };
     document.addEventListener("visibilitychange", vis);
-    window.addEventListener("focus", load);
-    const t = setInterval(load, 30000);
-    return () => { live = false; off(); off2(); document.removeEventListener("visibilitychange", vis); window.removeEventListener("focus", load); clearInterval(t); };
+    window.addEventListener("focus", vis);
+    const t = setInterval(load, 120000);
+    return () => { live = false; off(); off2(); document.removeEventListener("visibilitychange", vis); window.removeEventListener("focus", vis); clearInterval(t); };
   }, []);
   return [d, failed];
 }

@@ -71,7 +71,17 @@ def scan(*, semester=None, departments=None, involving_ids=None, limit=300, year
     departments: only conflicts where at least one class belongs to these departments.
     involving_ids: only conflicts that involve one of these schedule rows (used right after generating)."""
     tol = class_tolerance_minutes()        # same rule as the solver: students are never in two classes at once
-    qs = Schedule.objects.select_related("subject", "section__program", "teacher__user", "room", "timeslot")
+    # The dashboard runs this scan to get a conflict count. Restrict selected columns so the
+    # full schedule scan transfers only fields the detector and its response formatter use.
+    qs = Schedule.objects.select_related("subject", "section__program", "teacher__user", "room", "timeslot").only(
+        "id", "subject_id", "section_id", "teacher_id", "room_id", "timeslot_id", "merge_key", "school_year", "status",
+        "subject__code", "subject__title", "subject__classification",
+        "section__name", "section__semester", "section__year_level", "section__student_count", "section__program_id",
+        "section__program__name", "section__program__department",
+        "teacher__user_id",
+        "teacher__user__first_name", "teacher__user__last_name", "teacher__user__username",
+        "room__name", "timeslot__day", "timeslot__start_time", "timeslot__end_time",
+    )
     if semester:
         qs = qs.filter(section__semester=semester)
     blocks = _blocks(list(qs))

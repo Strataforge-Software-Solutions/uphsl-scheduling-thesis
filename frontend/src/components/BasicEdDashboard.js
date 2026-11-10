@@ -80,14 +80,15 @@ function BasicEdDashboard({ level }) {
   const reload = useCallback(() => {
     be.get(level, "overview/").then((r) => { setOverview(r.data); setError(""); }).catch((e) => setError(errText(e, "Could not load the dashboard.")));
   }, [level]);
-  useEffect(() => { setOverview(null); setTab("overview"); reload(); }, [level, reload]);
-  // the Home numbers, pending tasks and status are recounted whenever a timetable changes, the window regains focus, the Home tab opens, and every 30 s
+  useEffect(() => { setOverview(null); setTab("overview"); }, [level]);
+  // Refresh overview data only while it is visible; reopening Home and schedule changes always trigger a fresh read.
   useEffect(() => {
+    if (tab !== "overview") return undefined;
     const off = onSchedulesChanged(reload), vis = () => { if (document.visibilityState === "visible") reload(); };
     document.addEventListener("visibilitychange", vis); window.addEventListener("focus", reload);
-    const t = setInterval(reload, 30000);
+    const t = setInterval(() => { if (document.visibilityState === "visible") reload(); }, 120000);
     return () => { off(); document.removeEventListener("visibilitychange", vis); window.removeEventListener("focus", reload); clearInterval(t); };
-  }, [reload]);
+  }, [reload, tab]);
   useEffect(() => { if (tab === "overview") reload(); }, [tab, reload]);
 
   const periodLabel = periodHeading(overview?.structure);
