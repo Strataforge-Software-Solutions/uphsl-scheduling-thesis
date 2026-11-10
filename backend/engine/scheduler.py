@@ -169,6 +169,55 @@ def with_half_blocks(blocks, window):
     return blocks
 
 
+def is_rotc_subject(subject):
+    """ROTC/NSTP-ROTC classes may use Sunday; other subjects remain Mon-Sat."""
+    code = str(getattr(subject, "code", "") or "").upper()
+    title = str(getattr(subject, "title", "") or "").upper()
+    return "ROTC" in code or "ROTC" in title
+
+
+def supports_manual_split_sessions(subject):
+    """Gen Ed 3-lecture-unit subjects that may be manually split into two sessions."""
+    if getattr(subject, "classification", "") != "minor":
+        return False
+    if float(getattr(subject, "lec_units", 0) or 0) != 3 or float(getattr(subject, "lab_units", 0) or 0) != 0:
+        return False
+    code = str(getattr(subject, "code", "") or "").upper()
+    title = str(getattr(subject, "title", "") or "").upper()
+    excluded = ("ROTC" in code or "ROTC" in title or "NSTP" in code or "NSTP" in title
+                or "NATIONAL SERVICE TRAINING" in title or "PATHFIT" in code or "PATHFIT" in title
+                or "PHYSICAL ACTIVITIES TOWARD HEALTH AND FITNESS" in title)
+    return not excluded
+
+
+def build_independent_session_slots(timeslots, hours):
+    """Build standalone single-day blocks from adjacent 30-minute TimeSlots.
+
+    Unlike PairHours / PairSlot these sessions have no fixed day-pair or start-time
+    relationship; callers choose two independently and validate them together.
+    """
+    need = int(round(float(hours) * 60))
+    by_day = defaultdict(list)
+    for slot in timeslots:
+        if _dur(slot) == 30:
+            by_day[slot.day].append(slot)
+    blocks = []
+    for day, slots in by_day.items():
+        slots.sort(key=lambda item: _slot_minutes(item.start_time))
+        for i, first in enumerate(slots):
+            run = [first]
+            for nxt in slots[i + 1:]:
+                if _slot_minutes(nxt.start_time) != _slot_minutes(run[-1].end_time):
+                    break
+                run.append(nxt)
+                duration = _slot_minutes(run[-1].end_time) - _slot_minutes(run[0].start_time)
+                if duration >= need:
+                    if duration == need:
+                        blocks.append(BlockSlot(run))
+                    break
+    return blocks
+
+
 def build_block_slots(timeslots, hours):
     """All runs of adjacent TimeSlots (same day, each starting where the
     previous ended) that add up to `hours` hours.
@@ -304,6 +353,8 @@ def build_domain(section, subject, teachers, rooms, timeslots, availability_rule
 
     win = _rr.time_window_for(subject.id)
     timeslots = with_half_blocks(timeslots, win)
+    if not is_rotc_subject(subject):
+        timeslots = [sl for sl in timeslots if str(sl.day)[:3].title() != "Sun"]
     busy = _rr.share_busy_for(section, subject)
     if busy:          # a shared class: every member section must be free then too
         def _free(sl):

@@ -1789,7 +1789,8 @@ def _reschedule_call(request, fn):
     try:
         ids = [int(x) for x in (d.get("ids") or [])] or None
         kw = dict(ids=ids, section_id=d.get("section_id"), subject_id=d.get("subject_id"), room_id=int(d["room_id"]) if d.get("room_id") else None,
-                  school_year=d.get("school_year") or "")
+                  school_year=d.get("school_year") or "",
+                  split_session=str(d.get("split_session", "false")).lower() in ("1", "true", "yes"))
         if d.get("start") or d.get("end"):
             from .scheduler import _slot_minutes
             a, b = _slot_minutes(d.get("start") or "00:00"), _slot_minutes(d.get("end") or "23:59")
@@ -1815,15 +1816,19 @@ def _reschedule_call(request, fn):
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def slot_options(request):
-    """Days / times a class can move to (or be placed at) with its CURRENT ROOM kept, every rule checked."""
+    """Days / times a class can move to (or be placed at) with its CURRENT ROOM kept, every rule checked.
+    Set split_session=true for one candidate 1.5-hour session of an eligible Gen Ed subject.
+    """
     return _reschedule_call(request, lambda rs, u, kw, d: rs.suggest(u, **kw))
 
 
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def slot_options_apply(request):
-    """body: same as slot-options + key (one option's key). Re-validates on the server, then changes only this class."""
-    return _reschedule_call(request, lambda rs, u, kw, d: rs.apply(u, key=d.get("key"), **{k: v for k, v in kw.items() if k != "limit"}))
+    """Body: same as slot-options + key, or split_session=true and session_keys=[key1,key2]."""
+    return _reschedule_call(request, lambda rs, u, kw, d: rs.apply(
+        u, key=d.get("key"), session_keys=d.get("session_keys"),
+        **{k: v for k, v in kw.items() if k != "limit"}))
 
 
 @api_view(["POST"])

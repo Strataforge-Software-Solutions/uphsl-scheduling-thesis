@@ -51,6 +51,9 @@ export default function ScheduleProblemsModal({ clashes, unplaced, yearLevel, pi
   const [target, setTarget] = useState(null);     // {request:{ids|section_id,subject_id}, done(): update the lists}
   const [data, setData] = useState(null);
   const [choice, setChoice] = useState("");
+  const [splitMode, setSplitMode] = useState(false);
+  const [splitData, setSplitData] = useState(null);
+  const [sessionChoices, setSessionChoices] = useState(["", ""]);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
@@ -83,7 +86,8 @@ export default function ScheduleProblemsModal({ clashes, unplaced, yearLevel, pi
   }, [unplaced.length]);
 
   const open = async (request, done, reason, preselect = "") => {
-    setBusy("load"); setError(""); setNote(""); setChoice(preselect); setData(null); setExtra(null); setWhy(reason || ""); setTarget({ request, done });
+    setBusy("load"); setError(""); setNote(""); setChoice(preselect); setSplitMode(false); setSplitData(null); setSessionChoices(["", ""]);
+    setData(null); setExtra(null); setWhy(reason || ""); setTarget({ request, done });
     try {
       const r = await API.post("/engine/slot-options/", request);
       setData(r.data);
@@ -100,14 +104,23 @@ export default function ScheduleProblemsModal({ clashes, unplaced, yearLevel, pi
   const confirm = async () => {
     setBusy("apply"); setError("");
     try {
-      const r = await API.post("/engine/slot-options/apply/", { ...target.request, key: choice });
+      const body = splitMode
+        ? { ...target.request, split_session: true, session_keys: sessionChoices }
+        : { ...target.request, key: choice };
+      const r = await API.post("/engine/slot-options/apply/", body);
       setNote(r.data.summary);
       target.done();
       if (onFixed) onFixed(r.data);
       setTarget(null); setData(null);
     } catch (e) {
       setError(e.response?.data?.detail || "Could not apply that time.");
-      if (e.response?.data?.refresh) { setChoice(""); try { setData((await API.post("/engine/slot-options/", target.request)).data); } catch (_e) { /* keep old list */ } }
+      if (e.response?.data?.refresh) {
+        setChoice(""); setSessionChoices(["", ""]);
+        try {
+          if (splitMode) setSplitData((await API.post("/engine/slot-options/", { ...target.request, split_session: true })).data);
+          else setData((await API.post("/engine/slot-options/", target.request)).data);
+        } catch (_e) { /* keep old list */ }
+      }
     } finally { setBusy(""); }
   };
 
@@ -115,6 +128,51 @@ export default function ScheduleProblemsModal({ clashes, unplaced, yearLevel, pi
   const all = data ? [...data.options, ...(data.outside_options || []), ...(data.room_options || [])] : [];
   const picked = all.find((o) => o.key === choice);
   const anyOption = all.length > 0;
+  const splitOptions = splitData ? [...(splitData.options || []), ...(splitData.outside_options || []), ...(splitData.room_options || [])] : [];
+  const bySessionKey = (key) => splitOptions.find((o) => o.key === key);
+  const firstSession = bySessionKey(sessionChoices[0]);
+  const clockMinutes = (value) => { const [h, m] = String(value || "0:0").split(":").map(Number); return h * 60 + m; };
+  const secondSessionOptions = firstSession ? splitOptions.filter((o) => {
+    if (o.teacher_id !== firstSession.teacher_id || o.room_id !== firstSession.room_id) return false;
+    const overlap = o.day === firstSession.day && Math.max(clockMinutes(o.start), clockMinutes(firstSession.start)) < Math.min(clockMinutes(o.end), clockMinutes(firstSession.end));
+    return !overlap;
+  }) : splitOptions;
+  const splitCanApply = Boolean(sessionChoices[0] && sessionChoices[1] && secondSessionOptions.some((o) => o.key === sessionChoices[1]));
+  const visibleReason = splitMode ? splitData?.reason : data?.reason;
+  const visibleOptions = splitMode ? splitOptions : all;
+  const selectSplitMode = async () => {
+    if (!data?.split_allowed || !target) return;
+    setBusy("load-split"); setError(""); setSessionChoices(["", ""]);
+    try {
+      setSplitData((await API.post("/engine/slot-options/", { ...target.request, split_session: true })).data);
+      setSplitMode(true);
+    } catch (e) {
+      setError(e.response?.data?.detail || "Could not look up 1.5-hour sessions.");
+    } finally { setBusy(""); }
+  };
+  const renderSessionChoices = (index, list) => (
+    <>
+      {Object.entries(group(list)).map(([day, items]) => (
+        <div key={`${index}-${day}`} style={{ marginBottom: 10 }}>
+          <div style={{ fontWeight: 600, fontSize: 13, color: C.navy, marginBottom: 4 }}>{day}</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {items.map((o) => (
+              <label key={o.key} style={{ border: `1px solid ${sessionChoices[index] === o.key ? C.navy : C.line}`, background: sessionChoices[index] === o.key ? "#e6f0fa" : "#fff", borderRadius: 6, padding: "6px 10px", fontSize: 13, cursor: "pointer" }}>
+                <input type="radio" name={`session-${index}`} checked={sessionChoices[index] === o.key} onChange={() => setSessionChoices((prev) => {
+                  const next = [...prev]; next[index] = o.key;
+                  if (index === 0 && !splitOptions.some((candidate) => candidate.key === next[1]
+                    && candidate.teacher_id === o.teacher_id && candidate.room_id === o.room_id
+                    && !(candidate.day === o.day && Math.max(clockMinutes(candidate.start), clockMinutes(o.start)) < Math.min(clockMinutes(candidate.end), clockMinutes(o.end))))) next[1] = "";
+                  return next;
+                })} style={{ marginRight: 6 }} />
+                {o.label}{o.room ? <> · <strong>{o.room}</strong></> : null}{o.teacher ? <> · {o.teacher}</> : null}
+              </label>
+            ))}
+          </div>
+        </div>
+      ))}
+    </>
+  );
   const renderChips = (list, showRoom) => (
     <>
       {Object.entries(group(list)).map(([day, items]) => (
@@ -231,10 +289,27 @@ export default function ScheduleProblemsModal({ clashes, unplaced, yearLevel, pi
                       {data.class.teacher ? ` Teacher: ${data.class.teacher}.` : ""} Only times when the teacher is available and free, the room is free and the students have no other class are listed.
                     </div>
                   </div>
-                                    {data.options.length > 0 && <><div style={{ fontWeight: 600, fontSize: 13, margin: "4px 0", color: C.ok }}>{data.room.name ? `1. Free in ${data.room.name}, inside your time (recommended)` : "Free times"}</div>{renderChips(data.options, !data.room.kept)}</>}
-                  {(data.outside_options || []).length > 0 && <><div style={{ fontWeight: 600, fontSize: 13, margin: "8px 0 4px", color: C.warn }}>2. Same room {data.room.name}, outside your Start / End Time</div>{renderChips(data.outside_options, false)}</>}
-                  {(data.room_options || []).length > 0 && <><div style={{ fontWeight: 600, fontSize: 13, margin: "8px 0 4px", color: C.warn }}>3. Other free rooms (allowed for this subject; the room changes only if you confirm)</div>{renderChips(data.room_options, true)}</>}
-                  {data.reason && <div style={{ background: anyOption ? "#fffbeb" : "#fef2f2", border: `1px solid ${anyOption ? "#fde68a" : "#fecaca"}`, color: anyOption ? "#7a4b00" : "#991b1b", borderRadius: 6, padding: "10px 12px", fontSize: 13, marginTop: 6 }}>{data.reason}</div>}
+                  {data.split_allowed && (
+                    <div style={{ display: "flex", gap: 8, margin: "6px 0 12px", flexWrap: "wrap" }}>
+                      <button type="button" onClick={() => { setSplitMode(false); setSplitData(null); setSessionChoices(["", ""]); }} style={btn(!splitMode ? C.navy : "#fff", !splitMode ? "#fff" : C.navy)}>One 3-hour session</button>
+                      <button type="button" disabled={busy === "load-split"} onClick={selectSplitMode} style={{ ...btn(splitMode ? C.navy : "#fff", splitMode ? "#fff" : C.navy), opacity: busy === "load-split" ? 0.6 : 1 }}>
+                        {busy === "load-split" ? "Loading sessions…" : "Two 1.5-hour sessions"}
+                      </button>
+                    </div>
+                  )}
+                  {!splitMode && data.options.length > 0 && <><div style={{ fontWeight: 600, fontSize: 13, margin: "4px 0", color: C.ok }}>{data.room.name ? `1. Free in ${data.room.name}, inside your time (recommended)` : "Free times"}</div>{renderChips(data.options, !data.room.kept)}</>}
+                  {!splitMode && (data.outside_options || []).length > 0 && <><div style={{ fontWeight: 600, fontSize: 13, margin: "8px 0 4px", color: C.warn }}>2. Same room {data.room.name}, outside your Start / End Time</div>{renderChips(data.outside_options, false)}</>}
+                  {!splitMode && (data.room_options || []).length > 0 && <><div style={{ fontWeight: 600, fontSize: 13, margin: "8px 0 4px", color: C.warn }}>3. Other free rooms (allowed for this subject; the room changes only if you confirm)</div>{renderChips(data.room_options, true)}</>}
+                  {splitMode && splitData && <>
+                    <div style={{ fontWeight: 600, fontSize: 13, margin: "4px 0", color: C.ok }}>Choose the first 1.5-hour session</div>
+                    {renderSessionChoices(0, splitOptions)}
+                    <div style={{ fontWeight: 600, fontSize: 13, margin: "8px 0 4px", color: C.ok }}>Choose the second 1.5-hour session</div>
+                    {firstSession ? renderSessionChoices(1, secondSessionOptions) : <p style={{ color: "#6b7280", fontSize: 13 }}>Choose the first session to see compatible times for the second.</p>}
+                    {!splitOptions.length && !splitData.half_hour_slots_available && <p style={{ color: C.bad, fontSize: 13 }}>Half-hour time slots have not been seeded. Ask your system administrator to run the time-slot seeder before using split sessions.</p>}
+                    {!splitOptions.length && splitData.half_hour_slots_available && <p style={{ color: C.bad, fontSize: 13 }}>{splitData.reason || "No free 1.5-hour sessions are available."}</p>}
+                    {firstSession && !secondSessionOptions.length && <p style={{ color: C.bad, fontSize: 13 }}>No other non-overlapping 1.5-hour session is available with the same teacher and room.</p>}
+                  </>}
+                  {visibleReason && <div style={{ background: visibleOptions.length ? "#fffbeb" : "#fef2f2", border: `1px solid ${visibleOptions.length ? "#fde68a" : "#fecaca"}`, color: visibleOptions.length ? "#7a4b00" : "#991b1b", borderRadius: 6, padding: "10px 12px", fontSize: 13, marginTop: 6 }}>{visibleReason}</div>}
                 </>
               )}
               {error && <p style={{ color: C.bad, fontSize: 13 }}>{error}</p>}
@@ -244,9 +319,9 @@ export default function ScheduleProblemsModal({ clashes, unplaced, yearLevel, pi
                   <ul style={{ margin: "4px 0 0 18px", padding: 0 }}>{extra.replacements.map((r) => <li key={r.faculty_id}>{r.name} — {r.fit}</li>)}</ul>
                 </div>
               )}
-              {anyOption && (
+              {((splitMode && splitCanApply) || (!splitMode && anyOption)) && (
                 <div style={{ textAlign: "right", marginTop: 10 }}>
-                  <button disabled={!choice || busy === "apply"} onClick={confirm} style={{ ...btn(C.navy), opacity: choice ? 1 : 0.5 }}>{busy === "apply" ? "Checking and saving…" : picked?.room_changed ? `Apply / Confirm (room changes to ${picked.room})` : "Apply / Confirm"}</button>
+                  <button disabled={splitMode ? (!splitCanApply || busy === "apply") : (!choice || busy === "apply")} onClick={confirm} style={{ ...btn(C.navy), opacity: splitMode ? (splitCanApply ? 1 : 0.5) : (choice ? 1 : 0.5) }}>{busy === "apply" ? "Checking and saving…" : !splitMode && picked?.room_changed ? `Apply / Confirm (room changes to ${picked.room})` : "Apply / Confirm"}</button>
                 </div>
               )}
             </>

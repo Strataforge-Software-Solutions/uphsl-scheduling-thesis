@@ -525,6 +525,10 @@ function CurriculumTab({ programs, programId, defaultProgram }) {
   const [newFieldName, setNewFieldName] = useState("");
   const [selectedIds, setSelectedIds] = useState([]);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState("");
 
   const [form, setForm] = useState({
     code: "", title: "", lec_units: 0, lab_units: 0,
@@ -554,6 +558,50 @@ function CurriculumTab({ programs, programId, defaultProgram }) {
     setSubjects((current) => [...current, response.data]);
     updateCurriculumCache((data) => ({ ...data, subjects: [...data.subjects, response.data] }));
     setForm({ code: "", title: "", lec_units: 0, lab_units: 0, program: programId, year_level: "", semester: "", classification: "major", field: "" });
+  };
+
+  const startEdit = (subject) => {
+    setEditingId(subject.id);
+    setEditForm({
+      code: subject.code, title: subject.title, lec_units: subject.lec_units, lab_units: subject.lab_units,
+      program: String(subject.program), year_level: subject.year_level || "", semester: subject.semester || "",
+      classification: subject.classification, field: subject.field ? String(subject.field) : "",
+    });
+    setEditError("");
+  };
+
+  const cancelEdit = () => { setEditingId(null); setEditForm(null); setEditError(""); };
+
+  const saveEdit = async (subjectId) => {
+    if (!editForm || !editForm.code.trim() || !editForm.title.trim() || !editForm.program
+      || !editForm.year_level.trim() || !editForm.semester.trim()) {
+      setEditError("Subject code, title, program, year level, and semester are required.");
+      return;
+    }
+    if (![editForm.lec_units, editForm.lab_units].every((value) => Number.isInteger(Number(value)) && Number(value) >= 0)) {
+      setEditError("Lecture and laboratory units must be whole numbers of zero or more.");
+      return;
+    }
+    setSavingEdit(true);
+    setEditError("");
+    const payload = {
+      code: editForm.code.trim(), title: editForm.title.trim(),
+      lec_units: Number(editForm.lec_units), lab_units: Number(editForm.lab_units),
+      program: Number(editForm.program), year_level: editForm.year_level.trim(), semester: editForm.semester.trim(),
+      classification: editForm.classification, field: editForm.field || null,
+    };
+    try {
+      const response = await API.patch(`/curriculum/subjects/${subjectId}/`, payload);
+      setSubjects((current) => current.map((subject) => subject.id === subjectId ? response.data : subject));
+      updateCurriculumCache((data) => ({ ...data, subjects: data.subjects.map((subject) => subject.id === subjectId ? response.data : subject) }));
+      cancelEdit();
+    } catch (err) {
+      const data = err.response?.data;
+      const fieldMessage = data && typeof data === "object" ? Object.values(data).flat().find((value) => typeof value === "string") : null;
+      setEditError(data?.detail || fieldMessage || "Could not save changes. Check the subject details and try again.");
+    } finally {
+      setSavingEdit(false);
+    }
   };
 
   const remove = async (id) => {
@@ -704,12 +752,12 @@ function CurriculumTab({ programs, programId, defaultProgram }) {
               <input type="checkbox" aria-label="Select all visible subjects" checked={allVisibleSelected} disabled={bulkDeleting}
                 onChange={(event) => setSelectedIds(event.target.checked ? visibleIds : [])} />Select all
             </label></th>
-            <th>Code</th><th>Title</th><th>Lec</th><th>Lab</th><th>Type</th><th>Department</th><th>Field</th><th>Actions</th>
+            <th>Code</th><th>Title</th><th>Lec</th><th>Lab</th><th>Type</th><th>Department</th><th>Year level</th><th>Semester</th><th>Field</th><th>Actions</th>
           </tr>
         </thead>
         <tbody>
           {selectedIds.length > 0 && <tr>
-            <td colSpan={9}>
+            <td colSpan={11}>
               <span>{selectedIds.length} selected</span>{" "}
               <button className="curriculum-remove-button" disabled={bulkDeleting} onClick={removeSelected}>
                 {bulkDeleting ? "Removing…" : `Remove selected (${selectedIds.length})`}
@@ -717,21 +765,85 @@ function CurriculumTab({ programs, programId, defaultProgram }) {
             </td>
           </tr>}
           {filtered.map((s) => (
-            <tr key={s.id}>
-              <td><input type="checkbox" aria-label={`Select ${s.code}`} checked={selectedIds.includes(s.id)} disabled={bulkDeleting}
-                onChange={(event) => setSelectedIds((current) => event.target.checked
-                  ? [...current, s.id] : current.filter((id) => id !== s.id))} /></td>
-              <td>{s.code}</td><td>{s.title}</td><td>{s.lec_units}</td><td>{s.lab_units}</td>
-              <td>{kindLabel(s.classification, s.program_name)}</td>
-              <td>{s.department}</td>
-              <td>
-                <CustomSelect className="curriculum-field-select" value={s.field || ""} onChange={(e) => updateSubjectField(s.id, e.target.value)}>
-                  <option value="">-- none --</option>
-                  {academicFields.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-                </CustomSelect>
-              </td>
-              <td><button className="curriculum-remove-button" disabled={bulkDeleting} onClick={() => remove(s.id)}>Remove</button></td>
-            </tr>
+            <React.Fragment key={s.id}>
+              <tr>
+                <td><input type="checkbox" aria-label={`Select ${s.code}`} checked={selectedIds.includes(s.id)} disabled={bulkDeleting || savingEdit}
+                  onChange={(event) => setSelectedIds((current) => event.target.checked
+                    ? [...current, s.id] : current.filter((id) => id !== s.id))} /></td>
+                <td>{s.code}</td><td>{s.title}</td><td>{s.lec_units}</td><td>{s.lab_units}</td>
+                <td>{kindLabel(s.classification, s.program_name)}</td>
+                <td>{s.department}</td>
+                <td>{s.year_level || "—"}</td>
+                <td>{s.semester || "—"}</td>
+                <td>
+                  <CustomSelect className="curriculum-field-select" value={s.field || ""} disabled={bulkDeleting || savingEdit || editingId !== null} onChange={(e) => updateSubjectField(s.id, e.target.value)}>
+                    <option value="">-- none --</option>
+                    {academicFields.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                  </CustomSelect>
+                </td>
+                <td>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <button type="button" disabled={bulkDeleting || savingEdit || (editingId !== null && editingId !== s.id)} onClick={() => startEdit(s)}>
+                      {editingId === s.id ? "Editing" : "Edit"}
+                    </button>
+                    <button className="curriculum-remove-button" disabled={bulkDeleting || savingEdit} onClick={() => remove(s.id)}>Remove</button>
+                  </div>
+                </td>
+              </tr>
+              {editingId === s.id && editForm && (
+                <tr>
+                  <td colSpan={11}>
+                    <div style={{ padding: "12px 8px" }}>
+                      <div className="curriculum-add-form" aria-label={`Edit ${s.code}`}>
+                        <label className="curriculum-add-field curriculum-add-code"><span>Subject code</span>
+                          <input aria-label="Edit subject code" value={editForm.code} onChange={(e) => setEditForm({ ...editForm, code: e.target.value })} />
+                        </label>
+                        <label className="curriculum-add-field curriculum-add-title"><span>Subject title</span>
+                          <input aria-label="Edit subject title" value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} />
+                        </label>
+                        <label className="curriculum-add-field curriculum-add-lec"><span>Lecture units</span>
+                          <input aria-label="Edit lecture units" type="number" min="0" step="1" value={editForm.lec_units}
+                            onChange={(e) => setEditForm({ ...editForm, lec_units: e.target.value })} />
+                        </label>
+                        <label className="curriculum-add-field curriculum-add-lab"><span>Laboratory units</span>
+                          <input aria-label="Edit laboratory units" type="number" min="0" step="1" value={editForm.lab_units}
+                            onChange={(e) => setEditForm({ ...editForm, lab_units: e.target.value })} />
+                        </label>
+                        <label className="curriculum-add-field curriculum-add-program"><span>Program / department</span>
+                          <CustomSelect aria-label="Edit program" value={editForm.program} onChange={(e) => setEditForm({ ...editForm, program: e.target.value })}>
+                            <option value="">Select program</option>
+                            {programs.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.department})</option>)}
+                          </CustomSelect>
+                        </label>
+                        <label className="curriculum-add-field curriculum-add-year"><span>Year level</span>
+                          <input aria-label="Edit year level" value={editForm.year_level} onChange={(e) => setEditForm({ ...editForm, year_level: e.target.value })} />
+                        </label>
+                        <label className="curriculum-add-field curriculum-add-semester"><span>Semester</span>
+                          <input aria-label="Edit semester" value={editForm.semester} onChange={(e) => setEditForm({ ...editForm, semester: e.target.value })} />
+                        </label>
+                        <label className="curriculum-add-field curriculum-add-classification"><span>Subject type</span>
+                          <CustomSelect aria-label="Edit subject type" value={editForm.classification} onChange={(e) => setEditForm({ ...editForm, classification: e.target.value })}>
+                            <option value="major">{kindLabel("major", (programs.find((p) => String(p.id) === String(editForm.program)) || {}).name)}</option>
+                            <option value="minor">{kindLabel("minor")}</option>
+                          </CustomSelect>
+                        </label>
+                        <label className="curriculum-add-field curriculum-add-academic-field"><span>Academic field (optional)</span>
+                          <CustomSelect aria-label="Edit academic field" value={editForm.field} onChange={(e) => setEditForm({ ...editForm, field: e.target.value })}>
+                            <option value="">-- none --</option>
+                            {academicFields.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                          </CustomSelect>
+                        </label>
+                        <button type="button" disabled={savingEdit} onClick={() => saveEdit(s.id)}>
+                          {savingEdit ? "Saving…" : "Save changes"}
+                        </button>
+                        <button type="button" disabled={savingEdit} onClick={cancelEdit}>Cancel</button>
+                      </div>
+                      {editError && <p role="alert" style={{ color: "#b42318", margin: "8px 0 0", fontSize: 13 }}>{editError}</p>}
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </React.Fragment>
           ))}
         </tbody>
       </table>
