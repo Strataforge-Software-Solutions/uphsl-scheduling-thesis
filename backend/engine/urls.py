@@ -44,6 +44,7 @@ urlpatterns = router.urls + [
     path("workload/replacements/", views.workload_replacements, name="workload_replacements"),
     path("workload/<int:faculty_id>/", views.workload_detail, name="workload_detail"),
     path("conflicts/", views.conflict_scan_view, name="conflict_scan"),
+    path("schedule-plot/", views.schedule_plot_view, name="schedule_plot"),
     path("conflicts/demo/", views.conflict_demo_view, name="conflict_demo"),
     path("conflicts/resolve/", views.conflict_resolve_view, name="conflict_resolve"),
     path("minor/generate-all/", views.minor_generate_all_view, name="minor_generate_all"),

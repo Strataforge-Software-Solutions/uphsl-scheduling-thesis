@@ -860,6 +860,49 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--c-primary); }
 .schedule-list-table td { padding-top: 10px !important; padding-bottom: 10px !important; }
 .schedule-list-table th:last-child,
 .schedule-list-table td:last-child { width: 176px; min-width: 164px; text-align: center; }
+
+.dean-schedule-view-switch,
+.dean-timetable-switch { display: inline-flex; border: 1px solid var(--uphsl-border); border-radius: 7px; padding: 3px; background: var(--uphsl-card); gap: 3px; }
+.dean-schedule-view-switch button,
+.dean-timetable-switch button { border: 0; border-radius: 5px; padding: 7px 11px; background: transparent; color: var(--uphsl-text); cursor: pointer; }
+.dean-schedule-view-switch button.is-active,
+.dean-timetable-switch button.is-active { background: var(--uphsl-navy); color: #fff; }
+.dean-timetable { background: var(--uphsl-card); color: var(--uphsl-text); border: 1px solid var(--uphsl-border); border-radius: 8px; padding: 14px; }
+.dean-timetable-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.dean-timetable-toolbar label { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
+.dean-timetable-toolbar select { min-width: 190px; max-width: min(360px, 50vw); padding: 8px 10px; border: 1px solid var(--uphsl-border); border-radius: 6px; background: var(--uphsl-card); color: var(--uphsl-text); }
+.dean-timetable-caption { margin-left: auto; color: #64748b; font-size: 12px; }
+.dean-timetable-scroll { overflow: auto; border: 1px solid var(--uphsl-border); border-radius: 6px; }
+.dean-timetable-grid { display: grid; grid-template-columns: 72px repeat(7, minmax(135px, 1fr)); grid-template-rows: 38px auto; min-width: 1020px; }
+.dean-timetable-corner,.dean-timetable-day-heading { display: flex; align-items: center; justify-content: center; position: sticky; top: 0; z-index: 4; background: var(--uphsl-navy); color: #fff; font-size: 12px; font-weight: 700; border-right: 1px solid rgba(255,255,255,.16); }
+.dean-timetable-corner { left: 0; z-index: 5; }
+.dean-timetable-time-column { display: grid; grid-template-rows: repeat(var(--slot-count), 28px); position: sticky; left: 0; z-index: 3; background: var(--uphsl-card); border-right: 1px solid var(--uphsl-border); }
+.dean-timetable-time { padding: 1px 5px 0 0; text-align: right; color: #64748b; font-size: 10px; white-space: nowrap; transform: translateY(-6px); }
+.dean-timetable-day { position: relative; height: calc(var(--slot-count) * 28px); background: var(--uphsl-card); border-right: 1px solid var(--uphsl-border); }
+.dean-timetable-cell { position: absolute; left: 0; right: 0; top: calc(var(--cell-index) * 28px); height: 28px; border-top: 1px solid var(--uphsl-border); z-index: 1; }
+.dean-timetable-cell:nth-child(2n) { border-top-color: color-mix(in srgb, var(--uphsl-border) 52%, transparent); }
+.dean-timetable-cell.is-target { background: rgba(37, 99, 235, .12); }
+.dean-timetable-day.is-drop-target { background: rgba(37, 99, 235, .035); }
+.dean-timetable-block { position: absolute; z-index: 2; left: 3px; right: 3px; overflow: hidden; display: flex; flex-direction: column; gap: 2px; padding: 5px 6px; box-sizing: border-box; border: 1px solid #7aa7e8; border-left: 3px solid #2563eb; border-radius: 5px; background: #eaf2ff; color: #173b69; font-size: 10px; line-height: 1.25; }
+.dean-timetable-block strong { font-size: 11px; }
+.dean-timetable-block small { font-size: 9px; }
+.dean-timetable-block.is-movable { cursor: grab; }
+.dean-timetable-block.is-movable:active { cursor: grabbing; }
+.dean-timetable-block.is-busy { background: #e5e7eb; border-color: #aab3c0; border-left-color: #64748b; color: #475569; justify-content: center; }
+.dean-timetable-block.has-conflict { border-color: #dc2626; border-left-color: #b91c1c; background: #fee2e2; color: #7f1d1d; }
+.dean-timetable-block em { font-size: 9px; font-style: normal; font-weight: 700; color: #b91c1c; }
+.dean-timetable-error { margin: 0 0 10px; padding: 8px 10px; background: #fff1f2; border: 1px solid #fda4af; border-radius: 5px; color: #9f1239; font-size: 13px; }
+.dean-timetable-error button { float: right; border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 18px; line-height: 1; }
+.dean-timetable-empty { color: #64748b; padding: 20px 8px; }
+.dean-timetable-legend { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; padding: 12px 2px 0; color: #64748b; font-size: 11px; }
+.dean-timetable-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.dean-timetable-legend i { width: 12px; height: 12px; display: inline-block; border-radius: 3px; border: 1px solid #7aa7e8; background: #eaf2ff; }
+.dean-timetable-legend .legend-busy { border-color: #aab3c0; background: #e5e7eb; }
+.dean-timetable-legend .legend-conflict { border-color: #dc2626; background: #fee2e2; }
+html[data-theme="dark"] .dean-timetable-block { background: #1b3554; color: #dbeafe; border-color: #547dad; }
+html[data-theme="dark"] .dean-timetable-block.is-busy { background: #263549; color: #cbd5e1; border-color: #64748b; }
+html[data-theme="dark"] .dean-timetable-block.has-conflict { background: #4a2028; color: #fecaca; border-color: #f87171; }
+html[data-theme="dark"] .dean-timetable-cell.is-target { background: rgba(96, 165, 250, .18); }
 .schedule-row-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; width: min(100%, 168px); margin: 0 auto; }
 .schedule-row-action { display: inline-flex; align-items: center; justify-content: center; min-width: 0; min-height: 30px; padding: 5px 8px; border: 1px solid transparent; border-radius: 7px; font: inherit; font-size: 11px; font-weight: 700; line-height: 1; white-space: nowrap; cursor: pointer; transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
 .schedule-row-action:hover:not(:disabled) { transform: translateY(-1px); }

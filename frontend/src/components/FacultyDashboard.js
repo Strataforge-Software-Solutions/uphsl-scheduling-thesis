@@ -41,6 +41,7 @@ import AddFacultyModal from "./AddFacultyModal";
 import "./DashboardTheme.css";
 import { OverrideBadge } from "./AssignAnywayDialog";
 import { formatDate } from "../utils/formatDateTime";
+import DeanTimetablePlot from "./DeanTimetablePlot";
 
 function StatusPill({ status }) {
   if (status === "published") return <Badge tone="success">Published</Badge>;
@@ -473,8 +474,11 @@ function ScheduleManager({ programId, programName = "", departments = [] }) {
   // Search + status filter, matching the Registrar's schedule view.
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [scheduleView, setScheduleView] = useState("list");
+  const [plotRefreshKey, setPlotRefreshKey] = useState(0);
 
   const load = () => {
+    setPlotRefreshKey((key) => key + 1);
     getSchedules().then((res) => setSchedules(res.data));
     API.get("/rooms/").then((res) => setRooms(res.data));
     API.get("/rooms/dean/overview/", { params: { program_id: programId || undefined } }).then((res) => {
@@ -608,6 +612,17 @@ function ScheduleManager({ programId, programName = "", departments = [] }) {
     saveEdit(editingGroup, false, next);
   };
 
+  const moveFromPlot = (group, day, startTime) => {
+    const duration = (t) => { const [h, m] = String(t || "0:0").slice(0, 5).split(":").map(Number); return h * 60 + m; };
+    const endTime = `${String(Math.floor((duration(startTime) + duration(group.end) - duration(group.start)) / 60)).padStart(2, "0")}:${String((duration(startTime) + duration(group.end) - duration(group.start)) % 60).padStart(2, "0")}`;
+    const form = { room: String(group.room_id ?? group.room), teacher: String(group.teacher_id ?? group.teacher),
+      day, start_time: startTime, end_time: endTime };
+    setEditingGroup(group);
+    setEditForm(form);
+    setSaveError("");
+    saveEdit(group, false, form);
+  };
+
   const filterSelectStyle = { padding: "9px 12px", borderRadius: 6, border: "1px solid #d1d5db", fontSize: "13px", background: "white" };
 
   return (
@@ -615,6 +630,10 @@ function ScheduleManager({ programId, programName = "", departments = [] }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "8px", marginBottom: "14px", flexWrap: "wrap" }}>
         <h3 style={{ margin: 0 }}>Class schedule</h3>
         <div style={{ display: "flex", gap: "8px" }}>
+          <div className="dean-schedule-view-switch" role="group" aria-label="Schedule view">
+            <button type="button" className={scheduleView === "list" ? "is-active" : ""} onClick={() => setScheduleView("list")}>List</button>
+            <button type="button" className={scheduleView === "timetable" ? "is-active" : ""} onClick={() => setScheduleView("timetable")}>Timetable</button>
+          </div>
           <PrintPreviewButton disabled={grouped.length === 0} onFixed={load} yearChoices={printYears(byProgram)} defaultYear={yearLevel}
             termChoices={printTerms(byProgram)} params={{ program_id: programId, semester, status: statusFilter, classification: typeFilter }} />
           <button onClick={() => setShowGenerate(true)} title={`Generate the ${programName || "program"} subject schedule`}
@@ -669,6 +688,10 @@ function ScheduleManager({ programId, programName = "", departments = [] }) {
       <GenEdRequestsPanel role="dean" refreshKey={reqKey} onChanged={load} />
       {moveReq && <RequestMoveModal group={moveReq} onClose={() => setMoveReq(null)} onDone={() => setReqKey((k) => k + 1)} />}
 
+      {scheduleView === "timetable" ? (
+        <DeanTimetablePlot schedules={schedules} programId={programId} yearLevel={yearLevel} semester={semester}
+          faculty={faculty} rooms={rooms} departments={departments} refreshKey={plotRefreshKey} onMove={moveFromPlot} />
+      ) : <>
       <table className="sched-compact schedule-list-table">
         <thead>
           <tr>
@@ -752,6 +775,7 @@ function ScheduleManager({ programId, programName = "", departments = [] }) {
           onDone={(r) => { setShowMove(false); setSelected([]); setMoveNote(`Moved ${r.classes} class${r.classes > 1 ? "es" : ""}.`); load(); }}
         />
       )}
+      </>}
 
       <ClashDialog
         clash={editClash} picked={editPicked} busy={savingEdit} applyLabel="Apply this time"

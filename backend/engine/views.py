@@ -1272,6 +1272,113 @@ def conflict_scan_view(request):
                          departments=u.departments if is_dean else None))
 
 
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def schedule_plot_view(request):
+    """Privacy-filtered weekly timetable data for a Dean's Section / Teacher / Room plot."""
+    from rest_framework.exceptions import ValidationError
+    from .conflict_report import scan
+
+    user = request.user
+    if not (user.role == "faculty" and user.faculty_type == "dean"):
+        return Response({"detail": "The timetable plot is available to Deans."}, status=403)
+    kind = request.query_params.get("resource", "")
+    semester = request.query_params.get("semester", "").strip()
+    if kind not in ("section", "teacher", "room") or not semester:
+        raise ValidationError("Choose a resource type and semester.")
+    try:
+        resource_id = int(request.query_params.get("resource_id", ""))
+    except (TypeError, ValueError):
+        raise ValidationError("Choose a valid resource.")
+
+    schedules = Schedule.objects.select_related(
+        "subject", "section__program", "teacher__user", "room", "timeslot"
+    ).filter(section__semester=semester)
+    if kind == "section":
+        section = Section.objects.select_related("program").filter(
+            pk=resource_id, semester=semester, program__department__in=user.departments
+        ).first()
+        if section is None:
+            return Response({"detail": "Section not found in your department for this semester."}, status=404)
+        schedules = schedules.filter(section_id=section.id)
+    elif kind == "teacher":
+        profile = FacultyProfile.objects.select_related("user").filter(
+            pk=resource_id, user__department__in=user.departments
+        ).first()
+        if profile is None:
+            return Response({"detail": "Teacher not found in your department."}, status=404)
+        schedules = schedules.filter(teacher_id=profile.id)
+    else:
+        if not Room.objects.filter(pk=resource_id).exists():
+            return Response({"detail": "Room not found."}, status=404)
+        schedules = schedules.filter(room_id=resource_id)
+
+    rows = list(schedules.order_by("timeslot__day", "timeslot__start_time", "id"))
+    conflicts = scan(semester=semester, involving_ids=[r.id for r in rows], limit=10000)
+    conflict_ids = set()
+    for conflict in conflicts["conflicts"]:
+        conflict_ids.update(conflict.get("a", {}).get("ids", []))
+        conflict_ids.update(conflict.get("b", {}).get("ids", []))
+
+    # Build contiguous class blocks from the underlying periods. Shared schedules have one record
+    # per section; fold them together while keeping the outside department's section anonymous.
+    classes = {}
+    for row in rows:
+        own = row.section.program.department in user.departments
+        if not own:
+            identity = (("busy-shared", row.merge_key, row.timeslot.day) if row.merge_key else
+                        ("busy", row.subject_id, row.section_id, row.teacher_id, row.room_id, row.timeslot.day))
+        elif row.merge_key:
+            identity = ("detail-shared", row.merge_key, row.timeslot.day)
+        else:
+            identity = ("detail", row.subject_id, row.section_id, row.teacher_id, row.room_id, row.timeslot.day)
+        item = classes.setdefault(identity, {
+            "day": row.timeslot.day, "busy": not own, "merge_key": row.merge_key,
+            "rows": [], "sections": set(), "conflict": False,
+        })
+        item["rows"].append(row)
+        item["sections"].add((row.section.program.name, row.section.name))
+        item["conflict"] = item["conflict"] or row.id in conflict_ids
+
+    own_merges = {entry.get("merge_key") for entry in classes.values() if not entry["busy"] and entry.get("merge_key")}
+    items = []
+    for item in classes.values():
+        periods = sorted(item["rows"], key=lambda r: r.timeslot.start_time)
+        blocks = []
+        for row in periods:
+            start, end = row.timeslot.start_time, row.timeslot.end_time
+            if blocks and start <= blocks[-1]["end"]:
+                blocks[-1]["end"] = max(blocks[-1]["end"], end)
+                blocks[-1]["ids"].append(row.id)
+                blocks[-1]["conflict"] = blocks[-1]["conflict"] or row.id in conflict_ids
+            else:
+                blocks.append({"start": start, "end": end, "ids": [row.id], "conflict": row.id in conflict_ids})
+        for block in blocks:
+            first = periods[0]
+            base = {"day": item["day"], "start": block["start"].strftime("%H:%M"),
+                    "end": block["end"].strftime("%H:%M"), "busy": item["busy"], "conflict": block["conflict"]}
+            if item["busy"]:
+                if item.get("merge_key") and item["merge_key"] in own_merges:
+                    continue
+                items.append(base)
+                continue
+            section_labels = sorted({f"{p} {s}" for p, s in item["sections"]})
+            base.update({
+                "id": block["ids"][0], "ids": block["ids"], "subject_code": first.subject.code,
+                "subject_title": first.subject.title, "teacher_id": first.teacher_id,
+                "teacher_name": first.teacher.user.get_full_name().strip() or first.teacher.user.username,
+                "room_id": first.room_id, "room_name": first.room.name,
+                "section_id": first.section_id, "section_name": ", ".join(section_labels),
+                "program_name": first.section.program.name, "department": first.section.program.department,
+                "classification": first.subject.classification, "status": first.status,
+                "merge_key": item["merge_key"],
+                "editable": all(p.subject.classification == "major" and p.status == "draft" for p in periods)
+                            and not item["merge_key"],
+            })
+            items.append(base)
+    return Response({"items": items, "days": ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]})
+
+
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def conflict_demo_view(request):
