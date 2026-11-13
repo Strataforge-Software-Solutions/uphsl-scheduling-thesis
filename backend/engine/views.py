@@ -1605,7 +1605,10 @@ def export_schedule_pdf(request):
     department = request.query_params.get("department")
     status_filter = request.query_params.get("status")
     classification = request.query_params.get("classification")     # "major" | "minor" | "" (both)
-    export_format = (request.query_params.get("format") or "pdf").lower()
+    # `format` is DRF's reserved URL_FORMAT_OVERRIDE parameter. Values such
+    # as "pdf" are treated as renderer names and rejected with a generic 404
+    # before this view runs. Keep report formats under a separate query key.
+    export_format = (request.query_params.get("export_format") or "pdf").lower()
     if export_format not in {"pdf", "xlsx", "csv"}:
         return Response({"detail": "Choose pdf, xlsx, or csv for the report format."}, status=status.HTTP_400_BAD_REQUEST)
 
