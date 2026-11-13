@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { reportLoadError } from "../services/loadError";
-import API, { logout } from "../services/api";
+import API, { getCurrentUser, login, logout } from "../services/api";
 import { notificationTarget, jumpTo } from "../services/jump";
 import { useNavigate } from "react-router-dom";
 import { usePreferences, initialsOf } from "../services/preferences";
@@ -23,6 +24,137 @@ function BellIcon() {
       <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
     </svg>
   );
+}
+
+function LockIcon() {
+  return <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="4" y="10" width="16" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /><path d="M12 14v3" />
+  </svg>;
+}
+
+function elapsedLabel(milliseconds) {
+  const total = Math.max(0, Math.floor(milliseconds / 1000));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function ScreenLock() {
+  const [now, setNow] = useState(Date.now());
+  const [lockedAt, setLockedAt] = useState(() => {
+    const stored = Number(sessionStorage.getItem("screen_locked_at"));
+    return Number.isFinite(stored) && stored > 0 ? stored : null;
+  });
+  const [sessionStartedAt] = useState(() => {
+    const stored = Number(sessionStorage.getItem("session_started_at"));
+    const started = Number.isFinite(stored) && stored > 0 ? stored : Date.now();
+    if (!sessionStorage.getItem("session_started_at")) sessionStorage.setItem("session_started_at", String(started));
+    return started;
+  });
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [unlocking, setUnlocking] = useState(false);
+  const passwordRef = useRef(null);
+  const unlockRef = useRef(null);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!lockedAt) return undefined;
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousRootOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    passwordRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousRootOverflow;
+    };
+  }, [lockedAt]);
+
+  const lockScreen = () => {
+    const timestamp = Date.now();
+    sessionStorage.setItem("screen_locked_at", String(timestamp));
+    setPassword("");
+    setError("");
+    setLockedAt(timestamp);
+  };
+
+  const unlockScreen = async (event) => {
+    event.preventDefault();
+    if (!password || unlocking) return;
+    const currentUser = getCurrentUser();
+    if (!currentUser?.username) {
+      setError("Your sign-in session is missing. Sign in again to continue.");
+      return;
+    }
+    setUnlocking(true);
+    setError("");
+    try {
+      const refreshedUser = await login(currentUser.username, password);
+      if (refreshedUser?.must_change_password) {
+        setError("Your password needs to be updated before you can unlock this screen.");
+        return;
+      }
+      sessionStorage.removeItem("screen_locked_at");
+      setLockedAt(null);
+      setPassword("");
+    } catch (unlockError) {
+      setError(unlockError.response?.data?.detail || "That password could not be verified.");
+    } finally {
+      setUnlocking(false);
+    }
+  };
+
+  const trapKeys = (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      return;
+    }
+    if (event.key === "Tab") {
+      event.preventDefault();
+      const target = document.activeElement === passwordRef.current ? unlockRef.current : passwordRef.current;
+      target?.focus();
+    }
+  };
+
+  return <>
+    <button type="button" className="app-screen-lock-trigger" onClick={lockScreen} title="Lock screen and start a break timer" aria-label="Lock screen">
+      <LockIcon />
+    </button>
+    {lockedAt && createPortal(
+      <div className="screen-lock-backdrop">
+        <section className="screen-lock-panel" role="dialog" aria-modal="true" aria-labelledby="screen-lock-title" onKeyDown={trapKeys}>
+          <div className="screen-lock-brand"><span className="screen-lock-icon"><LockIcon /></span><span>U-FAST · MANILA CAMPUS WORKSPACE</span></div>
+          <p className="screen-lock-eyebrow">SCREEN LOCKED</p>
+          <h1 id="screen-lock-title">Take a break.</h1>
+          <p className="screen-lock-copy">Your workspace is hidden. Enter your password when you’re ready to return.</p>
+          <div className="screen-lock-clock" aria-live="off">
+            <strong>{new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit", second: "2-digit" }).format(now)}</strong>
+            <span>{new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(now)}</span>
+          </div>
+          <div className="screen-lock-timers" aria-live="off">
+            <div><span>Break time</span><strong>{elapsedLabel(now - lockedAt)}</strong></div>
+            <div><span>Session time</span><strong>{elapsedLabel(now - sessionStartedAt)}</strong></div>
+          </div>
+          <form className="screen-lock-form" onSubmit={unlockScreen}>
+            <label htmlFor="screen-lock-password">Password</label>
+            <input ref={passwordRef} id="screen-lock-password" type="password" autoComplete="current-password" value={password}
+              onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" />
+            {error && <p className="screen-lock-error" role="alert">{error}</p>}
+            <button ref={unlockRef} type="submit" disabled={!password || unlocking}>
+              {unlocking ? "Verifying…" : "Unlock screen"}
+            </button>
+          </form>
+          <p className="screen-lock-footer">Your break timer continues while this screen is locked.</p>
+        </section>
+      </div>, document.body
+    )}
+  </>;
 }
 
 function timeAgo(iso) {
@@ -233,6 +365,7 @@ function TopBar({ crumb, userName }) {
       </div>
       <div className="app-topbar-right">
         <NotificationBell />
+        <ScreenLock />
         <AvatarMenu userName={userName} />
       </div>
     </div>

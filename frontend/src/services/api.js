@@ -58,6 +58,7 @@ export async function login(username, password) {
   sessionStorage.setItem("access_token", res.data.access);
   sessionStorage.setItem("refresh_token", res.data.refresh);
   sessionStorage.setItem("user", JSON.stringify(res.data.user));
+  if (!sessionStorage.getItem("session_started_at")) sessionStorage.setItem("session_started_at", String(Date.now()));
   return res.data.user; // { role, faculty_type, department, must_change_password, ... }
 }
 
