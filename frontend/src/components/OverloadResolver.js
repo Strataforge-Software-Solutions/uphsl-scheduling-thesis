@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import ModalPortal from "./ModalPortal";
 import API from "../services/api";
 import Badge from "./Badge";
 import TeacherPicker from "./TeacherPicker";
@@ -171,7 +172,7 @@ export function ResolverWindow({ onClose, focusId = null }) {
   const applied = (d) => { setDone((x) => [...x, d]); load(); };
 
   return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", zIndex: 80, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+    <ModalPortal><div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", zIndex: 80, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
       <div className="overload-resolver-dialog" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Overload suggestions"
         style={{ background: "#f9fafb", borderRadius: 6, width: "100%", maxWidth: 860, maxHeight: "92vh", overflowY: "auto", padding: "20px 22px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
@@ -240,7 +241,7 @@ export function ResolverWindow({ onClose, focusId = null }) {
           );
         })}
       </div>
-    </div>
+    </div></ModalPortal>
   );
 }
 

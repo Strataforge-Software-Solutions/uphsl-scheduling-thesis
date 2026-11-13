@@ -213,6 +213,7 @@
 .settings-help-chevron { margin-left: auto; color: #123b70; font-size: 22px; line-height: 1; transition: transform .15s ease; }
 .settings-help-details[open] .settings-help-chevron { transform: rotate(90deg); }
 .settings-help-details > p { margin: 0; padding: 0 12px 12px 37px; color: #475569; font-size: 12px; line-height: 1.5; }
+.settings-help-steps { margin: 0 12px 12px; }
 .settings-support-list { overflow: hidden; margin: 0; border: 1px solid #dbe4ef; border-radius: 9px; background: #fff; }
 .settings-support-list > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 36px; padding: 6px 10px; border-bottom: 1px solid #e2e8f0; }
 .settings-support-list > div:last-child { border-bottom: 0; }

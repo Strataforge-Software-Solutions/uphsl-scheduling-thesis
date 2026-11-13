@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import ModalPortal from "./ModalPortal";
 
 /* Confirmation for a manual "Assign anyway": the chosen person is NOT connected to the subject (no matching specialization or degree).
    A short reason is required. Nothing is saved here; the server checks everything again when the change is saved. */
@@ -19,7 +20,7 @@ export default function AssignAnywayDialog({ person, subjectCode, subjectTitle, 
   const ok = reason.trim().length >= 3;
   const name = person.full_name || person.label;
   return (
-    <div role="dialog" aria-modal="true" aria-labelledby="assign-anyway-title"
+    <ModalPortal><div role="dialog" aria-modal="true" aria-labelledby="assign-anyway-title"
       onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onCancel(); }}
       onKeyDown={(e) => { if (e.key === "Escape" && !busy) { e.preventDefault(); e.stopPropagation(); onCancel(); } }}
       style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.45)", zIndex: 6000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
@@ -49,6 +50,6 @@ export default function AssignAnywayDialog({ person, subjectCode, subjectTitle, 
           </button>
         </div>
       </div>
-    </div>
+    </div></ModalPortal>
   );
 }

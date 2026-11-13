@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import ModalPortal from "./ModalPortal";
 import API from "../services/api";
 import { onJump, takeJump } from "../services/jump";
 
@@ -42,7 +43,7 @@ export function RequestMoveModal({ group, onClose, onDone }) {
     setBusy(false);
   };
   return (
-    <div role="dialog" aria-label="Request a Gen Ed schedule change" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    <ModalPortal><div role="dialog" aria-label="Request a Gen Ed schedule change" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.45)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
       <div style={{ background: "white", borderRadius: 6, width: "min(640px, 100%)", maxHeight: "90vh", overflow: "auto", padding: "16px 18px", boxShadow: "var(--shadow-pop)" }}>
         <h3 style={{ margin: "0 0 4px", color: "#003366" }}>Request a Gen Ed schedule change</h3>
@@ -95,7 +96,7 @@ export function RequestMoveModal({ group, onClose, onDone }) {
           </>
         )}
       </div>
-    </div>
+    </div></ModalPortal>
   );
 }
 

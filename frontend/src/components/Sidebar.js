@@ -24,6 +24,13 @@ function Chevron({ collapsed }) {
   return <svg className={collapsed ? "app-nav-chevron collapsed" : "app-nav-chevron"} viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4" /></svg>;
 }
 
+const NAV_GLYPHS = {
+  home: "⌂", overview: "◫", generate: "＋", minors: "▤", schedules: "▦", schedule: "▦", timetable: "▦",
+  exams: "▣", conflicts: "△", curriculum: "▣", classlists: "☷", availability: "◷", coverage: "♧",
+  analytics: "▥", activity: "↗", audit: "≡", accounts: "♙", faculty: "♙", rooms: "▤", sections: "▦",
+  calendar: "▦", settings: "⚙", data: "◉", profile: "♙",
+};
+
 /**
  * Shared sidebar used by every dashboard: school logo and name, text navigation (the current page has a left bar),
  * the signed-in user with role, and Sign out. Items' "icon" field is no longer shown (menus are text only).
@@ -32,6 +39,12 @@ function Chevron({ collapsed }) {
  */
 function Sidebar({ brandLabel, workspaceLabel, items, activeKey, onSelect, userName, userRole, onSignOut }) {
   const [collapsedGroups, setCollapsedGroups] = React.useState({});
+  const [sidebarCollapsed, setSidebarCollapsed] = React.useState(() => {
+    try { return window.localStorage.getItem("uphsl-sidebar-collapsed") === "true"; } catch { return false; }
+  });
+  React.useEffect(() => {
+    try { window.localStorage.setItem("uphsl-sidebar-collapsed", String(sidebarCollapsed)); } catch { /* storage is optional */ }
+  }, [sidebarCollapsed]);
 
   const sections = [];
   let currentSection = null;
@@ -53,9 +66,11 @@ function Sidebar({ brandLabel, workspaceLabel, items, activeKey, onSelect, userN
         type="button"
         className={activeKey === item.key ? "app-nav-item active" : "app-nav-item"}
         aria-current={activeKey === item.key ? "page" : undefined}
+        title={sidebarCollapsed ? item.label : undefined}
         onClick={() => onSelect(item.key)}
       >
-        {item.label}
+        <span className="app-nav-icon" aria-hidden="true">{NAV_GLYPHS[item.key] || item.label.slice(0, 1)}</span>
+        <span className="app-nav-item-label">{item.label}</span>
       </button>
     </li>
   );
@@ -69,13 +84,18 @@ function Sidebar({ brandLabel, workspaceLabel, items, activeKey, onSelect, userN
     .toUpperCase();
 
   return (
-    <div className="app-sidebar">
+    <div className={`app-sidebar${sidebarCollapsed ? " is-collapsed" : ""}`}>
       <div className="app-sidebar-brand">
         <img src={logo} alt="UPHSL U-FAST logo" className="app-sidebar-logo-img" />
-        <div>
+        <div className="app-sidebar-brand-copy">
           <div className="app-sidebar-brand-name">{brandLabel}</div>
           <div className="app-sidebar-brand-sub">{workspaceLabel}</div>
         </div>
+        <button type="button" className="app-sidebar-collapse" onClick={() => setSidebarCollapsed((value) => !value)}
+          aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"} aria-expanded={!sidebarCollapsed}
+          title={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}>
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d={sidebarCollapsed ? "m7 4 6 6-6 6" : "m13 4-6 6 6 6"} /></svg>
+        </button>
       </div>
 
       <ul className="app-sidebar-nav">
@@ -97,7 +117,7 @@ function Sidebar({ brandLabel, workspaceLabel, items, activeKey, onSelect, userN
                 <span className="app-nav-section-name">{section.group}</span>
                 <Chevron collapsed={collapsed} />
               </button>
-              {!collapsed && (
+              {(!collapsed || sidebarCollapsed) && (
                 <ul className="app-nav-subnav" id={groupId}>
                   {section.items.map(navItem)}
                 </ul>
@@ -114,7 +134,9 @@ function Sidebar({ brandLabel, workspaceLabel, items, activeKey, onSelect, userN
           <div className="app-sidebar-user-role">{userRole}</div>
         </div>
       </div>
-      <button className="app-sidebar-signout" onClick={onSignOut}>Sign out</button>
+      <button className="app-sidebar-signout" onClick={onSignOut} aria-label="Sign out" title={sidebarCollapsed ? "Sign out" : undefined}>
+        <span className="app-sidebar-signout-label">Sign out</span><span className="app-sidebar-signout-icon" aria-hidden="true">↪</span>
+      </button>
     </div>
   );
 }

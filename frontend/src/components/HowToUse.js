@@ -1,26 +1,53 @@
 import React, { useState } from "react";
 import { HOWTO } from "./howto";
 
-/* "How to Use This Tab": a short, collapsed step-by-step panel placed under the page header of every dashboard tab. */
+/* A compact, consistent guide shared by every dashboard role and tab. */
 export default function HowToUse({ role, tab }) {
   const info = HOWTO[role]?.[tab];
   const [open, setOpen] = useState(false);
   if (!info) return null;
+
+  const steps = info.steps || [];
+  const visibleSteps = steps.slice(0, 3);
+  const moreSteps = steps.slice(3);
+  const contentId = `howto-${role}-${tab}`;
+
   return (
-    <div className="howto" style={{ margin: "0 0 16px", border: "1px solid #e5e7eb", borderRadius: 6, background: "white" }}>
-      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}
-        style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", textAlign: "left", background: "none", border: "none", padding: "8px 12px", cursor: "pointer", fontSize: 13, color: "#374151", fontWeight: 600 }}>
-        How to use this tab
-        <span style={{ marginLeft: "auto", fontSize: 12, color: "#003366", fontWeight: 600 }}>{open ? "Hide" : "Show"}</span>
+    <section className="howto" aria-label="How to use this tab">
+      <button
+        type="button"
+        className="howto-toggle"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        aria-controls={contentId}
+      >
+        <span className="howto-info-icon" aria-hidden="true">i</span>
+        <span className="howto-title">How to use this tab (Simplified)</span>
+        <span className="howto-toggle-action">{open ? "Hide" : "Show"}</span>
       </button>
       {open && (
-        <div style={{ padding: "0 16px 12px", fontSize: 13, color: "#374151", borderTop: "1px solid #f3f4f6", paddingTop: 10 }}>
-          <p style={{ margin: "0 0 6px" }}>{info.summary}</p>
-          <ol style={{ margin: 0, paddingLeft: 20, lineHeight: 1.65 }}>
-            {info.steps.map((s, i) => <li key={i}>{s}</li>)}
-          </ol>
+        <div className="howto-content" id={contentId}>
+          <div className="howto-steps">
+            {visibleSteps.map((step, index) => (
+              <React.Fragment key={index}>
+                <div className="howto-step">
+                  <b>{index + 1}</b>
+                  <span>{step}</span>
+                </div>
+                {index < visibleSteps.length - 1 && <i aria-hidden="true">›</i>}
+              </React.Fragment>
+            ))}
+          </div>
+          {moreSteps.length > 0 && (
+            <details className="howto-more">
+              <summary>More steps ({moreSteps.length})</summary>
+              <ol>
+                {moreSteps.map((step, index) => <li key={index}>{step}</li>)}
+              </ol>
+            </details>
+          )}
         </div>
       )}
-    </div>
+    </section>
   );
 }

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import ModalPortal from "./ModalPortal";
 import API, { getCurrentUser } from "../services/api";
 import { formatTime } from "../utils/formatDateTime";
 
@@ -134,7 +135,7 @@ export default function ScheduleProblemsModal({ clashes, unplaced, yearLevel, pi
   );
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Scheduling problems" style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.5)", zIndex: 1100, display: "flex", alignItems: "center", justifyContent: "center", padding: 14 }}>
+    <ModalPortal><div role="dialog" aria-modal="true" aria-label="Scheduling problems" style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.5)", zIndex: 1100, display: "flex", alignItems: "center", justifyContent: "center", padding: 14 }}>
       <div style={{ background: "#fff", borderRadius: 6, width: "100%", maxWidth: 760, maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "var(--shadow-pop)" }}>
         <div style={{ padding: "14px 18px", borderBottom: `1px solid ${C.line}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
           <h3 style={{ margin: 0, color: C.navy }}>{target || startWith ? "Choose a day and time" : "Classes that need your decision"}</h3>
@@ -254,6 +255,6 @@ export default function ScheduleProblemsModal({ clashes, unplaced, yearLevel, pi
           {!target && error && <p style={{ color: C.bad, fontSize: 13 }}>{error}</p>}
         </div>
       </div>
-    </div>
+    </div></ModalPortal>
   );
 }

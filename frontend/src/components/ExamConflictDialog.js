@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import ModalPortal from "./ModalPortal";
 import API from "../services/api";
 import { formatDate, formatTime } from "../utils/formatDateTime";
 
@@ -45,7 +46,7 @@ export default function ExamConflictDialog({ pending, form, onClose, onApplied, 
     ? `Change date / time of ${fixable.reduce((n, i) => n + i.moves.length, 0)} of my exam(s)`
     : asks ? "Place what I can and ask the Dean(s) to move their exams" : `Place ${fixable.length} exam${fixable.length === 1 ? "" : "s"}`;
   return (
-    <div role="dialog" aria-modal="true" style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.55)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }}>
+    <ModalPortal><div role="dialog" aria-modal="true" style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.55)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }}>
       <div style={{ background: "#fff", borderRadius: 6, maxWidth: "760px", width: "100%", maxHeight: "86vh", overflowY: "auto", padding: "22px 24px", boxShadow: "var(--shadow-pop)" }}>
         <h3 style={{ marginTop: 0, color: "#003366" }}>{done ? (isDean ? "Exams moved" : "Done") : (isDean ? "Registrar requests" : "Exam conflict")}</h3>
         {!done && !isDean && <p style={{ fontSize: "13px", color: "#4b5563", marginTop: 0 }}>
@@ -82,6 +83,6 @@ export default function ExamConflictDialog({ pending, form, onClose, onApplied, 
           )}
         </div>
       </div>
-    </div>
+    </div></ModalPortal>
   );
 }

@@ -649,7 +649,7 @@ function CurriculumTab({ programId, defaultProgram }) {
               <td>{kindLabel(s.classification, s.program_name)}</td>
               <td>{s.department}</td>
               <td>
-                <CustomSelect className="curriculum-field-select" value={s.field || ""} onChange={(e) => updateSubjectField(s.id, e.target.value)}>
+                <CustomSelect portalMenu className="curriculum-field-select" value={s.field || ""} onChange={(e) => updateSubjectField(s.id, e.target.value)}>
                   <option value="">-- none --</option>
                   {academicFields.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
                 </CustomSelect>
@@ -939,7 +939,7 @@ function CoverageTab() {
           <section className="coverage-panel coverage-howto-panel">
             <div className="coverage-panel-heading">
               <span className="coverage-panel-icon"><CoverageIcon type="info" /></span>
-              <div><h3>How to use this tab</h3></div>
+              <div><h3>How to use this tab (Simplified)</h3></div>
             </div>
             <div className="coverage-steps">
               <div><b>1</b><span>Report an absence with the date and reason.</span></div><i>›</i>
