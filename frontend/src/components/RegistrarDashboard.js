@@ -921,6 +921,18 @@ function CurriculumTab({ programs, programId, defaultProgram }) {
                 </tr>
               )}
             </React.Fragment>
+            <tr key={s.id}>
+              <td>{s.code}</td><td>{s.title}</td><td>{s.lec_units}</td><td>{s.lab_units}</td>
+              <td>{kindLabel(s.classification, s.program_name)}</td>
+              <td>{s.department}</td>
+              <td>
+                <CustomSelect portalMenu className="curriculum-field-select" value={s.field || ""} onChange={(e) => updateSubjectField(s.id, e.target.value)}>
+                  <option value="">-- none --</option>
+                  {academicFields.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                </CustomSelect>
+              </td>
+              <td><button className="curriculum-remove-button" onClick={() => remove(s.id)}>Remove</button></td>
+            </tr>
           ))}
           {paginatedSubjects.length === 0 && <tr><td colSpan={9} className="coverage-empty">No subjects found for this program yet. Add one using the form above.</td></tr>}
         </tbody>

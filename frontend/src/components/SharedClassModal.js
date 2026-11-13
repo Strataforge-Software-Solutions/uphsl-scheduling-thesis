@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import ModalPortal from "./ModalPortal";
 import API from "../services/api";
 
 /* Choose how one minor (Gen Ed) subject is held before generating: Automatic, exclusive to this program, or shared by 2 or 3 programs.
@@ -50,7 +51,7 @@ export default function SharedClassModal({ item, program, onClose, onChanged }) 
   };
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Shared class" style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.5)", zIndex: 1100, display: "flex", alignItems: "center", justifyContent: "center", padding: 14 }}>
+    <ModalPortal><div role="dialog" aria-modal="true" aria-label="Shared class" style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.5)", zIndex: 1100, display: "flex", alignItems: "center", justifyContent: "center", padding: 14 }}>
       <div style={{ background: "#fff", borderRadius: 6, width: "100%", maxWidth: 680, maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "var(--shadow-pop)" }}>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid #e5e7eb", display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
           <div>
@@ -111,6 +112,6 @@ export default function SharedClassModal({ item, program, onClose, onChanged }) 
           </div>
         )}
       </div>
-    </div>
+    </div></ModalPortal>
   );
 }

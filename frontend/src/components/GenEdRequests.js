@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import ModalPortal from "./ModalPortal";
 import API from "../services/api";
 import { onJump, takeJump } from "../services/jump";
 
@@ -55,6 +56,19 @@ export function RequestMoveModal({ group, onClose, onDone }) {
             <div className="gened-move-eyebrow">SCHEDULE CHANGE REQUEST</div>
             <h2 id="gened-move-title">Request a Gen Ed schedule change</h2>
             <p>Choose an available time. The schedule changes only after the Registrar approves.</p>
+    <ModalPortal><div role="dialog" aria-label="Request a Gen Ed schedule change" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.45)", zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div style={{ background: "white", borderRadius: 6, width: "min(640px, 100%)", maxHeight: "90vh", overflow: "auto", padding: "16px 18px", boxShadow: "var(--shadow-pop)" }}>
+        <h3 style={{ margin: "0 0 4px", color: "#003366" }}>Request a Gen Ed schedule change</h3>
+        <p style={{ margin: "0 0 10px", fontSize: 13, color: "#4b5563" }}>
+          {group.subject_code} — {group.subject_title} · {group.section_name}. Gen Ed classes belong to the Registrar: pick the time you would like
+          it moved to (for example to free its current time for a major subject). Nothing changes until the Registrar approves.
+        </p>
+        {error && <p role="alert" style={{ color: "#b91c1c", fontSize: 13 }}>{error}</p>}
+        {done ? (
+          <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 6, padding: "10px 12px", fontSize: 13, color: "#166534" }}>
+            <b>Request sent.</b> {done.subject}: {done.current} → {done.target}. The Registrar was notified; you will be notified of the decision.
+            <div style={{ textAlign: "right", marginTop: 8 }}><button style={btnPrimary} onClick={onClose}>OK</button></div>
           </div>
           <button className="gened-move-close" onClick={onClose} aria-label="Close request">×</button>
         </header>
@@ -117,6 +131,10 @@ export function RequestMoveModal({ group, onClose, onDone }) {
         </div>
       </section>
     </div>
+          </>
+        )}
+      </div>
+    </div></ModalPortal>
   );
 }
 

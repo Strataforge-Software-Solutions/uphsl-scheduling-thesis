@@ -46,6 +46,7 @@ function timeAgo(iso) {
    dropdown is actually opened. */
 function NotificationBell() {
   const [open, setOpen] = useState(false);
+  const [expandedNotificationId, setExpandedNotificationId] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -158,30 +159,29 @@ function NotificationBell() {
           ) : items.length === 0 ? (
             <p style={{ padding: 16, fontSize: 13, color: "#6b7280", margin: 0 }}>No notifications.</p>
           ) : (
-            items.map((n) => (
-              <div
-                key={n.id}
-                onClick={() => {
-                  if (!n.is_read) markRead(n.id);
-                  const target = notificationTarget(n);
-                  if (target) { setOpen(false); jumpTo(target); }
-                }}
-                title={notificationTarget(n) ? "Open the Gen Ed move requests" : n.is_read ? undefined : "Mark as read"}
-                style={{
-                  display: "flex", gap: 10, padding: "10px 12px", borderBottom: "1px solid #f3f4f6",
-                  background: n.is_read ? "white" : "#f5f8fc", cursor: n.is_read && !notificationTarget(n) ? "default" : "pointer",
-                  borderLeft: `3px solid ${n.is_read ? "transparent" : "#003366"}`,
-                }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ margin: 0, fontSize: 13, color: "#111827", lineHeight: 1.45, fontWeight: n.is_read ? 400 : 600 }}>{n.message}</p>
-                  <p style={{ margin: "4px 0 0", fontSize: 12, color: "#6b7280" }}>
-                    {TYPE_LABEL[n.notif_type] || "Notice"} · {timeAgo(n.created_at)}{n.is_read ? "" : " · Unread"}
-                    {notificationTarget(n) && <span style={{ color: "#003366", fontWeight: 600, textDecoration: "underline" }}> · Open</span>}
-                  </p>
+            items.map((n) => {
+              const target = notificationTarget(n);
+              const expanded = expandedNotificationId === n.id;
+              return <div className={`notification-dropdown-item${n.is_read ? " is-read" : " is-unread"}`} key={n.id}>
+                <button type="button" className="notification-dropdown-trigger" aria-expanded={expanded}
+                  aria-controls={`notification-detail-${n.id}`} onClick={() => {
+                    if (!n.is_read) markRead(n.id);
+                    setExpandedNotificationId((current) => current === n.id ? null : n.id);
+                  }}>
+                  <span className="notification-dropdown-copy">
+                    <span className="notification-dropdown-message">{n.message}</span>
+                    <span className="notification-dropdown-meta">{TYPE_LABEL[n.notif_type] || "Notice"} · {timeAgo(n.created_at)}{n.is_read ? "" : " · Unread"}</span>
+                  </span>
+                  <span className={`notification-dropdown-chevron${expanded ? " is-open" : ""}`} aria-hidden="true">⌄</span>
+                </button>
+                <div id={`notification-detail-${n.id}`} className={`notification-dropdown-detail${expanded ? " is-open" : ""}`} aria-hidden={!expanded}>
+                  <div className="notification-dropdown-detail-inner">
+                    <p>{n.message}</p>
+                    {target && <button type="button" className="notification-dropdown-open" onClick={() => { setOpen(false); jumpTo(target); }}>Open requests</button>}
+                  </div>
                 </div>
-              </div>
-            ))
+              </div>;
+            })
           )}
         </div>
       )}

@@ -1,4 +1,5 @@
 import React from "react";
+import ModalPortal from "./ModalPortal";
 
 /* Warning pop-up shown when a day / time change clashes with another class. Lists each clash and offers the
    free start times on the chosen day; the caller keeps which one is picked and applies it. */
@@ -18,7 +19,7 @@ export default function ClashDialog({ clash, picked, onPick, onBack, onApply, bu
     && toMin(s.start_time) < toMin(picked[idKey(o)].end_time) && toMin(picked[idKey(o)].start_time) < toMin(s.end_time));
   const allPicked = clash.conflicts.every((c) => picked[idKey(c)]);
   return (
-    <div style={overlay}>
+    <ModalPortal><div style={overlay}>
       <div role="alertdialog" style={{ background: "white", borderRadius: 6, padding: "22px", width: "560px", maxWidth: "100%", maxHeight: "90vh", overflowY: "auto", borderTop: "5px solid #d97706" }}>
         <h3 style={{ margin: 0, color: "#92400e" }}>Schedule conflict</h3>
         <p style={{ margin: "6px 0 12px", fontSize: "13px", color: "#4b5563" }}>
@@ -55,6 +56,6 @@ export default function ClashDialog({ clash, picked, onPick, onBack, onApply, bu
           </button>
         </div>
       </div>
-    </div>
+    </div></ModalPortal>
   );
 }

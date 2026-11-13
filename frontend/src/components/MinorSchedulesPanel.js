@@ -1,5 +1,6 @@
 import CustomSelect from "./CustomSelect";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import API from "../services/api";
 import UnplacedResolve from "./UnplacedResolve";
 import { SimplifiedGuide } from "./HowToUse";
@@ -106,12 +107,14 @@ function Tag({ bg, fg, children }) {
 }
 
 /* One section of one subject in one department: who (program + section + students), how it is shared, and when / where. */
-function Cell({ c }) {
+function Cell({ c, onOpen }) {
   const bad = c.conflicts.length > 0;
   const m = MODE[c.mode] || MODE.separate;
   const others = c.shared_with || [];
   return (
-    <div style={{ border: `1px solid ${bad ? "#fca5a5" : "#e5e7eb"}`, borderLeft: `4px solid ${bad ? "#dc2626" : c.mode === "shared" ? "#22c55e" : "#6b7280"}`,
+    <button type="button" className={`minor-comparison-entry${bad ? " has-conflict" : c.mode === "shared" ? " is-shared" : ""}`}
+      aria-haspopup="dialog" aria-label={`View details for ${c.program} ${c.section}`} onClick={() => onOpen(c)}
+      style={{ border: `1px solid ${bad ? "#fca5a5" : "#e5e7eb"}`, borderLeft: `4px solid ${bad ? "#dc2626" : c.mode === "shared" ? "#22c55e" : "#6b7280"}`,
       background: bad ? "#fef2f2" : "#fff", borderRadius: 6, padding: "9px 11px", marginBottom: 8, lineHeight: 1.45 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 6, alignItems: "baseline" }}>
         <span style={{ minWidth: 0, fontWeight: 600, color: "#111827", overflowWrap: "anywhere" }}>{c.program.replace(/^BS |^BA /, "")} {c.section}</span>
@@ -133,7 +136,7 @@ function Cell({ c }) {
           <div style={{ color: "#6b7280", overflowWrap: "anywhere" }}>{b.teacher}</div>
         </div>
       ))}
-    </div>
+    </button>
   );
 }
 
@@ -141,6 +144,23 @@ export function Comparison({ data }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   useEffect(() => { setPage(1); }, [data]);
+  const [selectedDetail, setSelectedDetail] = useState(null);
+  const closeButtonRef = useRef(null);
+  const closeDetail = useCallback(() => setSelectedDetail(null), []);
+  useEffect(() => {
+    if (!selectedDetail) return undefined;
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    const onKeyDown = (event) => { if (event.key === "Escape") closeDetail(); };
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", onKeyDown);
+    closeButtonRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onKeyDown);
+      previousFocus?.focus?.();
+    };
+  }, [selectedDetail, closeDetail]);
   if (!data) return null;
   if (!data.groups.length) return <p style={{ fontSize: 13, color: "#6b7280" }}>No minor subjects found for this semester and year level.</p>;
   const cols = data.departments.length ? data.departments : DEPTS;
@@ -200,7 +220,7 @@ export function Comparison({ data }) {
                   const cells = g.cells.filter((c) => c.department === d);
                   return (
                     <td key={d} style={cell}>
-                      {cells.length ? cells.map((c) => <Cell key={c.section_id} c={c} />)
+                      {cells.length ? cells.map((c) => <Cell key={c.section_id} c={c} onOpen={(item) => setSelectedDetail({ subject: g, department: d, cell: item })} />)
                         : <div style={{ color: "#6b7280", fontSize: 12, textAlign: "center", padding: "10px 0" }}>Not in this curriculum</div>}
                     </td>
                   );
@@ -211,8 +231,50 @@ export function Comparison({ data }) {
           </tbody>
         </table>
       </div>
+        </tbody>
+      </table>
+      {selectedDetail && createPortal(<MinorScheduleDetailModal detail={selectedDetail} onClose={closeDetail} closeButtonRef={closeButtonRef} />, document.body)}
     </div>
   );
+}
+
+function MinorScheduleDetailModal({ detail, onClose, closeButtonRef }) {
+  const { subject, department, cell } = detail;
+  const mode = MODE[cell.mode] || MODE.separate;
+  const conflicts = cell.conflicts || [];
+  const surface = { border: "1px solid #dfe7f1", borderRadius: 12, padding: 14, background: "white" };
+  const label = { display: "block", marginBottom: 4, color: "#64748b", fontSize: 12 };
+  const value = { color: "#172b45", fontSize: 14, overflowWrap: "anywhere" };
+  return <div className="minor-detail-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className="minor-detail-modal" role="dialog" aria-modal="true" aria-labelledby="minor-detail-title">
+      <header className="minor-detail-header">
+        <div><div className="minor-detail-eyebrow">{DEPT_NAME[department] || department} · Schedule details</div>
+          <h2 id="minor-detail-title">{subject.code} — {subject.title}</h2>
+          <p>{subject.year_level} · {subject.units} unit{subject.units === 1 ? "" : "s"}</p>
+        </div>
+        <button ref={closeButtonRef} type="button" className="minor-detail-close" onClick={onClose} aria-label="Close schedule details">×</button>
+      </header>
+      <div className="minor-detail-body">
+        <div className="minor-detail-summary">
+          {[ ["Department", DEPT_NAME[department] || department], ["Program and section", `${cell.program} · ${cell.section}`], ["Enrollment", `${cell.students} student${cell.students === 1 ? "" : "s"}`] ].map(([title, content]) => <div key={title} style={{ ...surface, padding: 12 }}><span style={label}>{title}</span><strong style={value}>{content}</strong></div>)}
+        </div>
+        <section className="minor-detail-status" style={surface} aria-label="Schedule status">
+          <div className="minor-detail-tags"><Tag bg={mode.bg} fg={mode.fg}>{mode.label}</Tag>{cell.scheduled && (conflicts.length ? <Tag bg="#fee2e2" fg="#991b1b">Conflict</Tag> : <Tag bg="#ecfdf5" fg="#166534">No conflict</Tag>)}</div>
+          {cell.mode === "shared" && (cell.shared_with || []).length > 0 && <p><strong>Shared with: </strong>{cell.shared_with.join(", ")}</p>}
+          {conflicts.length > 0 && <div className="minor-detail-conflicts"><strong>Conflict details</strong><ul>{conflicts.map((conflict, index) => <li key={index}>{conflict}</li>)}</ul></div>}
+        </section>
+        <section className="minor-detail-schedule" style={surface}>
+          <h3>Scheduled periods</h3>
+          {cell.blocks?.length ? cell.blocks.map((block, index) => <div className="minor-detail-period" key={`${block.day}-${block.time}-${index}`}>
+            <div><span style={label}>Day and time</span><strong style={value}>{block.day} · {block.time}</strong></div>
+            <div><span style={label}>Room</span><strong style={value}>{block.room || "Not assigned"}</strong></div>
+            <div><span style={label}>Teacher</span><strong style={value}>{block.teacher || "Not assigned"}</strong></div>
+          </div>) : <p className="minor-detail-empty">No periods are scheduled for this section yet.</p>}
+        </section>
+      </div>
+      <footer className="minor-detail-footer"><button type="button" onClick={onClose}>Close</button></footer>
+    </section>
+  </div>;
 }
 
 const CAT = { "minor-minor": "Minor – Minor", "minor-major": "Minor – Major", "major-major": "Major – Major" };

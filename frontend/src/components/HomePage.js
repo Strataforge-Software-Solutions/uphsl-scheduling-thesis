@@ -85,6 +85,7 @@ function useNotifications() {
 
 export default function HomePage({ role, name, scope, nav = [], onNavigate, stats = [], tasks = [], status = [], extra = null, skip = [], hideIntro = false }) {
   const notes = useNotifications();
+  const [openGuides, setOpenGuides] = useState({});
   const tabs = nav.filter((i) => i.key && !skip.includes(i.key) && HOWTO[role]?.[i.key]);
   const visibleScope = scope && scope.toLowerCase() !== ROLE[role]?.toLowerCase() ? scope : null;
   return (
@@ -120,6 +121,8 @@ export default function HomePage({ role, name, scope, nav = [], onNavigate, stat
                 <li key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid #f3f4f6" }}>
                   <span className={t.tone === "bad" ? "is-bad" : ""}>{t.text}</span>
                   {t.tab && <button className="home-task-open" type="button" onClick={() => onNavigate(t.tab)}>Open</button>}
+                  <span style={{ color: t.tone === "bad" ? "#b91c1c" : "#111827" }}>{t.text}</span>
+                  {t.tab && <button type="button" className="home-task-open" onClick={() => onNavigate(t.tab)}>Open</button>}
                 </li>
               ))}
             </ul>
@@ -156,10 +159,15 @@ export default function HomePage({ role, name, scope, nav = [], onNavigate, stat
               <div className="home-tab-copy">
                 <button type="button" className="home-tab-title" onClick={() => onNavigate(t.key)}>{t.label}</button>
                 <p className="home-tab-summary">{info.summary}</p>
-                <details className="home-tab-details">
-                  <summary>Step by step</summary>
-                  <ol>{info.steps.map((s, i) => <li key={i}>{s}</li>)}</ol>
-                </details>
+                <div className="home-tab-details">
+                  <button type="button" className="home-tab-step-toggle" aria-expanded={Boolean(openGuides[t.key])}
+                    aria-controls={`home-tab-steps-${t.key}`} onClick={() => setOpenGuides((current) => ({ ...current, [t.key]: !current[t.key] }))}>
+                    Step by step <span aria-hidden="true" className={`home-tab-step-chevron${openGuides[t.key] ? " is-open" : ""}`}>⌄</span>
+                  </button>
+                  <div id={`home-tab-steps-${t.key}`} className={`home-tab-steps${openGuides[t.key] ? " is-open" : ""}`} aria-hidden={!openGuides[t.key]}>
+                    <div className="home-tab-steps-inner"><ol>{info.steps.map((s, i) => <li key={i}>{s}</li>)}</ol></div>
+                  </div>
+                </div>
               </div>
               <button type="button" className="home-tab-open" aria-label={`Open ${t.label}`} onClick={() => onNavigate(t.key)}>
                 <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 10h13m-5-5 5 5-5 5" /></svg>
