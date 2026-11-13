@@ -125,6 +125,7 @@ function ScreenLock() {
   return <>
     <button type="button" className="app-screen-lock-trigger" onClick={lockScreen} title="Lock screen and start a break timer" aria-label="Lock screen">
       <LockIcon />
+      <span>Lock</span>
     </button>
     {lockedAt && createPortal(
       <div className="screen-lock-backdrop">
