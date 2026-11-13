@@ -27,6 +27,80 @@ const card = { background: "white", border: "1px solid #e5e7eb", borderRadius: 6
 const th = { textAlign: "left", padding: "8px 10px", background: "#f3f4f6", borderBottom: "1px solid #e5e7eb", fontSize: 13, color: "#374151", verticalAlign: "bottom" };
 const td = { padding: "10px 12px", borderBottom: "1px solid #eef2f7", fontSize: 13, verticalAlign: "top" };
 
+function MinorSharingChoices({ semester, yearLevel }) {
+  const [data, setData] = useState(null);
+  const [drafts, setDrafts] = useState({});
+  const [busy, setBusy] = useState({});
+  const [messages, setMessages] = useState({});
+  const [messageErrors, setMessageErrors] = useState({});
+  const [error, setError] = useState("");
+  const load = useCallback(async () => {
+    try {
+      const r = await API.get("/engine/shared-classes/batch-options/", { params: { semester, year_level: yearLevel === "All" ? "" : yearLevel } });
+      setData(r.data);
+      setDrafts(Object.fromEntries((r.data.subjects || []).map((s) => [s.subject_id, {
+        mode: s.mode, departments: s.selected_departments || [],
+      }])));
+      setError("");
+    } catch (e) { setError(e.response?.data?.detail || "Could not load minor sharing choices."); }
+  }, [semester, yearLevel]);
+  useEffect(() => { load(); }, [load]);
+  const update = (s, changes) => setDrafts((cur) => ({ ...cur, [s.subject_id]: { ...(cur[s.subject_id] || { mode: s.mode, departments: [] }), ...changes } }));
+  const save = async (s) => {
+    setBusy((cur) => ({ ...cur, [s.subject_id]: true }));
+    setMessages((cur) => ({ ...cur, [s.subject_id]: "" }));
+    setMessageErrors((cur) => ({ ...cur, [s.subject_id]: false }));
+    try {
+      const d = drafts[s.subject_id] || { mode: s.mode, departments: [] };
+      const r = await API.post("/engine/shared-classes/batch-choice/", { subject_id: s.subject_id, mode: d.mode, departments: d.departments });
+      setMessages((cur) => ({ ...cur, [s.subject_id]: r.data.message || "Saved." }));
+      await load();
+    } catch (e) {
+      setMessages((cur) => ({ ...cur, [s.subject_id]: e.response?.data?.detail || "Could not save this choice." }));
+      setMessageErrors((cur) => ({ ...cur, [s.subject_id]: true }));
+    }
+    finally { setBusy((cur) => ({ ...cur, [s.subject_id]: false })); }
+  };
+  return (
+    <section className="minor-panel" style={card}>
+      <h3 style={{ margin: "0 0 4px", fontSize: 16 }}>Shared classes across departments</h3>
+      <p style={{ fontSize: 13, color: "#6b7280", marginTop: 0 }}>Automatic keeps the current behavior. Choose departments to share all exact-match programs there (groups contain at most three programs), or keep the subject separate.</p>
+      {error && <p role="alert" style={{ color: "#b91c1c", fontSize: 13 }}>{error}</p>}
+      {!data && !error && <p style={{ color: "#6b7280", fontSize: 13 }}>Loading sharing choices…</p>}
+      {data && !data.subjects.length && <p style={{ color: "#6b7280", fontSize: 13 }}>No matching minor lecture subjects in this semester and year level.</p>}
+      {data?.subjects?.length > 0 && (
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 760 }}>
+            <thead><tr>{["Subject", "Matching departments", "Sharing choice", "Save"].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+            <tbody>{data.subjects.map((s) => {
+              const d = drafts[s.subject_id] || { mode: s.mode, departments: [] };
+              return <tr key={`${s.subject_id}-${s.year_level}`}>
+                <td style={td}><strong>{s.code}</strong> · {s.title}<div style={{ color: "#6b7280", fontSize: 12 }}>{s.year_level} · {s.semester} · {s.lec_units} lecture units</div>
+                  {messages[s.subject_id] && <div role={messageErrors[s.subject_id] ? "alert" : "status"} style={{ color: messageErrors[s.subject_id] ? "#b91c1c" : "#166534", fontSize: 12, marginTop: 4 }}>{messages[s.subject_id]}</div>}
+                </td>
+                <td style={td}>{s.departments.map((dep) => {
+                  const count = s.programs.filter((p) => p.department === dep).length;
+                  return <label key={dep} style={{ display: "inline-flex", alignItems: "center", gap: 4, margin: "0 10px 5px 0", whiteSpace: "nowrap" }}>
+                    <input type="checkbox" checked={d.departments.includes(dep)} disabled={d.mode !== "shared"}
+                      onChange={(e) => update(s, { departments: e.target.checked ? [...d.departments, dep] : d.departments.filter((x) => x !== dep) })} />
+                    {dep} ({count})
+                  </label>;
+                })}</td>
+                <td style={td}><select value={d.mode} onChange={(e) => update(s, { mode: e.target.value })} style={{ padding: "6px 8px", border: "1px solid #cbd5e1", borderRadius: 5 }}>
+                  <option value="auto">Automatic</option><option value="shared">Choose departments</option><option value="exclusive">Keep separate</option>
+                </select>
+                  {d.mode === "shared" && <div style={{ color: "#6b7280", fontSize: 12, marginTop: 4 }}>Select departments above. All their exact matches are included; this subject’s program is included automatically.</div>}
+                </td>
+                <td style={td}><button type="button" disabled={!!busy[s.subject_id]} onClick={() => save(s)} style={{ background: "#003366", color: "white", border: 0, borderRadius: 5, padding: "6px 10px", cursor: "pointer" }}>{busy[s.subject_id] ? "Saving…" : "Save"}</button></td>
+              </tr>;
+            })}</tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function Tag({ bg, fg, children }) {
   return <span style={{ background: bg, color: fg, borderRadius: 4, padding: "1px 9px", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap" }}>{children}</span>;
 }
@@ -246,6 +320,8 @@ export default function MinorSchedulesPanel() {
       </div>
       <SimplifiedGuide steps={["Choose the academic year, semester, and year level.", "Generate the minor schedules for all departments.", "Review sharing, conflicts, and classes that could not be placed."]} />
       </div>
+
+      <MinorSharingChoices semester={semester} yearLevel={yearLevel} />
 
       {error && <p style={{ color: "#b91c1c", fontSize: 13 }}>{error}</p>}
 

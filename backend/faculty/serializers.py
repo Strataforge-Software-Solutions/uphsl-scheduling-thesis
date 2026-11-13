@@ -123,6 +123,19 @@ class FacultyProfileSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
     specialization_names = serializers.SerializerMethodField()
 
+    def get_fields(self):
+        fields = super().get_fields()
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if (user and user.is_authenticated and user.role == "faculty"
+                and user.faculty_type in {"full_time", "part_time"}):
+            # Faculty can update their own expertise, but profile/account fields
+            # remain managed by the Dean or Registrar.
+            for name, field in fields.items():
+                if name != "specializations":
+                    field.read_only = True
+        return fields
+
     def get_full_name(self, obj):
         return obj.user.get_full_name().strip() or obj.user.username
 

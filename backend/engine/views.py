@@ -940,10 +940,11 @@ def generate_schedule_view(request):
         # that room, are JOINED (shared class) instead of scheduled again.
         merge_report = []
         from . import shared_classes as _sc
-        _share_rules = _sc.share_rules(year_level, semester) if kind == "minor" else {}
-        if kind == "minor" and str(request.data.get("merge_minors", True)).lower() not in ("false", "0", "no"):
+        _share_rules = _sc.share_rules(year_level, semester, kind)
+        _merge_enabled = kind == "major" or str(request.data.get("merge_minors", True)).lower() not in ("false", "0", "no")
+        if _merge_enabled:
             from .merging import join_minor_classes
-            merge_report = join_minor_classes(subjects_by_section, school_year, rules=_share_rules)
+            merge_report = join_minor_classes(subjects_by_section, school_year, rules=_share_rules, subject_kind=kind)
 
         teachers = list(FacultyProfile.objects.select_related("user").prefetch_related("specializations").filter(user__is_active=True))   # a deactivated teacher is never given a class
         rooms = list(Room.objects.all())
@@ -1001,11 +1002,12 @@ def generate_schedule_view(request):
             room_assign[_sid] = {"preferred": _rid, "alts": [x for x in _old["alts"] if x != _rid], "fixed": True}
         # Confirmed shared classes: the host section's room is sized for every member, and its time must be free for them too.
         share_plans, _sizes, _busy = [], {}, {}
-        if kind == "minor" and _share_rules:
+        if _merge_enabled:
+            _claimed_shared_sections = set()
             for sec_, subs_ in subjects_by_section.items():
                 for sub_ in subs_:
                     if sub_.lab_units == 0:
-                        members, total = _sc.plan_members(sec_, sub_, _share_rules)
+                        members, total = _sc.plan_members(sec_, sub_, _share_rules, _claimed_shared_sections)
                         if members:
                             share_plans.append((sec_, sub_, members))
                             _sizes[(sec_.id, sub_.id)] = total
@@ -1268,6 +1270,113 @@ def conflict_scan_view(request):
         return Response({"detail": "Only a Dean, the Registrar or IT Admin can run the conflict check."}, status=403)
     return Response(scan(semester=request.query_params.get("semester") or None,
                          departments=u.departments if is_dean else None))
+
+
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def schedule_plot_view(request):
+    """Privacy-filtered weekly timetable data for a Dean's Section / Teacher / Room plot."""
+    from rest_framework.exceptions import ValidationError
+    from .conflict_report import scan
+
+    user = request.user
+    if not (user.role == "faculty" and user.faculty_type == "dean"):
+        return Response({"detail": "The timetable plot is available to Deans."}, status=403)
+    kind = request.query_params.get("resource", "")
+    semester = request.query_params.get("semester", "").strip()
+    if kind not in ("section", "teacher", "room") or not semester:
+        raise ValidationError("Choose a resource type and semester.")
+    try:
+        resource_id = int(request.query_params.get("resource_id", ""))
+    except (TypeError, ValueError):
+        raise ValidationError("Choose a valid resource.")
+
+    schedules = Schedule.objects.select_related(
+        "subject", "section__program", "teacher__user", "room", "timeslot"
+    ).filter(section__semester=semester)
+    if kind == "section":
+        section = Section.objects.select_related("program").filter(
+            pk=resource_id, semester=semester, program__department__in=user.departments
+        ).first()
+        if section is None:
+            return Response({"detail": "Section not found in your department for this semester."}, status=404)
+        schedules = schedules.filter(section_id=section.id)
+    elif kind == "teacher":
+        profile = FacultyProfile.objects.select_related("user").filter(
+            pk=resource_id, user__department__in=user.departments
+        ).first()
+        if profile is None:
+            return Response({"detail": "Teacher not found in your department."}, status=404)
+        schedules = schedules.filter(teacher_id=profile.id)
+    else:
+        if not Room.objects.filter(pk=resource_id).exists():
+            return Response({"detail": "Room not found."}, status=404)
+        schedules = schedules.filter(room_id=resource_id)
+
+    rows = list(schedules.order_by("timeslot__day", "timeslot__start_time", "id"))
+    conflicts = scan(semester=semester, involving_ids=[r.id for r in rows], limit=10000)
+    conflict_ids = set()
+    for conflict in conflicts["conflicts"]:
+        conflict_ids.update(conflict.get("a", {}).get("ids", []))
+        conflict_ids.update(conflict.get("b", {}).get("ids", []))
+
+    # Build contiguous class blocks from the underlying periods. Shared schedules have one record
+    # per section; fold them together while keeping the outside department's section anonymous.
+    classes = {}
+    for row in rows:
+        own = row.section.program.department in user.departments
+        if not own:
+            identity = (("busy-shared", row.merge_key, row.timeslot.day) if row.merge_key else
+                        ("busy", row.subject_id, row.section_id, row.teacher_id, row.room_id, row.timeslot.day))
+        elif row.merge_key:
+            identity = ("detail-shared", row.merge_key, row.timeslot.day)
+        else:
+            identity = ("detail", row.subject_id, row.section_id, row.teacher_id, row.room_id, row.timeslot.day)
+        item = classes.setdefault(identity, {
+            "day": row.timeslot.day, "busy": not own, "merge_key": row.merge_key,
+            "rows": [], "sections": set(), "conflict": False,
+        })
+        item["rows"].append(row)
+        item["sections"].add((row.section.program.name, row.section.name))
+        item["conflict"] = item["conflict"] or row.id in conflict_ids
+
+    own_merges = {entry.get("merge_key") for entry in classes.values() if not entry["busy"] and entry.get("merge_key")}
+    items = []
+    for item in classes.values():
+        periods = sorted(item["rows"], key=lambda r: r.timeslot.start_time)
+        blocks = []
+        for row in periods:
+            start, end = row.timeslot.start_time, row.timeslot.end_time
+            if blocks and start <= blocks[-1]["end"]:
+                blocks[-1]["end"] = max(blocks[-1]["end"], end)
+                blocks[-1]["ids"].append(row.id)
+                blocks[-1]["conflict"] = blocks[-1]["conflict"] or row.id in conflict_ids
+            else:
+                blocks.append({"start": start, "end": end, "ids": [row.id], "conflict": row.id in conflict_ids})
+        for block in blocks:
+            first = periods[0]
+            base = {"day": item["day"], "start": block["start"].strftime("%H:%M"),
+                    "end": block["end"].strftime("%H:%M"), "busy": item["busy"], "conflict": block["conflict"]}
+            if item["busy"]:
+                if item.get("merge_key") and item["merge_key"] in own_merges:
+                    continue
+                items.append(base)
+                continue
+            section_labels = sorted({f"{p} {s}" for p, s in item["sections"]})
+            base.update({
+                "id": block["ids"][0], "ids": block["ids"], "subject_code": first.subject.code,
+                "subject_title": first.subject.title, "teacher_id": first.teacher_id,
+                "teacher_name": first.teacher.user.get_full_name().strip() or first.teacher.user.username,
+                "room_id": first.room_id, "room_name": first.room.name,
+                "section_id": first.section_id, "section_name": ", ".join(section_labels),
+                "program_name": first.section.program.name, "department": first.section.program.department,
+                "classification": first.subject.classification, "status": first.status,
+                "merge_key": item["merge_key"],
+                "editable": all(p.subject.classification == "major" and p.status == "draft" for p in periods)
+                            and not item["merge_key"],
+            })
+            items.append(base)
+    return Response({"items": items, "days": ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]})
 
 
 @api_view(["POST"])
@@ -1603,7 +1712,10 @@ def export_schedule_pdf(request):
     department = request.query_params.get("department")
     status_filter = request.query_params.get("status")
     classification = request.query_params.get("classification")     # "major" | "minor" | "" (both)
-    export_format = (request.query_params.get("format") or "pdf").lower()
+    # `format` is DRF's reserved URL_FORMAT_OVERRIDE parameter. Values such
+    # as "pdf" are treated as renderer names and rejected with a generic 404
+    # before this view runs. Keep report formats under a separate query key.
+    export_format = (request.query_params.get("export_format") or "pdf").lower()
     if export_format not in {"pdf", "xlsx", "csv"}:
         return Response({"detail": "Choose pdf, xlsx, or csv for the report format."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1978,20 +2090,25 @@ def _shared_call(request, fn):
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 def shared_options(request):
-    """Minor subjects of one program / year / semester with their shared-class choice and the programs that could share each."""
+    """Subjects of one program / year / semester with their shared-class choice and compatible programs."""
     q = request.query_params
-    return _shared_call(request, lambda sc, u, d: sc.options(u, int(q["program_id"]), q["year_level"], q["semester"]))
+    return _shared_call(request, lambda sc, u, d: sc.options(u, int(q["program_id"]), q["year_level"], q["semester"], q.get("classification")))
 
 
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def shared_validate(request):
+    from curriculum.models import Program
     def run(sc, u, d):
-        sub = Subject.objects.filter(pk=int(d["subject_id"]), classification="minor").first()
+        sub = Subject.objects.select_related("program").filter(pk=int(d["subject_id"]), classification__in=("minor", "major")).first()
         if sub is None:
-            raise sc.SharedError("Minor subject not found.", 404)
+            raise sc.SharedError("Subject not found.", 404)
+        if not sc._can_configure(u, sub.classification, sub.program):
+            raise sc.SharedError("You do not have permission to configure sharing for this subject.", 403)
         ids = [sub.program_id] + [int(i) for i in d.get("program_ids", []) if int(i) != sub.program_id]
-        return sc.validate(ids, sub.code, sub.lec_units, sub.lab_units, sub.title, sub.year_level, sub.semester)
+        if sub.classification == "major" and any(p.department != sub.program.department for p in Program.objects.filter(pk__in=ids)):
+            raise sc.SharedError("Major classes can only be shared between programs in your own department.", 403)
+        return sc.validate(ids, sub.code, sub.lec_units, sub.lab_units, sub.title, sub.year_level, sub.semester, sub.classification)
     return _shared_call(request, run)
 
 
@@ -2017,6 +2134,24 @@ def shared_clear(request):
 @permission_classes([permissions.IsAuthenticated])
 def shared_confirm(request):
     return _shared_call(request, lambda sc, u, d: sc.confirm_group(u, int(d["group_id"])))
+
+
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def shared_batch_options(request):
+    from . import shared_classes as sc
+    try:
+        return Response(sc.batch_options(request.user, request.query_params.get("semester", ""),
+                                         request.query_params.get("year_level", "")))
+    except sc.SharedError as e:
+        return Response({"detail": e.message}, status=e.status)
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def shared_batch_choice(request):
+    return _shared_call(request, lambda sc, u, d: sc.batch_choice(u, int(d["subject_id"]), d.get("mode", "auto"),
+                                                                  d.get("departments", [])))
 
 
 @api_view(["GET"])

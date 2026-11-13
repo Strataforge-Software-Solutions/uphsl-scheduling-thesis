@@ -61,8 +61,11 @@ export default function PrintPreviewButton({ params, disabled = false, onFixed, 
     setDownload(null);
     const yp = yearChoice === null ? {} : { year_level: yearChoice === ALL ? undefined : yearChoice };
     try {
+      // `format` is reserved by Django REST Framework for renderer
+      // negotiation; unsupported values like "pdf" return a generic 404
+      // before the report view runs. Use an application-specific parameter.
       const rp = { ...clean, ...yp, semester: termChoice === ALL ? undefined : termChoice,
-        format: formatChoice, allow_conflicts: allowConflicts ? 1 : undefined };
+        export_format: formatChoice, allow_conflicts: allowConflicts ? 1 : undefined };
       const res = await API.get("/engine/export-report/", { params: rp, responseType: "blob" });
       setClash(null);
       const mime = formatChoice === "pdf" ? "application/pdf" : formatChoice === "xlsx"

@@ -520,10 +520,10 @@ def apply(user, *, key=None, session_keys=None, split_session=False, ids=None, s
             (Schedule.objects.filter(merge_key=mk, timeslot__in=slots) if members else
              Schedule.objects.filter(section=section, subject=subject, term=term, timeslot__in=slots)).values_list("id", flat=True))
         shared = []
-        if mode == "place" and subject.classification == "minor" and subject.lab_units == 0:
-            # a Gen Ed class placed here keeps the shared-class programs the Registrar chose: the confirmed members join the same time
+        if mode == "place" and subject.classification in ("minor", "major") and subject.lab_units == 0:
+            # A newly placed class applies its saved or automatic program-sharing rule to eligible sections.
             from . import shared_classes as sc
-            members, _total = sc.plan_members(section, subject, sc.share_rules(section.year_level, term))
+            members, _total = sc.plan_members(section, subject, sc.share_rules(section.year_level, term, subject.classification))
             if members:
                 shared = sc.extend_to_members([(section, subject, members)], made, year)
                 for m in shared:

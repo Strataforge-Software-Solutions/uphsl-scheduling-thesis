@@ -94,6 +94,8 @@ def plan_groups(programs, year_levels, semester):
             for b in bins[(sec.year_level, key)]:
                 if sec.program_id in b["programs"]:
                     continue
+                if len(b["programs"]) >= 3:
+                    continue
                 if not all(may_share(rules[sec.year_level], sec.program_id, pid, key[0]) for pid in b["programs"]):
                     continue
                 if b["total"] + sec.student_count <= limit:
