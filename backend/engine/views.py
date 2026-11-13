@@ -940,10 +940,11 @@ def generate_schedule_view(request):
         # that room, are JOINED (shared class) instead of scheduled again.
         merge_report = []
         from . import shared_classes as _sc
-        _share_rules = _sc.share_rules(year_level, semester) if kind == "minor" else {}
-        if kind == "minor" and str(request.data.get("merge_minors", True)).lower() not in ("false", "0", "no"):
+        _share_rules = _sc.share_rules(year_level, semester, kind)
+        _merge_enabled = kind == "major" or str(request.data.get("merge_minors", True)).lower() not in ("false", "0", "no")
+        if _merge_enabled:
             from .merging import join_minor_classes
-            merge_report = join_minor_classes(subjects_by_section, school_year, rules=_share_rules)
+            merge_report = join_minor_classes(subjects_by_section, school_year, rules=_share_rules, subject_kind=kind)
 
         teachers = list(FacultyProfile.objects.select_related("user").prefetch_related("specializations").filter(user__is_active=True))   # a deactivated teacher is never given a class
         rooms = list(Room.objects.all())
@@ -1001,11 +1002,12 @@ def generate_schedule_view(request):
             room_assign[_sid] = {"preferred": _rid, "alts": [x for x in _old["alts"] if x != _rid], "fixed": True}
         # Confirmed shared classes: the host section's room is sized for every member, and its time must be free for them too.
         share_plans, _sizes, _busy = [], {}, {}
-        if kind == "minor" and _share_rules:
+        if _merge_enabled:
+            _claimed_shared_sections = set()
             for sec_, subs_ in subjects_by_section.items():
                 for sub_ in subs_:
                     if sub_.lab_units == 0:
-                        members, total = _sc.plan_members(sec_, sub_, _share_rules)
+                        members, total = _sc.plan_members(sec_, sub_, _share_rules, _claimed_shared_sections)
                         if members:
                             share_plans.append((sec_, sub_, members))
                             _sizes[(sec_.id, sub_.id)] = total
@@ -1978,20 +1980,25 @@ def _shared_call(request, fn):
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 def shared_options(request):
-    """Minor subjects of one program / year / semester with their shared-class choice and the programs that could share each."""
+    """Subjects of one program / year / semester with their shared-class choice and compatible programs."""
     q = request.query_params
-    return _shared_call(request, lambda sc, u, d: sc.options(u, int(q["program_id"]), q["year_level"], q["semester"]))
+    return _shared_call(request, lambda sc, u, d: sc.options(u, int(q["program_id"]), q["year_level"], q["semester"], q.get("classification")))
 
 
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def shared_validate(request):
+    from curriculum.models import Program
     def run(sc, u, d):
-        sub = Subject.objects.filter(pk=int(d["subject_id"]), classification="minor").first()
+        sub = Subject.objects.select_related("program").filter(pk=int(d["subject_id"]), classification__in=("minor", "major")).first()
         if sub is None:
-            raise sc.SharedError("Minor subject not found.", 404)
+            raise sc.SharedError("Subject not found.", 404)
+        if not sc._can_configure(u, sub.classification, sub.program):
+            raise sc.SharedError("You do not have permission to configure sharing for this subject.", 403)
         ids = [sub.program_id] + [int(i) for i in d.get("program_ids", []) if int(i) != sub.program_id]
-        return sc.validate(ids, sub.code, sub.lec_units, sub.lab_units, sub.title, sub.year_level, sub.semester)
+        if sub.classification == "major" and any(p.department != sub.program.department for p in Program.objects.filter(pk__in=ids)):
+            raise sc.SharedError("Major classes can only be shared between programs in your own department.", 403)
+        return sc.validate(ids, sub.code, sub.lec_units, sub.lab_units, sub.title, sub.year_level, sub.semester, sub.classification)
     return _shared_call(request, run)
 
 
@@ -2017,6 +2024,24 @@ def shared_clear(request):
 @permission_classes([permissions.IsAuthenticated])
 def shared_confirm(request):
     return _shared_call(request, lambda sc, u, d: sc.confirm_group(u, int(d["group_id"])))
+
+
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def shared_batch_options(request):
+    from . import shared_classes as sc
+    try:
+        return Response(sc.batch_options(request.user, request.query_params.get("semester", ""),
+                                         request.query_params.get("year_level", "")))
+    except sc.SharedError as e:
+        return Response({"detail": e.message}, status=e.status)
+
+
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def shared_batch_choice(request):
+    return _shared_call(request, lambda sc, u, d: sc.batch_choice(u, int(d["subject_id"]), d.get("mode", "auto"),
+                                                                  d.get("departments", [])))
 
 
 @api_view(["GET"])

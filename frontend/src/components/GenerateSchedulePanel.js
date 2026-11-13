@@ -35,6 +35,7 @@ const timeLabel = (t) => formatTime(t);
 
 function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGenerated, hideTitle = false, onProgramName }) {
   const isRegistrar = role === "registrar";
+  const isDean = role === "dean";
   const kindWord = isRegistrar ? "minor" : "major";
   const progName = () => (programs.find((p) => String(p.id) === String(programId)) || {}).name || "Program";
   const [programs, setPrograms] = useState([]);
@@ -58,11 +59,10 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
   const [sharedInfo, setSharedInfo] = useState(null);   // shared-class choices of the minor subjects of the chosen program / year / semester
   const [sharedItem, setSharedItem] = useState(null);
   const loadShared = React.useCallback(async () => {
-    // only the Registrar's Gen Ed view uses the shared-class choices (the Dean's dialog no longer lists Gen Ed subjects)
-    if (!isRegistrar || !programId || !yearLevel || !semester) { setSharedInfo(null); return; }
-    try { setSharedInfo((await API.get("/engine/shared-classes/options/", { params: { program_id: programId, year_level: yearLevel, semester } })).data); }
+    if ((!isRegistrar && !isDean) || !programId || !yearLevel || !semester) { setSharedInfo(null); return; }
+    try { setSharedInfo((await API.get("/engine/shared-classes/options/", { params: { program_id: programId, year_level: yearLevel, semester, classification: isRegistrar ? "minor" : "major" } })).data); }
     catch (_e) { setSharedInfo(null); }
-  }, [isRegistrar, programId, yearLevel, semester]);
+  }, [isRegistrar, isDean, programId, yearLevel, semester]);
   useEffect(() => { loadShared(); }, [loadShared]);
   const sharedFor = (id) => (sharedInfo?.subjects || []).find((x) => x.subject_id === id);
   const [problems, setProblems] = useState(false);   // the Schedule problems window: opened ONLY by "Review conflicts" (real clashes)
@@ -316,8 +316,8 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
               </p>
             ) : (
               <div style={{ maxHeight: "min(460px, 60vh)", overflow: "auto" }}>
-                <table style={{ margin: 0, boxShadow: "none", border: "none", borderRadius: 0, width: "100%", minWidth: isRegistrar ? 1424 : 1204, tableLayout: "fixed" }}>
-                  <thead><tr><th style={{ width: 110 }}>Code</th><th style={{ width: isRegistrar ? 200 : 180 }}>Subject</th><th style={{ width: 118 }}>Needs</th><th style={{ width: 230 }}>Professor</th><th style={{ width: 310 }}>Room</th><th style={{ width: 128 }}>Start Time</th><th style={{ width: 128 }}>End Time</th>{isRegistrar && <th style={{ width: 190 }}>Shared Class / Programs</th>}</tr></thead>
+                <table style={{ margin: 0, boxShadow: "none", border: "none", borderRadius: 0, width: "100%", minWidth: isRegistrar || isDean ? 1424 : 1204, tableLayout: "fixed" }}>
+                  <thead><tr><th style={{ width: 110 }}>Code</th><th style={{ width: isRegistrar ? 200 : 180 }}>Subject</th><th style={{ width: 118 }}>Needs</th><th style={{ width: 230 }}>Professor</th><th style={{ width: 310 }}>Room</th><th style={{ width: 128 }}>Start Time</th><th style={{ width: 128 }}>End Time</th>{(isRegistrar || isDean) && <th style={{ width: 190 }}>Shared Class / Programs</th>}</tr></thead>
                   <tbody>
                     {shown.map((s) => {
                       const p = picks[s.id] || {};
@@ -442,7 +442,7 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
                                 <option key={t} value={t}>{timeLabel(t)}{mark(outside(p.start ? toMin(p.start) : DAY_START, toMin(t)))}</option>))}
                             </CustomSelect>
                           </td>
-                          {isRegistrar && (
+                          {(isRegistrar || isDean) && (
                             <td style={{ verticalAlign: "middle" }}>
                               {sharedFor(s.id) ? (
                                 <button onClick={() => setSharedItem(sharedFor(s.id))} style={{ background: "#fff", color: "#003366", border: "1px solid #003366", borderRadius: 6, padding: "3px 8px", fontSize: 12, cursor: "pointer", maxWidth: "100%", whiteSpace: "normal", textAlign: "left" }}>{sharedLabel(sharedFor(s.id))}</button>
@@ -538,7 +538,7 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
           )}
           {result.merged_classes && result.merged_classes.length > 0 && (
             <div style={{ background: "#eef7ee", border: "1px solid #b7dcb7", borderRadius: 6, padding: "10px 14px", fontSize: "13px", color: "#1d5a1d", maxWidth: "760px", margin: "10px 0" }}>
-              <strong>{result.merged_classes.length} shared class{result.merged_classes.length === 1 ? "" : "es"}:</strong> these subjects joined another department's class, so they use no extra teacher, room or time.
+              <strong>{result.merged_classes.length} shared class{result.merged_classes.length === 1 ? "" : "es"}:</strong> these subjects joined a matching program class, so they use no extra teacher, room or time.
               <ul style={{ margin: "6px 0 0 18px", padding: 0 }}>
                 {result.merged_classes.map((m, i) => (
                   <li key={i}>{m.subject} — with {m.joined.join(", ")} · {m.students} students in {m.room} (seats {m.capacity})</li>

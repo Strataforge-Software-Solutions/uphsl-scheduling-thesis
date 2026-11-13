@@ -1525,6 +1525,87 @@ class SharedMinorClassTests(Base):
         self.assertEqual({"department", "year_level", "semester"} <= set(item["candidates"][0]), True)
 
 
+class SharedMajorAndRegistrarBatchTests(Base):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.cas = [make_cas_teacher(800 + i) for i in range(2)]
+
+    def setUp(self):
+        self.peer = Program.objects.create(name="BS CS Peer", department=DEPT)
+        self.peer_section = Section.objects.create(name="P1A", program=self.peer, year_level="1st Year", semester="1st Sem", student_count=30)
+        self.subject = Subject.objects.get(program=self.prog, code="TST100")
+        self.peer_subject = Subject.objects.create(code=self.subject.code, title=self.subject.title, program=self.peer,
+                                                  lec_units=self.subject.lec_units, lab_units=0, year_level=self.subject.year_level,
+                                                  semester=self.subject.semester, classification="major")
+
+    def call_shared(self, user, path, data=None, method="post"):
+        self.client.force_authenticate(user)
+        url = f"/api/engine/shared-classes/{path}/"
+        if method == "get":
+            return self.client.get(url, data or {})
+        return self.client.post(url, data or {}, format="json")
+
+    def test_dean_can_save_major_group_only_in_their_department(self):
+        r = self.call_shared(self.dean, "save", {"subject_id": self.subject.id, "program_ids": [self.peer.id]})
+        self.assertEqual(r.status_code, 200, r.data)
+        outsider = Program.objects.create(name="Other Dept", department="Nursing")
+        self.assertEqual(self.call_shared(self.dean, "save", {"subject_id": self.subject.id, "program_ids": [outsider.id]}).status_code, 403)
+        self.assertEqual(self.call_shared(self.registrar, "save", {"subject_id": self.subject.id, "program_ids": [self.peer.id]}).status_code, 403)
+
+    def test_dean_major_options_include_same_department_matches(self):
+        r = self.call_shared(self.dean, "options", {"program_id": self.prog.id, "year_level": "1st Year", "semester": "1st Sem"}, method="get")
+        self.assertEqual(r.status_code, 200, r.data)
+        item = next(x for x in r.data["subjects"] if x["subject_id"] == self.subject.id)
+        self.assertIn(self.peer.id, {x["id"] for x in item["candidates"]})
+        self.assertEqual(r.data["subject_kind"], "major")
+
+    def test_generation_automatically_shares_matching_major_lectures_in_same_department(self):
+        r = self.gen()
+        self.assertEqual(r.status_code, 201, r.data)
+        rows = Schedule.objects.filter(subject__code=self.subject.code, subject__classification="major")
+        self.assertIn(self.prog.id, rows.values_list("section__program_id", flat=True))
+        self.assertIn(self.peer.id, rows.values_list("section__program_id", flat=True))
+        shared = rows.exclude(merge_key="")
+        self.assertTrue(shared.exists())
+        self.assertEqual(shared.values("merge_key").distinct().count(), 1)
+        self.assertEqual(set(shared.values_list("section__program_id", flat=True)), {self.prog.id, self.peer.id})
+
+    def test_saved_major_group_uses_only_the_deans_selected_programs(self):
+        other = Program.objects.create(name="BS CS Other", department=DEPT)
+        other_section = Section.objects.create(name="O1A", program=other, year_level="1st Year", semester="1st Sem", student_count=30)
+        Subject.objects.create(code=self.subject.code, title=self.subject.title, program=other, lec_units=self.subject.lec_units,
+                               lab_units=0, year_level=self.subject.year_level, semester=self.subject.semester, classification="major")
+        saved = self.call_shared(self.dean, "save", {"subject_id": self.subject.id, "program_ids": [self.peer.id]})
+        self.assertEqual(saved.status_code, 200, saved.data)
+        r = self.gen()
+        self.assertEqual(r.status_code, 201, r.data)
+        shared = Schedule.objects.filter(subject__code=self.subject.code, subject__classification="major").exclude(merge_key="")
+        self.assertEqual(set(shared.values_list("section__program_id", flat=True)), {self.prog.id, self.peer.id})
+        self.assertFalse(Schedule.objects.filter(section=other_section, subject__code=self.subject.code).exists())
+
+    def test_registrar_batch_choices_expand_selected_departments_and_preserve_minor_kind(self):
+        minor = Subject.objects.create(code="GE-X", title="Filipino Christian Living 1", program=self.prog, lec_units=3, lab_units=0,
+                                      year_level="1st Year", semester="1st Sem", classification="minor")
+        Subject.objects.create(code="GE-X", title="Filipino Christian Living 1", program=self.peer, lec_units=3, lab_units=0,
+                               year_level="1st Year", semester="1st Sem", classification="minor")
+        options = self.call_shared(self.registrar, "batch-options", {"semester": "1st Sem", "year_level": "1st Year"}, method="get")
+        self.assertEqual(options.status_code, 200, options.data)
+        item = next((x for x in options.data["subjects"] if x["code"] == minor.code and x["year_level"] == minor.year_level), None)
+        self.assertIsNotNone(item, options.data)
+        self.assertIn(DEPT, item["departments"])
+        saved = self.call_shared(self.registrar, "batch-choice", {"subject_id": item["subject_id"], "mode": "shared", "departments": [DEPT]})
+        self.assertEqual(saved.status_code, 200, saved.data)
+        from engine.models import SharedClassGroup
+        group = SharedClassGroup.objects.get(code="GE-X", subject_kind="minor")
+        self.assertEqual(set(group.programs.values_list("id", flat=True)), {self.prog.id, self.peer.id})
+        self.assertFalse(SharedClassGroup.objects.filter(code="GE-X", subject_kind="major").exists())
+        self.assertEqual(self.call_shared(self.registrar, "batch-choice", {"subject_id": item["subject_id"], "mode": "exclusive"}).status_code, 200)
+        self.assertTrue(self.call_shared(self.registrar, "batch-choice", {"subject_id": item["subject_id"], "mode": "auto"}).data["mode"] == "auto")
+        from engine.models import SharedClassExclusive
+        self.assertFalse(SharedClassExclusive.objects.filter(code="GE-X", subject_kind="minor").exists())
+
+
 class DesignatedRoomTests(APITestCase):
     """Computer Studies majors use Comp Lab C / D only; Dean assigns majors, Registrar minors; Resolve keeps the rules."""
 

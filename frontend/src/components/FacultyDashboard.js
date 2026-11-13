@@ -69,12 +69,14 @@ const FULL_TIME_NAV = [
   { key: "schedule", label: "My Schedule", icon: "" },
   { group: "People" },
   { key: "availability", label: "Availability", icon: "" },
+  { key: "profile", label: "My Profile", icon: "" },
 ];
 const PART_TIME_NAV = [
   { group: "Plan" },
   { key: "schedule", label: "My Schedule", icon: "" },
   { group: "People" },
   { key: "availability", label: "Availability", icon: "" },
+  { key: "profile", label: "My Profile", icon: "" },
 ];
 
 const DEAN_HEADERS = {
@@ -109,11 +111,12 @@ function FacultyDashboard({ name, department, departments = [department], facult
   };
 
   const eyebrow = facultyType === "dean" ? `${department} · Dean View` : facultyType === "part_time" ? `Part-time Faculty · ${department}` : `Full-time Faculty · ${department}`;
-  const crumb = facultyType === "dean" ? DEAN_HEADERS[activeTab]?.title : activeTab === "availability" ? "Availability" : "Schedule";
+  const facultyTabTitle = activeTab === "availability" ? "Availability" : activeTab === "profile" ? "My Profile" : "Schedule";
+  const crumb = facultyType === "dean" ? DEAN_HEADERS[activeTab]?.title : facultyTabTitle;
   const title = facultyType === "dean" ? DEAN_HEADERS[activeTab]?.title
-    : activeTab === "availability" ? "Availability"
-    : "My Schedule";
+    : activeTab === "profile" ? "My Profile" : activeTab === "availability" ? "Availability" : "My Schedule";
   const subtitle = facultyType === "dean" ? DEAN_HEADERS[activeTab]?.subtitle
+    : activeTab === "profile" ? "Review and update the subject specializations on your faculty record."
     : activeTab === "availability" ? ""
     : "Your assigned classes for this term.";
 
@@ -152,6 +155,7 @@ function FacultyDashboard({ name, department, departments = [department], facult
             </>
           )}
           {facultyType === "part_time" && activeTab === "availability" && <AvailabilityPanel />}
+          {facultyType !== "dean" && activeTab === "profile" && <MyFacultyProfile />}
         </div>
       </div>
     </div>
@@ -1451,7 +1455,7 @@ function CollegeFacultyRoster({ department, departments = [department] }) {
                   {expanded && (
                     <tr>
                       <td colSpan={8} style={{ background: "#f7f9fc", padding: 0 }}>
-                        <FacultyDetailPanel row={r} />
+                        <FacultyDetailPanel row={r} onSpecializationsSaved={() => setReloadKey((k) => k + 1)} />
                       </td>
                     </tr>
                   )}
@@ -1476,30 +1480,13 @@ function CollegeFacultyRoster({ department, departments = [department] }) {
    (day/time/preference, not just a list of days) plus specialization, so
    a Dean deciding which major/minor subject to hand a teacher doesn't have
    to go ask them or dig through the Availability review tab separately. */
-function FacultyDetailPanel({ row }) {
+function FacultyDetailPanel({ row, onSpecializationsSaved }) {
   const slots = row.availability_slots || [];
-  const specializations = row.specializations || [];
 
   return (
     <div style={{ padding: "16px 20px 20px" }}>
       <div style={{ marginBottom: "14px" }}>
-        <p style={{ margin: "0 0 6px", fontSize: "13px", fontWeight: 600, color: "#111827" }}>
-          Specialization
-        </p>
-        {specializations.length === 0 ? (
-          <p style={{ margin: 0, fontSize: "13px", color: "#6b7280" }}>No specialization on file.</p>
-        ) : (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-            {specializations.map((s) => (
-              <span key={s} style={{
-                background: "#e8eef7", color: "#003366", fontSize: "12px", fontWeight: 600,
-                padding: "4px 10px", borderRadius: 4,
-              }}>
-                {s}
-              </span>
-            ))}
-          </div>
-        )}
+        <FacultySpecializationEditor profileId={row.id} onSaved={onSpecializationsSaved} />
       </div>
 
       <div>
@@ -1526,6 +1513,116 @@ function FacultyDetailPanel({ row }) {
           </table>
         )}
       </div>
+    </div>
+  );
+}
+
+function MyFacultyProfile() {
+  return (
+    <section style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 8, padding: "20px 24px", maxWidth: 760 }}>
+      <h2 style={{ margin: "0 0 6px", color: "#003366", fontSize: 18 }}>My specializations</h2>
+      <p style={{ margin: "0 0 18px", color: "#64748b", fontSize: 13, lineHeight: 1.5 }}>
+        Keep your subject expertise current so Deans can consider it when assigning classes. Changes update your faculty record.
+      </p>
+      <FacultySpecializationEditor ownProfile />
+    </section>
+  );
+}
+
+function FacultySpecializationEditor({ profileId, ownProfile = false, onSaved }) {
+  const [profile, setProfile] = useState(null);
+  const [fields, setFields] = useState([]);
+  const [selected, setSelected] = useState([]);
+  const [editing, setEditing] = useState(ownProfile);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  const load = () => {
+    setLoading(true);
+    setError("");
+    const profileRequest = profileId
+      ? API.get(`/faculty/profiles/${profileId}/`)
+      : API.get("/faculty/profiles/").then((res) => res.data[0]);
+    Promise.all([profileRequest, API.get("/curriculum/academic-fields/")])
+      .then(([profileResponse, fieldsResponse]) => {
+        const nextProfile = profileResponse.data || profileResponse;
+        const nextFields = fieldsResponse.data || [];
+        setProfile(nextProfile);
+        setFields(nextFields);
+        setSelected((nextProfile.specializations || []).map(Number));
+      })
+      .catch((e) => setError(e.response?.data?.detail || "Could not load specialization options."))
+      .finally(() => setLoading(false));
+  };
+
+  React.useEffect(() => { load(); }, [profileId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const save = async () => {
+    if (!profile) return;
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      const response = await API.patch(`/faculty/profiles/${profile.id}/`, { specializations: selected });
+      const updated = response.data || response;
+      setProfile(updated);
+      setSelected((updated.specializations || selected).map(Number));
+      setEditing(false);
+      setMessage("Specializations saved.");
+      onSaved?.();
+    } catch (e) {
+      setError(e.response?.data?.detail || "Could not save specializations.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <p style={{ margin: 0, color: "#64748b", fontSize: 13 }}>Loading specializations…</p>;
+  if (error && !profile) return <p role="alert" style={{ margin: 0, color: "#b91c1c", fontSize: 13 }}>{error}</p>;
+
+  const selectedNames = fields.filter((field) => selected.includes(field.id)).map((field) => field.name);
+  return (
+    <div>
+      {!editing && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div>
+            <p style={{ margin: "0 0 6px", fontSize: 13, fontWeight: 650, color: "#111827" }}>Specializations</p>
+            {selectedNames.length ? (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {selectedNames.map((name) => <span key={name} style={{ background: "#e8eef7", color: "#003366", fontSize: 12, fontWeight: 600, padding: "4px 10px", borderRadius: 4 }}>{name}</span>)}
+              </div>
+            ) : <p style={{ margin: 0, color: "#6b7280", fontSize: 13 }}>No specialization on file.</p>}
+          </div>
+          <button type="button" onClick={() => { setMessage(""); setError(""); setEditing(true); }}>Edit specializations</button>
+        </div>
+      )}
+      {editing && (
+        <div>
+          {!ownProfile && <p style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 650, color: "#111827" }}>Edit specializations</p>}
+          {fields.length === 0 ? (
+            <p style={{ color: "#64748b", fontSize: 13 }}>No specialization fields are available yet. Ask a Dean or Registrar to add them to the curriculum field list.</p>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "8px 14px", maxHeight: 260, overflowY: "auto", padding: "2px 0 10px" }}>
+              {fields.map((field) => (
+                <label key={field.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#334155" }}>
+                  <input type="checkbox" checked={selected.includes(field.id)} onChange={(e) => setSelected((current) => e.target.checked
+                    ? [...current, field.id]
+                    : current.filter((id) => id !== field.id))} />
+                  {field.name}
+                </label>
+              ))}
+            </div>
+          )}
+          {error && <p role="alert" style={{ color: "#b91c1c", fontSize: 13 }}>{error}</p>}
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button type="button" disabled={saving} onClick={save}>{saving ? "Saving…" : "Save specializations"}</button>
+            {!ownProfile && <button type="button" disabled={saving} onClick={() => { setSelected((profile.specializations || []).map(Number)); setEditing(false); }}>Cancel</button>}
+          </div>
+        </div>
+      )}
+      {message && <p role="status" style={{ margin: "8px 0 0", color: "#166534", fontSize: 13 }}>{message}</p>}
     </div>
   );
 }

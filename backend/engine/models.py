@@ -304,6 +304,7 @@ class SharedClassGroup(models.Model):
     Only a CONFIRMED group is used by the generator. The curriculum, sections and students of each program are untouched:
     sharing only gives the participating sections the same teacher, room and time (Schedule.merge_key)."""
     code = models.CharField(max_length=30)
+    subject_kind = models.CharField(max_length=10, choices=[("major", "Major"), ("minor", "Minor")], default="minor")
     title = models.CharField(max_length=200)
     lec_units = models.PositiveSmallIntegerField(default=0)
     lab_units = models.PositiveSmallIntegerField(default=0)
@@ -323,13 +324,14 @@ class SharedClassExclusive(models.Model):
     """The Dean / Registrar decided that this program keeps this minor subject to itself (never merged, not even automatically)."""
     program = models.ForeignKey("curriculum.Program", on_delete=models.CASCADE, related_name="exclusive_minor_classes")
     code = models.CharField(max_length=30)
+    subject_kind = models.CharField(max_length=10, choices=[("major", "Major"), ("minor", "Minor")], default="minor")
     year_level = models.CharField(max_length=20)
     semester = models.CharField(max_length=20)
     created_by = models.ForeignKey("accounts.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ("program", "code", "year_level", "semester")
+        unique_together = ("program", "code", "year_level", "semester", "subject_kind")
 
 
 class GenEdMoveRequest(models.Model):

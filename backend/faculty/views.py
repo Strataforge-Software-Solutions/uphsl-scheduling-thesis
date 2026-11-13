@@ -7,6 +7,7 @@ from .serializers import (
     FacultyProfileSerializer, AvailabilitySerializer,
     AbsenceSerializer, WorkloadRecordSerializer, CoverageSuggestionSerializer,
 )
+from .permissions import CanManageFacultyProfiles
 from engine.permissions import ReadOnlyOrRegistrarDean
 
 # Availability.day is a free-text field (the submission form's placeholder
@@ -28,10 +29,7 @@ class FacultyProfileViewSet(viewsets.ModelViewSet):
         "availability_slots", "specializations"
     ).all()
     serializer_class = FacultyProfileSerializer
-    # Was IsAuthenticated-only -- any logged-in Student could DELETE a
-    # FacultyProfile, which cascades to that teacher's Schedule rows,
-    # Availability, Absence, and WorkloadRecord. Writes are Registrar/Dean only.
-    permission_classes = [ReadOnlyOrRegistrarDean]
+    permission_classes = [CanManageFacultyProfiles]
 
     def get_queryset(self):
         user = self.request.user

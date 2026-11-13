@@ -1,17 +1,16 @@
 """
-Shared (merged) minor classes.
+Shared (merged) lecture classes.
 
-A minor/Gen Ed subject (same code, same year level and semester) is normally
-scheduled once PER program section. When another department already has that
-class and its room still has seats for this section's students, this section
-JOINS it instead of getting a class of its own: same teacher, same room, same
-time. Only specific departments merge -- whichever fit in the room:
+A matching minor/Gen Ed or major subject can be joined to an existing class
+when its room has enough seats and its students are free. Minor classes may
+join across departments; major classes may join only within their department.
+The joining section uses the same teacher, room, and time:
     8 BA Comm + 30 CS = 38 students  ->  fits a 40-seat room, so they share.
     20 + 30 + 25 = 75                 ->  too many for a 40-seat room, so not merged.
 
-Only lecture-type minors join (not labs). Rows of one shared class carry the same
-Schedule.merge_key. Nothing here relaxes any other rule: the joining section must
-itself be free at that time.
+Only lecture subjects join (not labs). Rows of one shared class carry the same
+Schedule.merge_key. Qualification, department room use, capacity, and section
+availability remain required.
 """
 from collections import defaultdict
 
@@ -28,18 +27,17 @@ def _fits(section, rows_by_section, room, extra_students):
     return total <= cap
 
 
-def join_minor_classes(subjects_by_section, school_year, rules=None):
-    """Mutates subjects_by_section (removes the subjects that joined an existing
-    class) and creates the joined Schedule rows. Returns a list of dicts
-    describing each merge, for the Registrar's report."""
+def join_minor_classes(subjects_by_section, school_year, rules=None, subject_kind="minor"):
+    """Mutates subjects_by_section (removes subjects that joined an existing
+    class) and creates rows sharing its teacher, room, and time."""
     report = []
     for section, subjects in list(subjects_by_section.items()):
         own_rows = list(Schedule.objects.filter(section=section).select_related("timeslot"))
         for subject in list(subjects):
-            if subject.classification != "minor" or subject.lab_units > 0:
+            if subject.classification != subject_kind or subject.lab_units > 0:
                 continue
             host_rows = (Schedule.objects
-                         .filter(subject__code=subject.code, subject__classification="minor",
+                         .filter(subject__code=subject.code, subject__classification=subject_kind,
                                  # truly the same course: same units and title (FCL 1 at 3 units is not FCL 1 at 2 units)
                                  subject__lec_units=subject.lec_units, subject__lab_units=subject.lab_units,
                                  subject__title__iexact=subject.title,
@@ -47,6 +45,8 @@ def join_minor_classes(subjects_by_section, school_year, rules=None):
                          .exclude(section=section)
                          .exclude(section__program=section.program)
                          .select_related("section", "section__program", "room", "teacher", "timeslot"))
+            if subject_kind == "major":
+                host_rows = host_rows.filter(section__program__department=section.program.department)
             groups = defaultdict(list)           # group id -> rows
             from .shared_classes import may_share
             for r in host_rows:
@@ -58,10 +58,18 @@ def join_minor_classes(subjects_by_section, school_year, rules=None):
             for gid, rows in groups.items():
                 first_section = rows[0].section_id
                 block = [r for r in rows if r.section_id == first_section]
+                if subject_kind == "major" and any(r.section.program.department != section.program.department for r in rows):
+                    continue
+                member_programs = {r.section.program_id for r in rows}
+                if section.program_id in member_programs or len(member_programs) >= 3:
+                    continue
                 if len({r.room_id for r in block}) != 1 or len({r.teacher_id for r in block}) != 1:
                     continue
                 members = {r.section_id: r.section for r in rows}
                 room = block[0].room
+                from .shared_classes import _teacher_fits_section
+                if not _teacher_fits_section(block[0].teacher, subject, section):
+                    continue
                 if not may_use(room, getattr(section.program, "department", None)):
                     continue                      # the host class sits in a room reserved for another department
                 if not _fits(section, members.values(), room, section.student_count):
