@@ -40,7 +40,7 @@ function elapsedLabel(milliseconds) {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
-function ScreenLock() {
+function ScreenLock({ children }) {
   const [now, setNow] = useState(Date.now());
   const [lockedAt, setLockedAt] = useState(() => {
     const stored = Number(sessionStorage.getItem("screen_locked_at"));
@@ -123,10 +123,7 @@ function ScreenLock() {
   };
 
   return <>
-    <button type="button" className="app-screen-lock-trigger" onClick={lockScreen} title="Lock screen and start a break timer" aria-label="Lock screen">
-      <LockIcon />
-      <span>Lock</span>
-    </button>
+    {children(lockScreen)}
     {lockedAt && createPortal(
       <div className="screen-lock-backdrop">
         <section className="screen-lock-panel" role="dialog" aria-modal="true" aria-labelledby="screen-lock-title" onKeyDown={trapKeys}>
@@ -319,7 +316,7 @@ function NotificationBell() {
 }
 
 /* Avatar: the profile picture (or initials in a plain circle) and a small menu with "My settings". */
-function AvatarMenu({ userName }) {
+function AvatarMenu({ userName, onLockScreen }) {
   const { pictureUrl, profile } = usePreferences();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -349,6 +346,9 @@ function AvatarMenu({ userName }) {
             {profile && <div className="app-avatar-menu-role">{profile.role}</div>}
           </div>
           <button type="button" role="menuitem" className="app-avatar-menu-item" onClick={() => { setOpen(false); navigate("/settings"); }}>My settings</button>
+          <button type="button" role="menuitem" className="app-avatar-menu-item app-avatar-lock-item" onClick={() => { setOpen(false); onLockScreen(); }}>
+            <LockIcon /><span>Lock screen</span>
+          </button>
           <button type="button" role="menuitem" className="app-avatar-menu-item app-avatar-menu-signout" onClick={() => { setOpen(false); logout(); window.location.href = "/login"; }}>Sign out</button>
         </div>
       )}
@@ -365,9 +365,12 @@ function TopBar({ crumb, userName }) {
         <span className="app-breadcrumb-current">{crumb}</span>
       </div>
       <div className="app-topbar-right">
-        <NotificationBell />
-        <ScreenLock />
-        <AvatarMenu userName={userName} />
+        <ScreenLock>
+          {(lockScreen) => <>
+            <NotificationBell />
+            <AvatarMenu userName={userName} onLockScreen={lockScreen} />
+          </>}
+        </ScreenLock>
       </div>
     </div>
   );

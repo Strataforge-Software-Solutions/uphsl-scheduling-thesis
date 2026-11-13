@@ -426,6 +426,8 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--c-primary); }
   padding: 8px 12px; font-size: 13px; transition: background-color 0.15s ease;
 }
 .app-avatar-menu-item:hover, .app-avatar-menu-item:focus-visible { background: var(--c-subtle); color: var(--c-text); }
+.app-avatar-lock-item { display: flex; align-items: center; gap: 9px; }
+.app-avatar-lock-item svg { flex: 0 0 auto; }
 .app-avatar-menu-signout { margin-top: 4px; border-top: 1px solid var(--c-line) !important; color: #b42318 !important; }
 .app-avatar-menu-signout:hover, .app-avatar-menu-signout:focus-visible { color: #981b1b !important; background: #fff4f2 !important; }
 
@@ -1342,8 +1344,6 @@ html button.minor-comparison-entry:focus-visible {
 }
 
 /* Private break screen with a live local clock and elapsed timers. */
-.app-screen-lock-trigger { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 68px; height: 34px; padding: 0 9px; border: 1px solid var(--c-line); border-radius: 7px; background: var(--c-primary-soft); color: var(--c-primary); font-size: 12px; font-weight: 700; cursor: pointer; transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease; }
-.app-screen-lock-trigger:hover, .app-screen-lock-trigger:focus-visible { border-color: var(--c-line); background: var(--c-subtle) !important; color: var(--c-primary) !important; }
 .screen-lock-backdrop { position: fixed; inset: 0; z-index: 20000; display: grid; place-items: center; overflow-y: auto; padding: 20px; background: rgba(5, 15, 29, .74); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); animation: screen-lock-fade-in 180ms ease-out both; }
 .screen-lock-panel { width: min(460px, 100%); max-height: calc(100vh - 40px); overflow-y: auto; padding: clamp(22px, 5vw, 34px); border: 1px solid rgba(255,255,255,.16); border-radius: 20px; background: linear-gradient(145deg, #102a49, #071a31); color: #f8fbff; box-shadow: 0 28px 90px rgba(0,0,0,.42); animation: screen-lock-panel-in 220ms cubic-bezier(.2,.8,.2,1) both; }
 .screen-lock-brand { display: flex; align-items: center; gap: 10px; color: #c7d7eb; font-size: 10px; font-weight: 700; letter-spacing: .12em; }
