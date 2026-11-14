@@ -1,6 +1,7 @@
 import CustomSelect from "./CustomSelect";
 import CustomTimePicker from "./CustomTimePicker";
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import API from "../services/api";
 import { formatTime } from "../utils/formatDateTime";
 
@@ -29,6 +30,13 @@ export default function MoveClassesModal({ groups, describe, onClose, onDone }) 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const seq = useRef(0);
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    const previousRootOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previousOverflow; document.documentElement.style.overflow = previousRootOverflow; };
+  }, []);
 
   const byKey = useMemo(() => Object.fromEntries(groups.map((g) => [g.key, g])), [groups]);
   const current = byKey[active];
@@ -99,9 +107,9 @@ export default function MoveClassesModal({ groups, describe, onClose, onDone }) 
     return { text: "Ready", bg: "#dcfce7", fg: "#166534" };
   };
 
-  return (
+  return createPortal((
     <div style={overlay}>
-      <div style={{ background: "white", borderRadius: 6, padding: "22px", width: "820px", maxWidth: "100%", maxHeight: "92vh", overflowY: "auto" }}>
+      <div className="move-classes-dialog" style={{ background: "white", borderRadius: 12, padding: "22px", width: "820px", maxWidth: "100%", maxHeight: "92vh", overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "10px" }}>
           <div>
             <h3 style={{ margin: 0, color: "#003366" }}>Change day and time</h3>
@@ -210,5 +218,5 @@ export default function MoveClassesModal({ groups, describe, onClose, onDone }) 
         </div>
       </div>
     </div>
-  );
+  ), document.body);
 }

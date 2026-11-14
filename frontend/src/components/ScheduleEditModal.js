@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { HistoricalHint } from "./Charts";
 import RoomSelect from "./RoomSelect";
 import TeacherPicker from "./TeacherPicker";
@@ -63,22 +64,31 @@ export default function ScheduleEditModal({
       .catch((e) => { if (live) setTOpts({ error: e.response?.data?.detail || "The teacher list could not be loaded.", teachers: [] }); });
     return () => { live = false; };
   }, [idsKey]);
+  const isOpen = Boolean(group);
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    const previousRootOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previousOverflow; document.documentElement.style.overflow = previousRootOverflow; };
+  }, [isOpen]);
   if (!group) return null;
   const multiPeriod = group.ids.length > 1;
   const roomRank = (r) => (r.id === roomAssignment?.preferred ? 0 : roomAssignment?.alts?.includes(r.id) ? 1 : 2);
 
-  return (
-    <div
+  return createPortal((
+    <div className="schedule-edit-overlay"
       style={{
         position: "fixed", inset: 0, background: "rgba(15, 23, 42, 0.45)",
         display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
-        padding: "16px",
+        padding: "16px", overflow: "hidden",
       }}
       onClick={(e) => { if (e.target === e.currentTarget && !saving) onCancel(); }}
     >
-      <div style={{
-        background: "white", borderRadius: 6, width: "100%", maxWidth: "620px",
-        boxShadow: "var(--shadow-pop)", maxHeight: "90vh", overflowY: "auto",
+      <div className="schedule-edit-dialog" style={{
+        background: "white", borderRadius: 12, width: "100%", maxWidth: "620px", maxHeight: "90vh", minHeight: 0,
+        boxShadow: "var(--shadow-pop)", overflowY: "auto",
       }}>
         <div style={{ padding: "22px 26px 18px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
@@ -310,5 +320,5 @@ export default function ScheduleEditModal({
           onConfirm={(reason) => { setEditForm({ ...editForm, teacher: String(ask.id), override_reason: reason }); setAsk(null); }} />
       )}
     </div>
-  );
+  ), document.body);
 }

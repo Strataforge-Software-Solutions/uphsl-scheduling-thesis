@@ -1,4 +1,5 @@
 import CustomSelect from "./CustomSelect";
+import ModalPortal from "./ModalPortal";
 import React, { useEffect, useState } from "react";
 import API from "../services/api";
 import { formatTime } from "../utils/formatDateTime";
@@ -84,7 +85,7 @@ export default function FacultyTimePopover({ teachers = [], initialId = "", seme
   }, [fid, semester, programId, yearLevel]);
 
   return (
-    <div role="dialog" aria-label="Faculty time" style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.35)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}
+    <ModalPortal><div role="dialog" aria-label="Faculty time" style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.35)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={{ background: "white", borderRadius: 6, width: "min(760px, 100%)", maxHeight: "90vh", overflow: "auto", padding: "14px 16px", boxShadow: "var(--shadow-pop)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
@@ -201,6 +202,6 @@ export default function FacultyTimePopover({ teachers = [], initialId = "", seme
           </>
         )}
       </div>
-    </div>
+    </div></ModalPortal>
   );
 }
