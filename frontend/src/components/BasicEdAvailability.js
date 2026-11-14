@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import API from "../services/api";
+import { notifyToast } from "../services/toast";
 import { be, errText, cardStyle, btn, btnPrimary, Notice } from "./basicEdUi";
 import { formatDate, formatTime } from "../utils/formatDateTime";
 
@@ -107,8 +108,8 @@ export function MyAvailability() {
       const out = Object.entries(cells).map(([k, v]) => { const [day, start] = k.split("|"); return { day, start, preference: v }; });
       const r = await API.post("/basic-ed/my/availability/", { cells: out });
       try { window.localStorage.removeItem(draftKey); } catch (e) { /* ignore */ }
-      setData(r.data); setCells(r.data.cells); setMsg({ ok: true, text: r.data.detail });
-    } catch (e) { setMsg({ ok: false, text: errText(e, "Could not submit your availability.") }); }
+      setData(r.data); setCells(r.data.cells); setMsg({ ok: true, text: r.data.detail }); notifyToast(r.data.detail || "Availability submitted.");
+    } catch (e) { const message = errText(e, "Could not submit your availability."); setMsg({ ok: false, text: message }); notifyToast(message, "error"); }
     setBusy(false);
   };
   if (error) return <Notice tone="error">{error}</Notice>;
@@ -156,17 +157,17 @@ export function FacultyAvailability({ level }) {
   const waiting = (list?.teachers || []).filter((t) => t.status !== "submitted").length;
   const remind = async () => {
     setBusy("remind"); setMsg(null);
-    try { const r = await be.post(level, "availability/remind/"); setMsg({ ok: true, text: r.data.detail }); }
-    catch (e) { setMsg({ ok: false, text: errText(e) }); }
+    try { const r = await be.post(level, "availability/remind/"); setMsg({ ok: true, text: r.data.detail }); notifyToast(r.data.detail || "Reminder sent."); }
+    catch (e) { const message = errText(e); setMsg({ ok: false, text: message }); notifyToast(message, "error"); }
     setBusy("");
   };
   const giveBack = async () => {
     setBusy("return"); setMsg(null);
     try {
       const r = await be.post(level, `availability/${open}/return/`, { note });
-      setMsg({ ok: true, text: r.data.detail }); setNote(""); load();
+      setMsg({ ok: true, text: r.data.detail }); notifyToast(r.data.detail || "Availability returned for changes."); setNote(""); load();
       setDetail((d) => (d ? { ...d, ...r.data } : d));
-    } catch (e) { setMsg({ ok: false, text: errText(e) }); }
+    } catch (e) { const message = errText(e); setMsg({ ok: false, text: message }); notifyToast(message, "error"); }
     setBusy("");
   };
   if (error) return <Notice tone="error">{error}</Notice>;

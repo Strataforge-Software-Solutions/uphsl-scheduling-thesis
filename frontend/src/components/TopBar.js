@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
-import { reportLoadError } from "../services/loadError";
 import API, { logout } from "../services/api";
+import { notifyToast } from "../services/toast";
 import { notificationTarget, jumpTo } from "../services/jump";
 import { useNavigate } from "react-router-dom";
 import { usePreferences, initialsOf } from "../services/preferences";
@@ -14,6 +14,27 @@ const TYPE_LABEL = {
   exam_assignment: "Exam",
   substitute_assignment: "Substitute",
 };
+const NOTIFICATION_CACHE_KEY = "app_notifications_cache_v1";
+
+function readNotificationCache() {
+  try {
+    const cached = JSON.parse(sessionStorage.getItem(NOTIFICATION_CACHE_KEY) || "null");
+    return Array.isArray(cached?.items) ? cached.items : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeNotificationCache(items) {
+  try { sessionStorage.setItem(NOTIFICATION_CACHE_KEY, JSON.stringify({ savedAt: Date.now(), items })); }
+  catch { /* cache is an optional speed-up */ }
+}
+
+function parseMoveRequest(message = "") {
+  const match = message.match(/^(.+?) asks to move (.+?) from (.+?) to (.+?)\. See Schedules > Gen Ed move requests\.?$/i);
+  if (!match) return null;
+  return { requester: match[1], subject: match[2], currentTime: match[3], requestedTime: match[4] };
+}
 
 /* Line-drawn bell (24 x 24, 1.75 stroke), drawn inline: no icon library. */
 function BellIcon() {
@@ -49,8 +70,7 @@ function NotificationBell() {
   const [open, setOpen] = useState(false);
   const { present: menuPresent, closing: menuClosing } = usePopupPresence(open);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [items, setItems] = useState(readNotificationCache);
   const wrapRef = useRef(null);
 
   const refreshCount = () => {
@@ -60,8 +80,18 @@ function NotificationBell() {
       .catch(() => {});
   };
 
+  const refreshNotifications = () => {
+    API.get("/notifications/", { params: { limit: 50 } })
+      .then((res) => {
+        setItems(res.data);
+        writeNotificationCache(res.data);
+      })
+      .catch(() => {});
+  };
+
   useEffect(() => {
     refreshCount();
+    refreshNotifications();
     const vis = () => { if (document.visibilityState === "visible") refreshCount(); };
     document.addEventListener("visibilitychange", vis);
     window.addEventListener("focus", refreshCount);
@@ -81,30 +111,38 @@ function NotificationBell() {
     const next = !open;
     setOpen(next);
     if (next) {
-      setLoading(true);
-      API.get("/notifications/", { params: { limit: 50 } })
-        .then((res) => setItems(res.data))
-        .catch(reportLoadError("the notifications"))
-        .finally(() => setLoading(false));
+      refreshCount();
+      refreshNotifications();
     }
   };
 
   const markRead = async (id) => {
-    setItems((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
+    setItems((prev) => {
+      const updated = prev.map((n) => (n.id === id ? { ...n, is_read: true } : n));
+      writeNotificationCache(updated);
+      return updated;
+    });
     setUnreadCount((c) => Math.max(0, c - 1));
     try {
       await API.patch(`/notifications/${id}/`, { is_read: true });
     } catch {
+      notifyToast("Could not update the notification. Try again.", "error");
       refreshCount();
     }
   };
 
   const markAllRead = async () => {
-    setItems((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    setItems((prev) => {
+      const updated = prev.map((n) => ({ ...n, is_read: true }));
+      writeNotificationCache(updated);
+      return updated;
+    });
     setUnreadCount(0);
     try {
       await API.post("/notifications/mark_all_read/");
+      notifyToast("All notifications marked as read.");
     } catch {
+      notifyToast("Could not mark notifications as read. Try again.", "error");
       refreshCount();
     }
   };
@@ -113,14 +151,11 @@ function NotificationBell() {
     <div ref={wrapRef} style={{ position: "relative" }}>
       <button
         onClick={toggleOpen}
+        className={`app-notification-button${open ? " is-open" : ""}${unreadCount > 0 ? " has-unread" : ""}`}
         title="Notifications"
         aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
         aria-expanded={open}
-        style={{
-          position: "relative", background: open ? "#f3f4f6" : "transparent", color: "#374151", border: "1px solid transparent",
-          cursor: "pointer", width: 34, height: 34, padding: 0, borderRadius: 6, display: "inline-flex",
-          alignItems: "center", justifyContent: "center",
-        }}
+        style={{ position: "relative" }}
       >
         <BellIcon />
         {unreadCount > 0 && (
@@ -155,35 +190,44 @@ function NotificationBell() {
             )}
           </div>
 
-          {loading ? (
-            <p style={{ padding: 16, fontSize: 13, color: "#6b7280", margin: 0 }}>Loading…</p>
-          ) : items.length === 0 ? (
+          {items.length === 0 ? (
             <p style={{ padding: 16, fontSize: 13, color: "#6b7280", margin: 0 }}>No notifications.</p>
           ) : (
-            items.map((n) => (
-              <div
+            items.map((n) => {
+              const target = notificationTarget(n);
+              const moveRequest = parseMoveRequest(n.message);
+              return <button
                 key={n.id}
+                type="button"
+                className={`notification-card${n.is_read ? " is-read" : " is-unread"}${moveRequest ? " is-move-request" : ""}`}
+                disabled={n.is_read && !target}
                 onClick={() => {
                   if (!n.is_read) markRead(n.id);
-                  const target = notificationTarget(n);
                   if (target) { setOpen(false); jumpTo(target); }
                 }}
-                title={notificationTarget(n) ? "Open the Gen Ed move requests" : n.is_read ? undefined : "Mark as read"}
-                style={{
-                  display: "flex", gap: 10, padding: "10px 12px", borderBottom: "1px solid #f3f4f6",
-                  background: n.is_read ? "white" : "#f5f8fc", cursor: n.is_read && !notificationTarget(n) ? "default" : "pointer",
-                  borderLeft: `3px solid ${n.is_read ? "transparent" : "#003366"}`,
-                }}
+                title={target ? "Review this request in Schedules" : n.is_read ? undefined : "Mark as read"}
               >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ margin: 0, fontSize: 13, color: "#111827", lineHeight: 1.45, fontWeight: n.is_read ? 400 : 600 }}>{n.message}</p>
-                  <p style={{ margin: "4px 0 0", fontSize: 12, color: "#6b7280" }}>
-                    {TYPE_LABEL[n.notif_type] || "Notice"} · {timeAgo(n.created_at)}{n.is_read ? "" : " · Unread"}
-                    {notificationTarget(n) && <span style={{ color: "#003366", fontWeight: 600, textDecoration: "underline" }}> · Open</span>}
-                  </p>
-                </div>
-              </div>
-            ))
+                <span className="notification-card-topline">
+                  <span className={`notification-kind${moveRequest ? " is-request" : ""}`}>{moveRequest ? "Move request" : TYPE_LABEL[n.notif_type] || "Notice"}</span>
+                  {!n.is_read && <span className="notification-new">New</span>}
+                </span>
+                {moveRequest ? (
+                  <>
+                    <strong className="notification-subject">{moveRequest.subject}</strong>
+                    <span className="notification-requester">Requested by {moveRequest.requester}</span>
+                    <span className="notification-time-change">
+                      <span><small>Current time</small><strong>{moveRequest.currentTime}</strong></span>
+                      <span className="notification-time-arrow" aria-hidden="true">→</span>
+                      <span><small>Requested time</small><strong>{moveRequest.requestedTime}</strong></span>
+                    </span>
+                  </>
+                ) : <span className="notification-message">{n.message}</span>}
+                <span className="notification-card-footer">
+                  <time dateTime={n.created_at}>{timeAgo(n.created_at)}</time>
+                  <span>{target ? "Review request →" : n.is_read ? "" : "Mark read"}</span>
+                </span>
+              </button>;
+            })
           )}
         </div>
       )}
@@ -231,14 +275,112 @@ function AvatarMenu({ userName }) {
             window.dispatchEvent(new Event("app-screen-lock"));
           }}>Lock screen</button>
           <button type="button" role="menuitem" className="app-avatar-menu-item" onClick={() => { setOpen(false); navigate("/settings"); }}>My settings</button>
-          <button type="button" role="menuitem" className="app-avatar-menu-item app-avatar-menu-signout" onClick={() => { setOpen(false); logout(); window.location.href = "/login"; }}>Sign out</button>
+          <button type="button" role="menuitem" className="app-avatar-menu-item app-avatar-menu-signout" onClick={() => { setOpen(false); logout(); window.location.href = "/login?signedOut=1"; }}>Sign out</button>
         </div>
       )}
     </div>
   );
 }
 
-function TopBar({ crumb, userName }) {
+const QUICK_PAGE_KEYS = ["home", "overview", "generate", "schedules", "schedule", "timetable", "analytics", "exams", "coverage"];
+
+function QuickPageSearch({ items = [], onNavigate }) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+  const inputRef = useRef(null);
+  const resultListRef = useRef(null);
+  const { present, closing } = usePopupPresence(open);
+  const pages = items.filter((item) => item.key && item.label);
+  const matches = pages.filter((item) => item.label.toLowerCase().includes(query.trim().toLowerCase()));
+  const quickPages = QUICK_PAGE_KEYS.map((key) => pages.find((item) => item.key === key)).filter(Boolean)
+    .filter((item, index, list) => list.findIndex((candidate) => candidate.key === item.key) === index).slice(0, 4);
+  const presets = quickPages.length ? quickPages : pages.slice(0, 4);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const closeIfOutside = (event) => {
+      if (wrapRef.current && !wrapRef.current.contains(event.target)) setOpen(false);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        inputRef.current?.blur();
+      }
+    };
+    document.addEventListener("pointerdown", closeIfOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeIfOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  const navigateTo = (item) => {
+    onNavigate?.(item.key);
+    setQuery("");
+    setOpen(false);
+    inputRef.current?.blur();
+  };
+
+  const handleKeyDown = (event) => {
+    if (event.key === "ArrowDown" && matches.length) {
+      event.preventDefault();
+      resultListRef.current?.querySelector("button")?.focus();
+    } else if (event.key === "Enter" && matches.length) {
+      event.preventDefault();
+      navigateTo(matches[0]);
+    }
+  };
+
+  if (!pages.length || !onNavigate) return null;
+
+  return (
+    <div className="app-quick-search" ref={wrapRef}>
+      <svg className="app-quick-search-icon" viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="m13 13 4 4" /></svg>
+      <input
+        ref={inputRef}
+        type="search"
+        role="combobox"
+        value={query}
+        placeholder="Search pages…"
+        aria-label="Search pages and quick links"
+        aria-autocomplete="list"
+        aria-haspopup="listbox"
+        aria-expanded={present}
+        aria-controls="app-quick-search-results"
+        onFocus={() => setOpen(true)}
+        onChange={(event) => { setQuery(event.target.value); setOpen(true); }}
+        onKeyDown={handleKeyDown}
+      />
+      {present && (
+        <div className={`app-quick-search-panel${closing ? " is-closing" : ""}`} role="dialog" aria-label="Quick page navigation" aria-hidden={closing} inert={closing ? "" : undefined}>
+          {!query.trim() && presets.length > 0 && (
+            <div className="app-quick-search-presets">
+              <div className="app-quick-search-heading">Quick presets</div>
+              <div className="app-quick-search-chips">
+                {presets.map((item) => (
+                  <button key={item.key} type="button" onClick={() => navigateTo(item)}>{item.label}</button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="app-quick-search-heading">{query.trim() ? "Search results" : "All pages"}</div>
+          <div id="app-quick-search-results" className="app-quick-search-results" role="listbox" ref={resultListRef}>
+            {matches.length ? matches.map((item) => (
+              <button key={item.key} type="button" role="option" aria-selected="false" onClick={() => navigateTo(item)}>
+                <span>{item.label}</span><span aria-hidden="true">›</span>
+              </button>
+            )) : <p className="app-quick-search-empty">No pages match “{query}”.</p>}
+          </div>
+          <div className="app-quick-search-hint">Type to filter · Enter to open · Esc to close</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TopBar({ crumb, userName, navItems, onNavigate }) {
   return (
     <div className="app-topbar">
       <div className="app-breadcrumb">
@@ -246,6 +388,7 @@ function TopBar({ crumb, userName }) {
         <span className="app-breadcrumb-sep">›</span>
         <span className="app-breadcrumb-current">{crumb}</span>
       </div>
+      <QuickPageSearch items={navItems} onNavigate={onNavigate} />
       <div className="app-topbar-right">
         <NotificationBell />
         <AvatarMenu userName={userName} />

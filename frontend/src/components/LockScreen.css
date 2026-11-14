@@ -201,7 +201,40 @@
   background-color: transparent;
 }
 
+.app-toast {
+  position: fixed;
+  z-index: 14000;
+  top: 20px;
+  right: 24px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: calc(100vw - 32px);
+  padding: 11px 15px;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+  background: #f0fdf4;
+  color: #166534;
+  box-shadow: 0 8px 24px rgba(17, 24, 39, .14);
+  font-size: 13px;
+  font-weight: 650;
+  animation: app-success-toast-in 220ms cubic-bezier(.2,.75,.25,1) both;
+}
+.app-toast svg { width: 18px; height: 18px; flex: 0 0 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.app-toast.is-error { border-color: #fecaca; background: #fef2f2; color: #b42318; }
+.app-toast.is-info { border-color: #bfdbfe; background: #eff6ff; color: #1d4ed8; }
+.app-toast.is-warning { border-color: #fde68a; background: #fffbeb; color: #92400e; }
+@keyframes app-success-toast-in {
+  from { opacity: 0; transform: translateY(-7px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+html[data-theme="dark"] .app-toast { border-color: #286243; background: #123324; color: #bbf7d0; }
+html[data-theme="dark"] .app-toast.is-error { border-color: #7f343b; background: #321f2a; color: #fecaca; }
+html[data-theme="dark"] .app-toast.is-info { border-color: #31557c; background: #172b43; color: #bfdbfe; }
+html[data-theme="dark"] .app-toast.is-warning { border-color: #725a22; background: #302611; color: #fde68a; }
+
 @media (max-width: 520px) {
+  .app-toast { top: 12px; right: 12px; }
   .app-lock-screen { padding: 12px; }
   .app-lock-card { padding: 27px 23px 25px; border-radius: 20px; }
   .app-lock-brand { margin-bottom: 26px; font-size: 10px; letter-spacing: .08em; }

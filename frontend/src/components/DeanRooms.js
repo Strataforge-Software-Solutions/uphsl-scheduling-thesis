@@ -1,6 +1,7 @@
 import CustomSelect from "./CustomSelect";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import API from "../services/api";
+import { notifyToast } from "../services/toast";
 import RoomSelect from "./RoomSelect";
 
 /* Dean Dashboard -> Rooms. Rooms of the college, the building its program subjects prefer, and a preferred /
@@ -202,8 +203,8 @@ function EnrollmentCard() {
     try {
       const r = await API.put("/rooms/dean/enrollment/", { department: dept, year_level: y.year_level, students, apply });
       setData(r.data); setDraft((d) => { const n = { ...d }; delete n[`${dept}|${y.year_level}`]; return n; });
-      setMsg(apply ? "Saved. Section sizes updated." : "Saved.");
-    } catch (e) { setMsg(e.response?.data?.detail || "Could not save."); }
+      const message = apply ? "Saved. Section sizes updated." : "Saved."; setMsg(message); notifyToast(message);
+    } catch (e) { const message = e.response?.data?.detail || "Could not save."; setMsg(message); notifyToast(message, "error"); }
   };
   if (!data) return null;
   return (

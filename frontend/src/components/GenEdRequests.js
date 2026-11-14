@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import API from "../services/api";
+import { notifyToast } from "../services/toast";
 import { onJump, takeJump } from "../services/jump";
 
 /* Gen Ed move requests (engine/gened_requests.py).
@@ -43,8 +44,9 @@ export function RequestMoveModal({ group, onClose, onDone }) {
     try {
       const r = await API.post("/engine/gened-requests/", { ids: group.ids, key, reason });
       setDone(r.data);
+      notifyToast("Schedule move request sent.");
       onDone && onDone();
-    } catch (e) { setError(e.response?.data?.detail || "Could not send the request."); }
+    } catch (e) { const message = e.response?.data?.detail || "Could not send the request."; setError(message); notifyToast(message, "error"); }
     setBusy(false);
   };
   return (
@@ -151,9 +153,10 @@ export function GenEdRequestsPanel({ role, onChanged, refreshKey = 0 }) {
       const st = r.data.status;
       setMsg({ ok: st === "approved" || st === "rejected" || st === "cancelled",
         text: st === "approved" ? `Approved and moved. ${r.data.summary || ""}` : st === "failed" ? r.data.decision_note : `Request ${r.data.status_label.toLowerCase()}.` });
+      notifyToast(st === "approved" ? `Request approved. ${r.data.summary || ""}` : st === "failed" ? (r.data.decision_note || "Request could not be completed.") : `Request ${r.data.status_label.toLowerCase()}.`, st === "failed" ? "error" : "success");
       load();
       if (st === "approved" && onChanged) onChanged();
-    } catch (e) { setMsg({ ok: false, text: e.response?.data?.detail || "Could not update the request." }); }
+    } catch (e) { const message = e.response?.data?.detail || "Could not update the request."; setMsg({ ok: false, text: message }); notifyToast(message, "error"); }
     setBusy(null);
   };
   const shown = open ? data.items : data.items.filter((x) => x.status === "pending");

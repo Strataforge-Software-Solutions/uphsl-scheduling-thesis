@@ -119,6 +119,8 @@ export function displayName(user) {
 
 export function logout() {
   sessionStorage.clear();
+  // Preserve a one-time confirmation across the full-page redirect to login.
+  sessionStorage.setItem("app_logout_toast", "true");
 }
 
 export function getCurrentUser() {

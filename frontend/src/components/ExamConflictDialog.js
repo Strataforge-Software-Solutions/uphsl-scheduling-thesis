@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import API from "../services/api";
+import { notifyToast } from "../services/toast";
 import { formatDate, formatTime } from "../utils/formatDateTime";
 
 /* Pop-up for exams that could not be placed: shows what is in the way and the new date / hour for the program (major) exams that have to
@@ -29,10 +30,11 @@ export default function ExamConflictDialog({ pending, form, onClose, onApplied, 
     try {
       const r = await API.post("/exams/resolve/", body(true), { timeout: 120000 });
       setPlan(r.data);
+      notifyToast(r.data.applied ? "Exam conflicts resolved and changes saved." : "Exam conflict review completed.", r.data.applied ? "success" : "warning");
       if (r.data.applied) onApplied && onApplied(r.data);
       else if (r.data.detail) setError(r.data.detail);
     } catch (e) {
-      setError(e.response?.data?.detail || "Could not apply the change.");
+      const message = e.response?.data?.detail || "Could not apply the change."; setError(message); notifyToast(message, "error");
     } finally { setBusy(false); }
   };
 

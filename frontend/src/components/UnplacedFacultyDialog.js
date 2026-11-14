@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import API from "../services/api";
+import { notifyToast } from "../services/toast";
 import TeacherPicker from "./TeacherPicker";
 import AssignAnywayDialog, { OverrideBadge } from "./AssignAnywayDialog";
 import { groupOptions, pickerExtras } from "../utils/facultyGroups";
@@ -49,10 +50,11 @@ export default function UnplacedFacultyDialog({ cls, onClose, onPlaced }) {
     setBusy("apply"); setError("");
     try {
       const r = await API.post("/engine/slot-options/apply/", { ...request(teacher, override), key: choice });
-      setDone(r.data.summary || "The class was placed.");
+      setDone(r.data.summary || "The class was placed."); notifyToast(r.data.summary || "The class was placed.");
       if (onPlaced) onPlaced(r.data);
     } catch (e) {
-      setError(e.response?.data?.detail || "Could not place the class.");
+      const message = e.response?.data?.detail || "Could not place the class.";
+      setError(message); notifyToast(message, "error");
       if (e.response?.data?.refresh) loadTimes(teacher, override);
     }
     setBusy("");

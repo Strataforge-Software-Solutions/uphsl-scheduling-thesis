@@ -1,5 +1,6 @@
 import CustomSelect from "./CustomSelect";
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { notifyToast } from "../services/toast";
 import Badge from "./Badge";
 import { CollapsibleChartPanel, StatTile, HBarChart } from "./Charts";
 import { be, errText, inputStyle, cardStyle, btn, btnPrimary, Notice } from "./basicEdUi";
@@ -109,9 +110,9 @@ export default function BasicEdAnalytics({ level, overview }) {
     setApplying(i); setNote(null);
     try {
       for (const id of rec.entry_ids) await be.patch(level, `entries/${id}/`, { teacher: rec.to_id });
-      setNote({ tone: "ok", text: `Moved ${rec.subject} (${rec.section}) from ${rec.from} to ${rec.to}.` });
+      const message = `Moved ${rec.subject} (${rec.section}) from ${rec.from} to ${rec.to}.`; setNote({ tone: "ok", text: message }); notifyToast(message);
     } catch (e) {
-      setNote({ tone: "error", text: `Could not move it: ${errText(e)} Nothing else was changed; the list below is up to date.` });
+      const message = `Could not move it: ${errText(e)} Nothing else was changed; the list below is up to date.`; setNote({ tone: "error", text: message }); notifyToast(message, "error");
     }
     setApplying(null);
     load(true);

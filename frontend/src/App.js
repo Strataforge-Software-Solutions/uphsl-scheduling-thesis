@@ -13,6 +13,36 @@ import { ConfirmDialogProvider } from "./components/ConfirmDialog";
 function App() {
   const [user, setUser] = useState(getCurrentUser());
   const [isLocked, setIsLocked] = useState(() => Boolean(getCurrentUser() && sessionStorage.getItem("app_screen_locked") === "true"));
+  const [toast, setToast] = useState(() => {
+    const url = new URL(window.location.href);
+    const signedOut = url.searchParams.get("signedOut") === "1"
+      || sessionStorage.getItem("app_logout_toast") === "true";
+    return signedOut ? { message: "You have been signed out.", type: "success" } : null;
+  });
+
+  React.useEffect(() => {
+    sessionStorage.removeItem("app_logout_toast");
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("signedOut")) {
+      url.searchParams.delete("signedOut");
+      window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    if (!toast) return undefined;
+    const timeout = window.setTimeout(() => setToast(null), 3200);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
+
+  React.useEffect(() => {
+    const showToast = (event) => setToast({
+      message: event.detail?.message || "Done.",
+      type: event.detail?.type || "success",
+    });
+    window.addEventListener("app-toast", showToast);
+    return () => window.removeEventListener("app-toast", showToast);
+  }, []);
 
   React.useEffect(() => {
     const lock = () => { if (getCurrentUser()) setIsLocked(true); };
@@ -20,7 +50,10 @@ function App() {
     return () => window.removeEventListener("app-screen-lock", lock);
   }, []);
 
-  const handleLoginSuccess = (loggedInUser) => setUser(loggedInUser);
+  const handleLoginSuccess = (loggedInUser) => {
+    setUser(loggedInUser);
+    setToast({ message: "Signed in successfully. Welcome to U-FAST.", type: "success" });
+  };
 
   return (
     <PreferencesProvider userId={user?.id}>
@@ -60,7 +93,13 @@ function App() {
           />
         </Routes>
       </div>
-      {isLocked && user && <LockScreen user={user} onUnlock={(authenticatedUser) => { setUser(authenticatedUser); setIsLocked(false); }} onSignOut={() => { setUser(null); setIsLocked(false); }} />}
+      {isLocked && user && <LockScreen user={user} onUnlock={(authenticatedUser) => { setUser(authenticatedUser); setIsLocked(false); setToast({ message: "Screen unlocked. Welcome back.", type: "success" }); }} onSignOut={() => { sessionStorage.removeItem("app_logout_toast"); setUser(null); setIsLocked(false); setToast({ message: "You have been signed out.", type: "success" }); }} />}
+      {toast && (
+        <div className={`app-toast is-${toast.type}`} role={toast.type === "error" ? "alert" : "status"} aria-live={toast.type === "error" ? "assertive" : "polite"}>
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d={toast.type === "error" ? "M10 3v7m0 3v.2M3.8 16h12.4L10 4 3.8 16Z" : "m4 10 4 4 8-8"} /></svg>
+          <span>{toast.message}</span>
+        </div>
+      )}
     </Router>
     </ConfirmDialogProvider>
     </PreferencesProvider>

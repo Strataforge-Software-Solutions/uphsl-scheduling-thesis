@@ -5,6 +5,7 @@ import HowToUse from "./HowToUse";
 import { PrincipalHome } from "./HomeWrappers";
 import React, { useState, useEffect, useCallback } from "react";
 import { getCurrentUser, logout, displayName } from "../services/api";
+import { notifyToast } from "../services/toast";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import PageHeader from "./PageHeader";
@@ -115,7 +116,7 @@ function BasicEdDashboard({ level }) {
     titles.faculty = ["Faculty", `${LEVEL_NAME[level]} teachers, qualifications, availability and teaching loads.`];
   }
   const [title, subtitle] = titles[tab];
-  const handleLogout = () => { logout(); window.location.href = "/login"; };
+  const handleLogout = () => { logout(); window.location.href = "/login?signedOut=1"; };
 
   return (
     <div className="app-shell">
@@ -123,7 +124,7 @@ function BasicEdDashboard({ level }) {
         items={navItems} activeKey={tab} onSelect={setTab}
         userName={(isAdmin ? user?.username : displayName(user)) || "User"} userRole={isAdmin ? "IT administrator" : `${level} Principal`} onSignOut={handleLogout} />
       <div className="app-main">
-        <TopBar crumb={title} userName={isAdmin ? user?.username : displayName(user)} />
+        <TopBar crumb={title} userName={isAdmin ? user?.username : displayName(user)} navItems={navItems} onNavigate={setTab} />
         <PageHeader eyebrow={isAdmin ? `IT ADMIN WORKSPACE · ${level}` : `${LEVEL_NAME[level]} Workspace`} title={title} subtitle={subtitle} />
         <div className="app-page-body motion-page-content" key={level + "-" + tab}>
           {error && <Notice tone="error">{error} <button style={btn} onClick={reload}>Retry</button></Notice>}
@@ -246,9 +247,9 @@ function AdminData({ level, overview }) {
     setBusy(true); setMsg(null);
     try {
       const r = await API.post("/basic-ed/clear-generated/", { level, ...f, apply }, { params: { level } });
-      if (apply) { setMsg({ tone: "ok", text: `Removed ${r.data.runs} timetable(s) (${r.data.entries} periods). Generate them again in the Principal workspace.` }); setPreview(null); }
+      if (apply) { const message = `Removed ${r.data.runs} timetable(s) (${r.data.entries} periods). Generate them again in the Principal workspace.`; setMsg({ tone: "ok", text: message }); notifyToast(message); setPreview(null); }
       else setPreview(r.data);
-    } catch (e) { setMsg({ tone: "error", text: errText(e) }); } finally { setBusy(false); }
+    } catch (e) { const message = errText(e); setMsg({ tone: "error", text: message }); notifyToast(message, "error"); } finally { setBusy(false); }
   };
   return (
     <div style={adminCard}>
@@ -349,7 +350,7 @@ function CalendarTab({ level, overview, periodLabel, reload }) {
     try { await be.post(level, `calendar/periods/${mapEdit.id}/terms/`, { terms: mapEdit.terms }); setMapEdit(null); reload(); }
     catch (e) { setErr(errText(e)); }
   };
-  const saveTerm = async (t, patch) => { try { await be.patch(level, `calendar/periods/${t.id}/`, patch); reload(); } catch (e) { alert(errText(e)); } };
+  const saveTerm = async (t, patch) => { try { await be.patch(level, `calendar/periods/${t.id}/`, patch); notifyToast("Calendar dates saved."); reload(); } catch (e) { notifyToast(errText(e), "error"); } };
   return (
     <div>
       <div style={cardStyle}>
@@ -420,8 +421,8 @@ function SettingsTab({ level, overview, reload }) {
       await be.patch(level, "config/", { period_minutes: Number(cfg.period_minutes), break_minutes: Number(cfg.break_minutes), break_every: Number(cfg.break_every),
         max_teacher_hours: Number(cfg.max_teacher_hours), max_periods_per_teacher_day: Number(cfg.max_periods_per_teacher_day), building: cfg.building, floor: cfg.floor === "" || cfg.floor == null ? null : Number(cfg.floor) });
       for (const w of wins) await be.patch(level, `windows/${w.id}/`, { start_time: w.start_time, end_time: w.end_time, recess_start: w.recess_start || null, recess_end: w.recess_end || null, lunch_start: w.lunch_start || null, lunch_end: w.lunch_end || null, break_start: w.break_start || null, break_end: w.break_end || null, curriculum_framework: w.curriculum_framework, framework_verified: w.framework_verified, framework_note: w.framework_note });
-      setMsg({ tone: "ok", text: "Saved. New schedules use these settings; existing versions are unchanged." }); reload();
-    } catch (e) { setMsg({ tone: "error", text: errText(e) }); } finally { setBusy(false); }
+      const message = "Saved. New schedules use these settings; existing versions are unchanged."; setMsg({ tone: "ok", text: message }); notifyToast(message); reload();
+    } catch (e) { const message = errText(e); setMsg({ tone: "error", text: message }); notifyToast(message, "error"); } finally { setBusy(false); }
   };
   const n = (k, label) => <label className="shs-config-field" key={k}><span>{label}</span><input type="number" value={cfg[k] ?? ""} onChange={(e) => setCfg({ ...cfg, [k]: e.target.value })} /></label>;
   const updateWindow = (index, patch) => setWins(wins.map((w, i) => i === index ? { ...w, ...patch } : w));

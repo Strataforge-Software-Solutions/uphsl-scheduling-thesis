@@ -1,6 +1,7 @@
 import CustomSelect from "./CustomSelect";
 import { OverrideBadge } from "./AssignAnywayDialog";
 import React, { useState, useEffect, useCallback } from "react";
+import { notifyToast } from "../services/toast";
 import API from "../services/api";
 import Badge from "./Badge";
 import RoomSelect from "./RoomSelect";
@@ -77,9 +78,10 @@ export function GeneratePanel({ level, overview, periodLabel, onDone }) {
     setBusy(true); setErr(""); setRes(null); setBlockers(null);
     try {
       const r = await API.post("/basic-ed/schedules/generate/", { level, grading_period: Number(period), grade_level: grade, force: !!force }, { params: { level }, timeout: 180000 });
-      setRes(r.data.results); onDone && onDone();
+      setRes(r.data.results); notifyToast(`Schedule generated for ${r.data.results.length} grade level${r.data.results.length === 1 ? "" : "s"}.`); onDone && onDone();
     } catch (e) {
-      if (e.response?.data?.issues) setBlockers(e.response.data.issues); else setErr(errText(e));
+      if (e.response?.data?.issues) { setBlockers(e.response.data.issues); notifyToast("Schedule generation needs curriculum fixes before it can continue.", "warning"); }
+      else { const message = errText(e); setErr(message); notifyToast(message, "error"); }
     } finally { setBusy(false); }
   };
   return (
@@ -116,8 +118,8 @@ export function GeneratePanel({ level, overview, periodLabel, onDone }) {
             <div style={{ marginTop: "8px" }}>
               <button style={btnPrimary} disabled={fixing === r.run.id} onClick={async () => {
                 setFixing(r.run.id);
-                try { const d = await resolveRun(level, r.run.id); setFixed({ ...fixed, [r.run.id]: d }); onDone && onDone(); }
-                catch (e) { setFixed({ ...fixed, [r.run.id]: { resolved: [], unresolved: [{ message: errText(e), reason: "" }] } }); }
+                try { const d = await resolveRun(level, r.run.id); setFixed({ ...fixed, [r.run.id]: d }); notifyToast(resolveText(d), d.unresolved.length ? "warning" : "success"); onDone && onDone(); }
+                catch (e) { const message = errText(e); setFixed({ ...fixed, [r.run.id]: { resolved: [], unresolved: [{ message, reason: "" }] } }); notifyToast(message, "error"); }
                 finally { setFixing(null); }
               }}>{fixing === r.run.id ? "Resolving…" : "Resolve"}</button>
               <span style={{ fontSize: "13px", color: "#6b7280", marginLeft: "10px" }}>Tries another teacher, room or period for each problem; nothing is kept unless every rule still holds.</span>
@@ -207,8 +209,8 @@ function RunDetail({ level, id, overview, periodLabel, onBack, user }) {
 
   const doResolve = async (only) => {
     setBusy(true); setMsg(null);
-    try { const d = await resolveRun(level, id, only); setFix(d); setMsg({ tone: d.unresolved.length ? "warn" : "ok", text: resolveText(d) }); load(); }
-    catch (e) { setMsg({ tone: "error", text: errText(e) }); } finally { setBusy(false); }
+    try { const d = await resolveRun(level, id, only); const message = resolveText(d); setFix(d); setMsg({ tone: d.unresolved.length ? "warn" : "ok", text: message }); notifyToast(message, d.unresolved.length ? "warning" : "success"); load(); }
+    catch (e) { const message = errText(e); setMsg({ tone: "error", text: message }); notifyToast(message, "error"); } finally { setBusy(false); }
   };
 
   if (!data) return <div style={cardStyle}>{msg ? <Notice tone="error">{msg.text}</Notice> : "Loading…"}<button style={btn} onClick={onBack}>Back</button></div>;
@@ -226,15 +228,15 @@ function RunDetail({ level, id, overview, periodLabel, onBack, user }) {
     let comment = "";
     if (action === "request-revision") { comment = window.prompt("What should be revised?") || ""; if (!comment.trim()) return; }
     setBusy(true); setMsg(null);
-    try { await be.post(level, `schedules/${id}/${action}/`, { comment }); load(); setMsg({ tone: "ok", text: "Done." }); }
-    catch (e) { setMsg({ tone: "error", text: errText(e) }); } finally { setBusy(false); }
+    try { await be.post(level, `schedules/${id}/${action}/`, { comment }); load(); setMsg({ tone: "ok", text: "Done." }); notifyToast(`Schedule ${action.replaceAll("-", " ")} completed.`); }
+    catch (e) { const message = errText(e); setMsg({ tone: "error", text: message }); notifyToast(message, "error"); } finally { setBusy(false); }
   };
   const revalidate = async () => { setBusy(true); try { await be.post(level, `schedules/${id}/validate/`); load(); } finally { setBusy(false); } };
   const pdf = async () => {
     try {
       const r = await API.get(`/basic-ed/schedules/${id}/pdf/`, { params: { level }, responseType: "blob" });
       const url = window.URL.createObjectURL(new Blob([r.data], { type: "application/pdf" })); window.open(url, "_blank"); setTimeout(() => window.URL.revokeObjectURL(url), 60000);
-    } catch (e) { setMsg({ tone: "error", text: "Could not create the PDF." }); }
+    } catch (e) { setMsg({ tone: "error", text: "Could not create the PDF." }); notifyToast("Could not create the PDF.", "error"); }
   };
   const canDecide = user.role === "principal" || user.role === "admin";
   return (
@@ -380,12 +382,12 @@ function EntryEditModal({ level, entry, grid, faculty, rooms, onClose, onSaved }
     setSaving(true); setErr("");
     try {
       const r = await be.patch(level, `entries/${entry.id}/`, { day: f.day, start_time: period[0], end_time: period[1], teacher: f.teacher || null, room: f.room || null });
-      if (r.data.entry_issues?.length) { setIssues(r.data.entry_issues); } else onSaved();
-    } catch (e) { setErr(errText(e)); } finally { setSaving(false); }
+      if (r.data.entry_issues?.length) { setIssues(r.data.entry_issues); notifyToast("Saved with schedule conflicts to review.", "warning"); } else { notifyToast("Class period saved."); onSaved(); }
+    } catch (e) { const message = errText(e); setErr(message); notifyToast(message, "error"); } finally { setSaving(false); }
   };
   const remove = async () => {
     if (!(await confirmDialog({ title: "Remove class period?", message: "Remove this period from the timetable?", confirmLabel: "Remove period" }))) return;
-    try { await be.del(level, `entries/${entry.id}/`); onSaved(); } catch (e) { setErr(errText(e)); }
+    try { await be.del(level, `entries/${entry.id}/`); notifyToast("Class period removed."); onSaved(); } catch (e) { const message = errText(e); setErr(message); notifyToast(message, "error"); }
   };
   const eligibleRooms = rooms.filter((r) => r.is_active);
   return (

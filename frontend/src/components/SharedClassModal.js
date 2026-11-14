@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import API from "../services/api";
+import { notifyToast } from "../services/toast";
 
 /* Choose how one minor (Gen Ed) subject is held before generating: Automatic, exclusive to this program, or shared by 2 or 3 programs.
    The choice is checked on the server (same code, title and units; same year level and semester; enough seats; a qualified teacher)
@@ -39,9 +40,10 @@ export default function SharedClassModal({ item, program, onClose, onChanged }) 
     try {
       const r = await API.post(`/engine/shared-classes/${path}/`, body);
       setNote(r.data.message || msg);
+      notifyToast(r.data.message || msg);
       if (onChanged) await onChanged();
       return r.data;
-    } catch (e) { setError(e.response?.data?.detail || "Could not save."); return null; } finally { setBusy(false); }
+    } catch (e) { const message = e.response?.data?.detail || "Could not save."; setError(message); notifyToast(message, "error"); return null; } finally { setBusy(false); }
   };
   const save = async () => {
     if (mode === "auto") return act("clear", { subject_id: item.subject_id }, "Back to automatic.");

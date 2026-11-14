@@ -42,15 +42,22 @@ function classHome(role, [d, failed], nav, onNavigate, name, scope, labelMap, hi
   const tasks = [];
   if (d) {
     if (d.class_periods === 0) tasks.push({ text: "No schedule generated yet.", tab: labelMap.generate, tone: "warn" });
-    if (d.draft) tasks.push({ text: `${d.draft} draft class period(s) wait for your review and approval.`, tab: "schedules", tone: "warn" });
-    if (d.conflicts) tasks.push({ text: `${d.conflicts} scheduling conflict(s) to resolve.`, tab: "conflicts", tone: "bad" });
-    if (d.overloaded) tasks.push({ text: `${d.overloaded} teacher(s) are overloaded: press View Suggestions.`, tab: "analytics", tone: "bad" });
+    if (d.draft) tasks.push({ text: `${d.draft} draft ${d.draft === 1 ? "class period is" : "class periods are"} waiting for your review and approval.`, tab: "schedules", tone: "warn" });
+    if (d.conflicts) tasks.push({ text: `${d.conflicts} scheduling ${d.conflicts === 1 ? "conflict needs" : "conflicts need"} resolution.`, tab: "conflicts", tone: "bad" });
+    if (d.overloaded) tasks.push({ text: `${d.overloaded} ${d.overloaded === 1 ? "teacher is" : "teachers are"} over the weekly load limit.`, tab: "analytics", tone: "bad" });
   }
-  const status = d ? [
-    d.class_periods ? `${d.class_periods} periods · ${d.draft} draft · ${d.approved} approved · ${d.published} published` : "No class periods exist",
-    d.conflicts ? `${d.conflicts} scheduling ${d.conflicts === 1 ? "conflict" : "conflicts"} found` : "No scheduling conflicts",
-    d.overloaded ? `${d.overloaded} ${d.overloaded === 1 ? "teacher exceeds" : "teachers exceed"} the weekly limit` : "No teachers over the weekly limit",
-  ] : failed ? ["The numbers could not be loaded. They retry automatically."] : [];
+  const status = d ? {
+    summary: `${d.class_periods} class ${d.class_periods === 1 ? "period" : "periods"} scheduled`,
+    metrics: [
+      { label: "Draft review", value: d.draft, tone: d.draft ? "warn" : "ok" },
+      { label: "Approved", value: d.approved, tone: "info" },
+      { label: "Published", value: d.published, tone: d.published ? "ok" : "neutral" },
+    ],
+    checks: [
+      { label: d.conflicts ? `${d.conflicts} scheduling ${d.conflicts === 1 ? "conflict" : "conflicts"} need attention` : "No scheduling conflicts", tone: d.conflicts ? "bad" : "ok" },
+      { label: d.overloaded ? `${d.overloaded} ${d.overloaded === 1 ? "teacher is" : "teachers are"} over the weekly limit` : "Faculty workload is within limits", tone: d.overloaded ? "warn" : "ok" },
+    ],
+  } : failed ? { error: "Schedule information could not be loaded. It will retry automatically." } : null;
   return <HomePage role={role} name={name} scope={scope} nav={nav} onNavigate={onNavigate} stats={stats} tasks={tasks} status={status} hideIntro={hideIntro} />;
 }
 
@@ -76,11 +83,17 @@ export function PrincipalHome({ level, levelName, overview, nav, onNavigate, nam
   if (c.pending_review) tasks.push({ text: `${c.pending_review} timetable(s) wait for your approval.`, tab: "schedules", tone: "warn" });
   if (c.open_conflicts) tasks.push({ text: `${c.open_conflicts} open conflict(s) in the timetables.`, tab: "schedules", tone: "bad" });
   if (c.unverified_subjects) tasks.push({ text: `${c.unverified_subjects} curriculum line(s) are unverified.`, tab: "curriculum", tone: "warn" });
-  const by = {};
-  overview.runs.forEach((r) => { by[r.status] = (by[r.status] || 0) + 1; });
-  const status = [
-    overview.runs.length ? `${overview.runs.length} timetable(s): ` + Object.entries(by).map(([k, v]) => `${v} ${k}`).join(", ") + "." : "No timetable generated yet.",
-    `Academic year ${overview.academic_year || "–"}.`,
-  ];
+  const status = {
+    summary: `Academic year ${overview.academic_year || "–"}`,
+    metrics: [
+      { label: "Timetables", value: overview.runs.length, tone: overview.runs.length ? "info" : "warn" },
+      { label: "Periods placed", value: overview.runs.reduce((n, r) => n + (r.entry_count || 0), 0), tone: "info" },
+      { label: "Awaiting approval", value: c.pending_review, tone: c.pending_review ? "warn" : "ok" },
+    ],
+    checks: [
+      { label: c.open_conflicts ? `${c.open_conflicts} open conflicts need attention` : "No open timetable conflicts", tone: c.open_conflicts ? "bad" : "ok" },
+      { label: c.unverified_subjects ? `${c.unverified_subjects} curriculum lines need verification` : "Curriculum is verified", tone: c.unverified_subjects ? "warn" : "ok" },
+    ],
+  };
   return <HomePage role="principal" name={name} scope={levelName} nav={nav} onNavigate={onNavigate} stats={stats} tasks={tasks} status={status} extra={extra} skip={["overview"]} />;
 }

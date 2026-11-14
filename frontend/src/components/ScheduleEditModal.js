@@ -6,6 +6,7 @@ import TeacherPicker from "./TeacherPicker";
 import AssignAnywayDialog, { OverrideBadge } from "./AssignAnywayDialog";
 import { groupOptions, pickerExtras } from "../utils/facultyGroups";
 import API from "../services/api";
+import { notifyToast } from "../services/toast";
 import { formatTime } from "../utils/formatDateTime";
 
 /* Full day names shown in the UI <-> short codes ("Mon".."Sun") the backend
@@ -55,8 +56,9 @@ export default function ScheduleEditModal({
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState("");
   const idsKey = group ? group.ids.join(",") : "";
+  const isOpen = Boolean(group);
   useEffect(() => {
-    if (!group) return undefined;
+    if (!isOpen) return undefined;
     const previousRootOverflow = document.documentElement.style.overflow;
     const previousOverflow = document.body.style.overflow;
     const previousPaddingRight = document.body.style.paddingRight;
@@ -69,7 +71,7 @@ export default function ScheduleEditModal({
       document.body.style.overflow = previousOverflow;
       document.body.style.paddingRight = previousPaddingRight;
     };
-  }, [!!group]);
+  }, [isOpen]);
   useEffect(() => {
     if (!idsKey) return undefined;
     let live = true;
@@ -180,8 +182,8 @@ export default function ScheduleEditModal({
                       <button type="button" disabled={removing || saving}
                         onClick={async () => {
                           setRemoving(true); setRemoveError("");
-                          try { await API.post("/engine/schedules/remove_override/", { ids: group.ids }); onOverrideRemoved(); }
-                          catch (e) { setRemoveError(e.response?.data?.detail || "Could not remove the assignment."); }
+                          try { await API.post("/engine/schedules/remove_override/", { ids: group.ids }); notifyToast("Manual assignment removed."); onOverrideRemoved(); }
+                          catch (e) { const message = e.response?.data?.detail || "Could not remove the assignment."; setRemoveError(message); notifyToast(message, "error"); }
                           setRemoving(false);
                         }}
                         style={{ background: "white", color: "#b91c1c", border: "1px solid #b91c1c", borderRadius: 4, padding: "3px 10px", fontSize: 12 }}>

@@ -1,6 +1,7 @@
 import CustomSelect from "./CustomSelect";
 import React, { useState, useEffect, useCallback } from "react";
 import API from "../services/api";
+import { notifyToast } from "../services/toast";
 import Badge from "./Badge";
 import { ResolverWindow, onWorkloadChanged } from "./OverloadResolver";
 
@@ -101,11 +102,12 @@ function LimitsEditor({ limits, onSaved, analyticsStyle = false }) {
         workload_policy: form.policy,
         reserve_lunch_gap: !!form.reserve_lunch_gap,
       });
-      setMsg({ ok: true, text: "Workload limits saved." });
+      setMsg({ ok: true, text: "Workload limits saved." }); notifyToast("Workload limits saved.");
       onSaved();
     } catch (e) {
       const d = e.response?.data;
-      setMsg({ ok: false, text: d?.detail || (d && Object.values(d).flat().join(" ")) || "Could not save." });
+      const message = d?.detail || (d && Object.values(d).flat().join(" ")) || "Could not save.";
+      setMsg({ ok: false, text: message }); notifyToast(message, "error");
     } finally { setSaving(false); }
   };
   const inp = { padding: "7px", borderRadius: "6px", border: "1px solid #d1d5db", width: "90px" };

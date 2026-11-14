@@ -2,6 +2,7 @@ import CustomSelect from "./CustomSelect";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import API from "../services/api";
+import { notifyToast } from "../services/toast";
 import UnplacedResolve from "./UnplacedResolve";
 import { SimplifiedGuide } from "./HowToUse";
 import { AnimatedMetricValue } from "./Charts";
@@ -50,15 +51,18 @@ function Cell({ c, onOpen }) {
         {c.scheduled && (bad ? <Tag bg="#fee2e2" fg="#991b1b">Conflict</Tag> : <Tag bg="#ecfdf5" fg="#166534">No conflict</Tag>)}
       </div>
       {c.mode === "shared" && others.length > 0 && (
-        <div className="minor-comparison-shared-with" title={others.join(", ")}>
-          <span style={{ color: "#6b7280" }}>With: </span>{others.join(", ")}
+        <div className="minor-comparison-shared-with">
+          <span className="minor-comparison-field-label">Shared with</span>
+          <div className="minor-comparison-shared-partners">
+            {others.map((other) => <span key={other}>{other}</span>)}
+          </div>
         </div>)}
       {bad && <div className="minor-comparison-conflict">{c.conflicts.join(", ")}</div>}
       {c.blocks.map((b, i) => (
         <div key={i} className={`minor-comparison-block${i ? " is-additional" : ""}`}>
-          <div className="minor-comparison-block-time">{b.day} · {b.time}</div>
-          <div className="minor-comparison-block-room">Room {b.room}</div>
-          <div className="minor-comparison-block-teacher">{b.teacher}</div>
+          <div className="minor-comparison-block-time"><span className="minor-comparison-field-label">Day and time</span><strong>{b.day} · {b.time}</strong></div>
+          <div className="minor-comparison-block-detail"><span>Room</span><strong>{b.room || "Not assigned"}</strong></div>
+          <div className="minor-comparison-block-detail"><span>Instructor</span><strong>{b.teacher || "Not assigned"}</strong></div>
         </div>
       ))}
     </button>
@@ -285,10 +289,11 @@ export default function MinorSchedulesPanel() {
     try {
       const res = await API.post("/engine/minor/generate-all/", { school_year: schoolYear, semester, year_level: yearLevel }, { timeout: 600000 });
       setResult(res.data);
+      notifyToast(res.data.blocked ? "Minor schedules could not be generated. Review the issues shown." : "Minor schedules generated.", res.data.blocked ? "warning" : "success");
     } catch (e) {
       const d = e.response?.data;
       if (e.response?.status === 422 && d) setResult({ blocked: true, ...d });
-      else setError(d?.detail || "Could not generate the minor schedules.");
+      else { const message = d?.detail || "Could not generate the minor schedules."; setError(message); notifyToast(message, "error"); }
     }
     await load();
     setBusy(false);

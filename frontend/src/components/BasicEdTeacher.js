@@ -26,13 +26,13 @@ function BasicEdTeacher() {
   const times = [...new Set(entries.map((e) => hhmm(e.start_time)))].sort();
   const byKey = {};
   entries.forEach((e) => { byKey[`${e.day}|${hhmm(e.start_time)}`] = e; });
-  const handleLogout = () => { logout(); window.location.href = "/login"; };
+  const handleLogout = () => { logout(); window.location.href = "/login?signedOut=1"; };
   const nav = [{ group: "Plan" }, { key: "schedule", label: "My Schedule", icon: "" }, { group: "People" }, { key: "profile", label: "My Profile", icon: "" }];
   return (
     <div className="app-shell">
       <Sidebar brandLabel="U-FAST" workspaceLabel={`${user.school_level} Faculty`} items={nav} activeKey={tab} onSelect={setTab} userName={user.username} userRole={`${user.school_level} Teacher`} onSignOut={handleLogout} />
       <div className="app-main">
-        <TopBar crumb={tab === "schedule" ? "My Schedule" : "My Profile"} userName={user.username} />
+        <TopBar crumb={tab === "schedule" ? "My Schedule" : "My Profile"} userName={user.username} navItems={nav} onNavigate={setTab} />
         <PageHeader eyebrow={`${user.school_level} Faculty`} title={tab === "schedule" ? "My Schedule" : "My Profile"} subtitle={tab === "schedule" ? "Your classes, rooms and sections once the principal publishes the schedule." : "Your teaching profile."} />
         <div className="app-page-body motion-page-content" key={tab}>
           {error && <Notice tone="error">{error}</Notice>}

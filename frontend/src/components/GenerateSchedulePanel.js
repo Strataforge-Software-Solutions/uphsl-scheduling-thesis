@@ -2,6 +2,7 @@ import CustomSelect from "./CustomSelect";
 import React, { useState, useEffect } from "react";
 import { reportLoadError } from "../services/loadError";
 import API from "../services/api";
+import { notifyToast } from "../services/toast";
 import { WorkloadWarningList } from "./WorkloadPanel";
 import { ConflictList } from "./ConflictChecker";
 import ScheduleProblemsModal from "./ScheduleProblemsModal";
@@ -227,6 +228,7 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
         program_id: programId, year_level: yearLevel, semester, merge_minors: mergeMinors, room_choices, time_windows, keep_edited: keepEdited, only_missing: onlyMissing === true, teacher_choices,
       }, { timeout: 180000 });   // generation can take a while over a remote database
       setResult(res.data);
+      notifyToast("Schedule generation finished.", uniqueClasses(res.data.conflicts).length ? "warning" : "success");
       const d = res.data, items = [];
       // Classes that could not be placed were SKIPPED (nothing was forced): one plain pop-up with the reasons, OK only.
       // Nothing opens by itself to fix them; real clashes are shown in red under the result.
@@ -248,6 +250,7 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
         message = "Could not reach the backend. Check the network connection and confirm the backend service is available.";
       }
       setResult({ error: message });
+      notifyToast(message, "error");
       setPopup({ title: "Schedule generation failed", tone: "bad", items: [{ text: message }] });
     } finally {
       setRunning(false);

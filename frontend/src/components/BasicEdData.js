@@ -2,6 +2,7 @@ import CustomSelect from "./CustomSelect";
 import React, { useState, useEffect, useCallback } from "react";
 import { statusText } from "./BasicEdAvailability";
 import API from "../services/api";
+import { notifyToast } from "../services/toast";
 import { reportLoadError } from "../services/loadError";
 import Badge from "./Badge";
 import { AnimatedMetricValue } from "./Charts";
@@ -93,12 +94,12 @@ export function SectionsTab({ level, windows }) {
     const body = { ...form, strand: form.strand || null, adviser: form.adviser || null, home_room: form.home_room || null, grade_level: Number(form.grade_level), student_count: Number(form.student_count) };
     try {
       if (form.id) await be.patch(level, `sections/${form.id}/`, body); else await be.post(level, "sections/", body);
-      setEdit(null); sections.load();
-    } catch (e) { setErr(errText(e)); } finally { setSaving(false); }
+      setEdit(null); notifyToast(form.id ? "Section updated." : "Section added."); sections.load();
+    } catch (e) { const message = errText(e); setErr(message); notifyToast(message, "error"); } finally { setSaving(false); }
   };
   const remove = async (s) => {
     if (!(await confirmDialog({ title: "Remove section?", message: `Remove section ${s.name}? Its schedule periods are removed too.`, confirmLabel: "Remove section" }))) return;
-    try { await be.del(level, `sections/${s.id}/`); sections.load(); } catch (e) { alert(errText(e)); }
+    try { await be.del(level, `sections/${s.id}/`); notifyToast("Section removed."); sections.load(); } catch (e) { notifyToast(errText(e), "error"); }
   };
   return (
     <div style={cardStyle}>
@@ -140,12 +141,12 @@ export function RoomsTab({ level, config }) {
   const save = async (form) => {
     setSaving(true); setErr("");
     const body = { ...form, building: config.building, floor: Number(form.floor), capacity: Number(form.capacity) };
-    try { if (form.id) await be.patch(level, `rooms/${form.id}/`, body); else await be.post(level, "rooms/", body); setEdit(null); rooms.load(); }
-    catch (e) { setErr(errText(e)); } finally { setSaving(false); }
+  try { if (form.id) await be.patch(level, `rooms/${form.id}/`, body); else await be.post(level, "rooms/", body); setEdit(null); notifyToast(form.id ? "Room updated." : "Room added."); rooms.load(); }
+    catch (e) { const message = errText(e); setErr(message); notifyToast(message, "error"); } finally { setSaving(false); }
   };
   const remove = async (r) => {
     if (!(await confirmDialog({ title: "Delete room?", message: `Delete room ${r.name}?`, confirmLabel: "Delete room" }))) return;
-    try { await be.del(level, `rooms/${r.id}/`); rooms.load(); } catch (e) { alert(errText(e)); }
+    try { await be.del(level, `rooms/${r.id}/`); notifyToast("Room deleted."); rooms.load(); } catch (e) { notifyToast(errText(e), "error"); }
   };
   return (
     <div style={cardStyle}>
@@ -193,8 +194,8 @@ export function FacultyTab({ level }) {
     const body = { first_name: f.first_name, last_name: f.last_name, employee_id: f.employee_id, department: f.department || "", strand: f.strand || null,
       specializations: f.specializations || "", qualifications: f.qualifications || "", max_weekly_hours: Number(f.max_weekly_hours || 30),
       preferred_start: f.preferred_start || null, preferred_end: f.preferred_end || null, is_active: !!f.is_active, account_active: !!f.is_active };
-    try { if (f.id) await be.patch(level, `faculty/${f.id}/`, body); else await be.post(level, "faculty/", body); setEdit(null); faculty.load(); }
-    catch (e) { setErr(errText(e)); } finally { setSaving(false); }
+    try { if (f.id) await be.patch(level, `faculty/${f.id}/`, body); else await be.post(level, "faculty/", body); setEdit(null); notifyToast(f.id ? "Faculty record updated." : "Faculty account added."); faculty.load(); }
+    catch (e) { const message = errText(e); setErr(message); notifyToast(message, "error"); } finally { setSaving(false); }
   };
   const shown = faculty.rows.filter((f) => !q || `${f.full_name} ${f.employee_id} ${f.department} ${f.specializations}`.toLowerCase().includes(q.toLowerCase()));
   const pageCount = Math.max(1, Math.ceil(shown.length / pageSize));
@@ -293,12 +294,12 @@ export function CurriculumTab({ level, windows, periodLabel, structure }) {
     const body = { ...f, strand: f.strand || null, grade_level: Number(f.grade_level), grading_period: Number(f.grading_period), sessions_per_week: Number(f.sessions_per_week),
       total_hours: f.total_hours === "" || f.total_hours == null ? null : Number(f.total_hours) };
     delete body.strand_code; delete body.source_title;
-    try { if (f.id) await be.patch(level, `curriculum/${f.id}/`, body); else await be.post(level, "curriculum/", body); setEdit(null); curr.load(); }
-    catch (e) { setErr(errText(e)); } finally { setSaving(false); }
+    try { if (f.id) await be.patch(level, `curriculum/${f.id}/`, body); else await be.post(level, "curriculum/", body); setEdit(null); notifyToast(f.id ? "Subject updated." : "Subject added."); curr.load(); }
+    catch (e) { const message = errText(e); setErr(message); notifyToast(message, "error"); } finally { setSaving(false); }
   };
   const retire = async (s) => {
     if (!(await confirmDialog({ title: "Retire subject?", message: `Retire ${s.code}? Schedules already made keep it; new schedules won't use it.`, confirmLabel: "Retire subject" }))) return;
-    try { await be.del(level, `curriculum/${s.id}/`); curr.load(); } catch (e) { alert(errText(e)); }
+    try { await be.del(level, `curriculum/${s.id}/`); notifyToast("Subject retired."); curr.load(); } catch (e) { notifyToast(errText(e), "error"); }
   };
   const validate = async () => {
     try { const r = await be.get(level, "curriculum-tools/validate/", { period: period || 1, grade: grade || undefined }); setIssues(r.data); }
@@ -307,8 +308,8 @@ export function CurriculumTab({ level, windows, periodLabel, structure }) {
   const doImport = async (file) => {
     if (!file) return;
     const fd = new FormData(); fd.append("file", file); fd.append("level", level);
-    try { const r = await API.post("/basic-ed/curriculum-tools/import/", fd, { params: { level } }); setImportMsg({ tone: "ok", text: `Imported ${r.data.imported} new, updated ${r.data.updated}. Imported lines start as unverified.` }); curr.load(); sources.load(); }
-    catch (e) { const d = e.response?.data; setImportMsg({ tone: "error", text: d?.errors ? "Nothing was imported. " + d.errors.slice(0, 6).map((x) => `Row ${x.row}: ${x.message}`).join(" · ") : errText(e) }); }
+    try { const r = await API.post("/basic-ed/curriculum-tools/import/", fd, { params: { level } }); const message = `Imported ${r.data.imported} new, updated ${r.data.updated}. Imported lines start as unverified.`; setImportMsg({ tone: "ok", text: message }); notifyToast(message); curr.load(); sources.load(); }
+    catch (e) { const d = e.response?.data; const message = d?.errors ? "Nothing was imported. " + d.errors.slice(0, 6).map((x) => `Row ${x.row}: ${x.message}`).join(" · ") : errText(e); setImportMsg({ tone: "error", text: message }); notifyToast(message, "error"); }
   };
   const downloadTemplate = async () => {
     const r = await API.get("/basic-ed/curriculum-tools/template/", { params: { level }, responseType: "blob" });

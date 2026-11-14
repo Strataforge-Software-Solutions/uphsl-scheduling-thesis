@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import API from "../services/api";
+import { notifyToast } from "../services/toast";
 import Badge from "./Badge";
 import TeacherPicker from "./TeacherPicker";
 
@@ -72,7 +73,7 @@ function ClassBlock({ teacher, cls, onDone }) {
       setSugg(list); setPick(list[0] ? list[0].faculty_id : null);
       // the server's own reason (for a major: "No available faculty in your department ..." with the reason for each teacher)
       setReason(list.length ? "" : (r.data.reason_none || "No qualified faculty member is available, free and under their weekly limit for this class."));
-    } catch (e) { setMsg({ ok: false, text: e.response?.data?.detail || "Could not look up replacements." }); }
+    } catch (e) { const message = e.response?.data?.detail || "Could not look up replacements."; setMsg({ ok: false, text: message }); notifyToast(message, "error"); }
     setLoading(false);
   };
 
@@ -81,11 +82,13 @@ function ClassBlock({ teacher, cls, onDone }) {
     try {
       const r = await API.post("/engine/workload/overload-assign/", { schedule_ids: cls.schedule_ids, teacher: pick });
       setMsg({ ok: true, data: r.data });
+      notifyToast(r.data.detail || "Faculty assignment updated.");
       notifyWorkloadChanged();
       onDone && onDone(r.data);
     } catch (e) {
       const d = e.response?.data || {};
       setMsg({ ok: false, text: d.detail || "Could not assign.", conflicts: d.conflicts });
+      notifyToast(d.detail || "Could not assign.", "error");
     }
     setBusy(false);
   };

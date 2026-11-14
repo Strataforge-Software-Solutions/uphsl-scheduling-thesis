@@ -1,6 +1,7 @@
 import CustomSelect from "./CustomSelect";
 import React, { useCallback, useEffect, useState } from "react";
 import API from "../services/api";
+import { notifyToast } from "../services/toast";
 import ScheduleProblemsModal from "./ScheduleProblemsModal";
 import { SimplifiedGuide } from "./HowToUse";
 
@@ -83,7 +84,7 @@ export default function ConflictChecker() {
       setReport(res.data);
       return res.data;
     } catch (e) {
-      setError(e.response?.data?.detail || "Could not run the conflict check.");
+      const message = e.response?.data?.detail || "Could not run the conflict check."; setError(message); notifyToast(message, "error");
       return null;
     } finally { setBusy(false); }
   }, [semester]);
@@ -95,15 +96,16 @@ export default function ConflictChecker() {
     try {
       const res = await API.post("/engine/conflicts/demo/", { action });
       setNote(action === "add" ? `Added ${res.data.created.length} sample conflicts (teacher, room, students).` : `Removed ${res.data.removed} sample class period(s).`);
+      notifyToast(action === "add" ? "Sample conflicts added." : "Sample conflict classes removed.");
     } catch (e) {
-      setError(e.response?.data?.detail || "Could not do that.");
+      const message = e.response?.data?.detail || "Could not do that."; setError(message); notifyToast(message, "error");
     }
     await run();
   };
 
   // after a confirmed change: check the whole schedule again, and keep showing only the conflicts that are still there
   const afterFix = async (d) => {
-    if (d && d.summary) setNote(d.summary);
+    if (d && d.summary) { setNote(d.summary); notifyToast(d.summary); }
     if (!d || d.clash == null) return;
     const fresh = await run();
     if (!fresh) return;

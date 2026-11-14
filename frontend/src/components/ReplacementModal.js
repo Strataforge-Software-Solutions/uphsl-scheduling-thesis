@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import API from "../services/api";
+import { notifyToast } from "../services/toast";
 
 /* Dean / Registrar: a teacher is leaving or unavailable. For each of their classes, show qualified
    replacements ranked by degree / specialization / qualifications, with availability and workload,
@@ -56,11 +57,12 @@ export default function ReplacementModal({ faculty, onClose, onChanged }) {
     setBusyKey(key); setError(""); setOverload(null);
     try {
       await API.post("/engine/replacements/assign/", { schedule_ids: cls.schedule_ids, teacher: cand.faculty_id, override_workload: override });
+      notifyToast("Replacement teacher assigned.");
       await load(true); onChanged?.();
     } catch (e) {
       const d = e.response?.data;
       if (e.response?.status === 409 && d?.workload_overload) setOverload({ cls, cand, d });
-      else setError(d?.detail || "Could not reassign the class.");
+      else { const message = d?.detail || "Could not reassign the class."; setError(message); notifyToast(message, "error"); }
     } finally { setBusyKey(""); }
   };
 

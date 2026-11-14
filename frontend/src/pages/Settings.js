@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import API, { changePassword, markPasswordChanged, refreshCurrentUser } from "../services/api";
 import { usePreferences, DEFAULT_PREFS, initialsOf } from "../services/preferences";
+import { notifyToast } from "../services/toast";
 import { formatDate } from "../utils/formatDateTime";
 import { APP_INFO, SUPPORT } from "../config/appInfo";
 import { HELP_STEPS } from "../components/howto";
@@ -125,8 +126,11 @@ function usePrefSection(keys) {
       const d = await save(values);
       setForm(pick(d.preferences, keys));
       setMsg({ ok: true, text: okText });
+      notifyToast(okText);
     } catch (e) {
-      setMsg({ ok: false, text: errorText(e, "Could not save. Check your connection and try again.") });
+      const message = errorText(e, "Could not save. Check your connection and try again.");
+      setMsg({ ok: false, text: message });
+      notifyToast(message, "error");
     }
     setBusy("");
   };
@@ -170,7 +174,8 @@ function ProfileSection({ headingRef }) {
       setForm(pick(d.profile, fields));
       refreshCurrentUser().catch(() => {});          // the name shown in the dashboards
       setMsg({ ok: true, text: "Profile saved." });
-    } catch (e) { setMsg({ ok: false, text: errorText(e, "Could not save your profile.") }); }
+      notifyToast("Profile saved.");
+    } catch (e) { const message = errorText(e, "Could not save your profile."); setMsg({ ok: false, text: message }); notifyToast(message, "error"); }
     setBusy("");
   };
 
@@ -190,13 +195,14 @@ function ProfileSection({ headingRef }) {
       await uploadPicture(chosen.file);
       URL.revokeObjectURL(chosen.url); setChosen(null);
       setPicMsg({ ok: true, text: "Picture saved." });
-    } catch (e) { setPicMsg({ ok: false, text: errorText(e, "Could not upload the picture.") }); }
+      notifyToast("Profile picture saved.");
+    } catch (e) { const message = errorText(e, "Could not upload the picture."); setPicMsg({ ok: false, text: message }); notifyToast(message, "error"); }
     setBusy("");
   };
   const remove = async () => {
     setBusy("pic"); setPicMsg(null);
-    try { await removePicture(); setPicMsg({ ok: true, text: "Picture removed." }); }
-    catch (e) { setPicMsg({ ok: false, text: errorText(e, "Could not remove the picture.") }); }
+    try { await removePicture(); setPicMsg({ ok: true, text: "Picture removed." }); notifyToast("Profile picture removed."); }
+    catch (e) { const message = errorText(e, "Could not remove the picture."); setPicMsg({ ok: false, text: message }); notifyToast(message, "error"); }
     setBusy("");
   };
 
@@ -467,11 +473,14 @@ function ChangePasswordSection({ headingRef }) {
       setNewPassword("");
       setConfirmPassword("");
       setMsg({ ok: true, text: "Your password has been changed." });
+      notifyToast("Your password has been changed.");
     } catch (e) {
       const data = e?.response?.data;
       const details = [data?.old_password, data?.new_password, data?.confirm_password]
         .flatMap((value) => Array.isArray(value) ? value : value ? [value] : []);
-      setMsg({ ok: false, text: details.join(" ") || errorText(e, "Could not change your password. Check your connection and try again.") });
+      const message = details.join(" ") || errorText(e, "Could not change your password. Check your connection and try again.");
+      setMsg({ ok: false, text: message });
+      notifyToast(message, "error");
     }
     setBusy(false);
   };

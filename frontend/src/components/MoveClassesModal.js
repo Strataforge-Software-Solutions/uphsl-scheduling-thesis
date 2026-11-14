@@ -2,6 +2,7 @@ import CustomSelect from "./CustomSelect";
 import CustomTimePicker from "./CustomTimePicker";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import API from "../services/api";
+import { notifyToast } from "../services/toast";
 import { formatTime } from "../utils/formatDateTime";
 
 /* Dean: change the day and time of one or more classes, ONE CLASS AT A TIME.
@@ -85,9 +86,11 @@ export default function MoveClassesModal({ groups, describe, onClose, onDone }) 
     setBusy(true); setError("");
     try {
       const r = await API.post("/engine/reschedule/", { items: itemsOf(planned.map((g) => g.key)) });
+      notifyToast("Schedule changes saved.");
       onDone(r.data);
     } catch (e) {
-      setError(e.response?.status === 409 ? "Something changed while you were editing; a time is no longer free. Check the marked classes." : (e.response?.data?.detail || "Could not save the schedule."));
+      const message = e.response?.status === 409 ? "Something changed while you were editing; a time is no longer free. Check the marked classes." : (e.response?.data?.detail || "Could not save the schedule.");
+      setError(message); notifyToast(message, "error");
     } finally { setBusy(false); }
   };
 

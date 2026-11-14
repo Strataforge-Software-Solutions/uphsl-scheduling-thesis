@@ -1,6 +1,7 @@
 import CustomSelect from "./CustomSelect";
 import React, { useState } from "react";
 import API from "../services/api";
+import { notifyToast } from "../services/toast";
 
 /* Account creation tools (single account + CSV import). Account management belongs to the IT Admin,
    so these live here and are used by the IT Admin dashboard only. */
@@ -47,14 +48,16 @@ export function AddStaffModal({ onClose, onCreated }) {
       const res = await API.post("/accounts/bulk-create/", { users: [row] });
       if (res.data.created.length > 0) {
         setResult({ ok: true, text: `Account created: ${res.data.created[0]} (School ID ${String(res.data.created[0]).replace(/^UPHM-/, "")}; default password = School ID; must be changed on first login).` });
+        notifyToast("Account created successfully.");
         onCreated?.();
         setForm({ firstName: "", lastName: "", schoolId: "", roleIndex: "2", department: "", specializations: "" });
       } else {
         const err = res.data.errors[0]?.errors;
         setResult({ ok: false, text: err ? JSON.stringify(err) : "Could not create the account." });
+        notifyToast(err ? JSON.stringify(err) : "Could not create the account.", "error");
       }
     } catch (err) {
-      setResult({ ok: false, text: err.response?.data?.detail || "Request failed." });
+      const message = err.response?.data?.detail || "Request failed."; setResult({ ok: false, text: message }); notifyToast(message, "error");
     } finally {
       setSubmitting(false);
     }
@@ -171,6 +174,7 @@ export function BulkCreateAccounts({ onCreated }) {
       const users = parseRows(csvText);
       const res = await API.post("/accounts/bulk-create/", { users });
       setFeedback(res.data);
+      if (res.data.created?.length) notifyToast(`${res.data.created.length} account${res.data.created.length === 1 ? "" : "s"} created.`);
       if (res.data.created?.length) onCreated?.();
     } catch (err) {
       setFeedback({ created: [], errors: [{ row: {}, errors: err.response?.data || "Request failed." }] });

@@ -1,5 +1,6 @@
 import CustomSelect from "./CustomSelect";
 import React, { useCallback, useEffect, useState } from "react";
+import { notifyToast } from "../services/toast";
 import TeacherPicker from "./TeacherPicker";
 import AssignAnywayDialog, { OverrideBadge } from "./AssignAnywayDialog";
 import { be, errText, cardStyle, Notice } from "./basicEdUi";
@@ -35,14 +36,15 @@ export default function TeachingAssignmentsPanel({ level }) {
       if (row.pin) await be.patch(level, `assignments/${row.pin.id}/`, { faculty: Number(facultyId), ...extra });
       else await be.post(level, "assignments/", { faculty: Number(facultyId), section: Number(sectionId), subject: row.subject_id, ...extra });
       setMsg({ ok: true, text: `${row.code}: teacher pinned.` });
+      notifyToast(`${row.code}: teacher pinned.`);
       load();
-    } catch (e) { setMsg({ ok: false, text: errText(e, "Could not save the teacher.") }); }
+    } catch (e) { const message = errText(e, "Could not save the teacher."); setMsg({ ok: false, text: message }); notifyToast(message, "error"); }
     setBusy("");
   };
   const unpin = async (row) => {
     setBusy(String(row.subject_id)); setMsg(null);
-    try { await be.del(level, `assignments/${row.pin.id}/`); setMsg({ ok: true, text: `${row.code}: pin removed. Generate will choose the teacher.` }); load(); }
-    catch (e) { setMsg({ ok: false, text: errText(e, "Could not remove the pin.") }); }
+    try { await be.del(level, `assignments/${row.pin.id}/`); const message = `${row.code}: pin removed. Generate will choose the teacher.`; setMsg({ ok: true, text: message }); notifyToast(message); load(); }
+    catch (e) { const message = errText(e, "Could not remove the pin."); setMsg({ ok: false, text: message }); notifyToast(message, "error"); }
     setBusy("");
   };
 

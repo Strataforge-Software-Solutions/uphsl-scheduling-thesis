@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { displayName, login, logout } from "../services/api";
+import { login, logout } from "../services/api";
 import "./LockScreen.css";
 
 export default function LockScreen({ user, onUnlock, onSignOut }) {
@@ -9,7 +9,6 @@ export default function LockScreen({ user, onUnlock, onSignOut }) {
   const [submitting, setSubmitting] = useState(false);
   const [now, setNow] = useState(Date.now());
   const navigate = useNavigate();
-  const name = displayName(user) || user?.username || "Your account";
   const sessionStartedAt = Number(sessionStorage.getItem("app_session_started_at")) || now;
   const lockStartedAt = Number(sessionStorage.getItem("app_lock_started_at")) || now;
 

@@ -3,6 +3,7 @@ import CustomDatePicker from "./CustomDatePicker";
 import CustomTimePicker from "./CustomTimePicker";
 import React, { useState, useEffect } from "react";
 import API from "../services/api";
+import { notifyToast } from "../services/toast";
 import Badge from "./Badge";
 import { HistoricalHint } from "./Charts";
 import RoomSelect from "./RoomSelect";
@@ -137,9 +138,9 @@ function ExamSchedulePanel({ role, programId }) {
       window.open(url, "_blank");
       setTimeout(() => window.URL.revokeObjectURL(url), 60000);
     } catch (err) {
-      alert(isRegistrar
+      notifyToast(isRegistrar
         ? "Could not make the PDF -- there may be no Gen Ed exams for this exam period yet."
-        : "Could not make the PDF -- there may be no program-subject exams for this exam period yet.");
+        : "Could not make the PDF -- there may be no program-subject exams for this exam period yet.", "error");
     } finally {
       setDownloading(false);
     }
@@ -155,10 +156,12 @@ function ExamSchedulePanel({ role, programId }) {
         exam_start_date: genForm.exam_start_date, exam_end_date: genForm.exam_end_date,
       }, { timeout: 180000 });
       setGenResult(res.data);
+      notifyToast("Exam schedule generated.");
       setConflictDialog(isRegistrar && (res.data.pending || []).length > 0);
       load();
     } catch (err) {
-      setGenResult({ error: err.response?.data?.detail || "Generation failed — please try again." });
+      const message = err.response?.data?.detail || "Generation failed — please try again.";
+      setGenResult({ error: message }); notifyToast(message, "error");
     } finally {
       setGenerating(false);
     }
@@ -177,18 +180,20 @@ function ExamSchedulePanel({ role, programId }) {
         day: weekdayOf(editing.exam_date), start_time: editing.start_time, end_time: editing.end_time });
       await API.patch(`/exams/${editing.id}/`, { exam_date: editing.exam_date, timeslot: slot.data.id });
       setEditing(null);
+      notifyToast("Exam updated.");
       load();
     } catch (err) {
       const d = err.response?.data;
-      setEditError(d?.timeslot ? [].concat(d.timeslot).join(" ") : (d?.detail || (d ? JSON.stringify(d) : "Could not save.")));
+      const message = d?.timeslot ? [].concat(d.timeslot).join(" ") : (d?.detail || (d ? JSON.stringify(d) : "Could not save."));
+      setEditError(message); notifyToast(message, "error");
     } finally {
       setSaving(false);
     }
   };
   const removeExam = async (e) => {
     if (!(await confirmDialog({ title: "Remove exam?", message: `Remove the ${e.subject_code} exam on ${e.exam_date || "this date"}?`, confirmLabel: "Remove exam" }))) return;
-    try { await API.delete(`/exams/${e.id}/`); load(); }
-    catch (err) { alert(err.response?.data?.detail || "Could not remove that exam."); }
+    try { await API.delete(`/exams/${e.id}/`); notifyToast("Exam removed."); load(); }
+    catch (err) { notifyToast(err.response?.data?.detail || "Could not remove that exam.", "error"); }
   };
 
   const addExam = async () => {
@@ -204,10 +209,12 @@ function ExamSchedulePanel({ role, programId }) {
         timeslot: slotRes.data.id, exam_period: form.exam_period, exam_date: form.exam_date,
       });
       setForm({ ...form, subject: "", section: "", proctor: "", room: "", exam_date: "" });
+      notifyToast("Exam added.");
       load();
     } catch (err) {
       const d = err.response?.data;
-      setError(d?.timeslot ? [].concat(d.timeslot).join(" ") : (d?.detail || JSON.stringify(d)));
+      const message = d?.timeslot ? [].concat(d.timeslot).join(" ") : (d?.detail || JSON.stringify(d));
+      setError(message); notifyToast(message, "error");
     }
   };
 

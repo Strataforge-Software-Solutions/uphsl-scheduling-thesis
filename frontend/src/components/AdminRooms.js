@@ -1,6 +1,7 @@
 import CustomSelect from "./CustomSelect";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import API from "../services/api";
+import { notifyToast } from "../services/toast";
 import { roomMatches } from "./RoomSelect";
 import { useConfirmDialog } from "./ConfirmDialog";
 
@@ -26,8 +27,8 @@ export default function AdminRooms() {
   const shown = useMemo(() => (data?.rooms || []).filter((r) => roomMatches(r, q) && (!type || r.room_type === type)), [data, q, type]);
   const remove = async (r) => {
     if (!(await confirmDialog({ title: "Delete room?", message: `Delete room ${r.name}? This cannot be undone.`, confirmLabel: "Delete room" }))) return;
-    try { await API.delete(`/rooms/admin/rooms/${r.id}/`); setNote(`Room ${r.name} deleted.`); load(); }
-    catch (e) { setNote(e.response?.data?.detail || "Could not delete the room."); }
+    try { await API.delete(`/rooms/admin/rooms/${r.id}/`); setNote(`Room ${r.name} deleted.`); notifyToast(`Room ${r.name} deleted.`); load(); }
+    catch (e) { const message = e.response?.data?.detail || "Could not delete the room."; setNote(message); notifyToast(message, "error"); }
   };
   if (error && !data) return <p style={{ color: "#b91c1c" }}>{error}</p>;
   if (!data) return <p style={{ color: "#6b7280" }}>Loading…</p>;
@@ -91,8 +92,9 @@ function RoomForm({ room, data, onClose, onSaved }) {
     setBusy(true); setErr("");
     try {
       if (editing) await API.patch(`/rooms/admin/rooms/${room.id}/`, f); else await API.post("/rooms/admin/rooms/", f);
+      notifyToast(editing ? "Room saved." : "Room added.");
       onSaved(editing ? "Room saved." : "Room added.");
-    } catch (e) { setErr(e.response?.data?.detail || "Could not save the room."); setBusy(false); }
+    } catch (e) { const message = e.response?.data?.detail || "Could not save the room."; setErr(message); notifyToast(message, "error"); setBusy(false); }
   };
   const w = { ...box, width: "100%", marginTop: 4 };
   return (

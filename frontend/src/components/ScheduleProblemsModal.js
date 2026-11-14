@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import API, { getCurrentUser } from "../services/api";
+import { notifyToast } from "../services/toast";
 import { formatTime } from "../utils/formatDateTime";
 
 /* One pop-up for everything the generator could not settle: classes that were not placed and clashes with existing classes.
@@ -92,7 +93,7 @@ export default function ScheduleProblemsModal({ clashes, unplaced, yearLevel, pi
       const r = await API.post("/engine/slot-options/", request);
       setData(r.data);
     } catch (e) {
-      setError(e.response?.data?.detail || "Could not look up free times.");
+      const message = e.response?.data?.detail || "Could not look up free times."; setError(message); notifyToast(message, "error");
       setExtra(e.response?.data || null);
       if (e.response?.data?.already_placed) { done(); }
     } finally { setBusy(""); }
@@ -109,11 +110,12 @@ export default function ScheduleProblemsModal({ clashes, unplaced, yearLevel, pi
         : { ...target.request, key: choice };
       const r = await API.post("/engine/slot-options/apply/", body);
       setNote(r.data.summary);
+      notifyToast(r.data.summary || "Schedule placement saved.");
       target.done();
       if (onFixed) onFixed(r.data);
       setTarget(null); setData(null);
     } catch (e) {
-      setError(e.response?.data?.detail || "Could not apply that time.");
+      const message = e.response?.data?.detail || "Could not apply that time."; setError(message); notifyToast(message, "error");
       if (e.response?.data?.refresh) {
         setChoice(""); setSessionChoices(["", ""]);
         try {
@@ -147,7 +149,7 @@ export default function ScheduleProblemsModal({ clashes, unplaced, yearLevel, pi
       setSplitData((await API.post("/engine/slot-options/", { ...target.request, split_session: true })).data);
       setSplitMode(true);
     } catch (e) {
-      setError(e.response?.data?.detail || "Could not look up 1.5-hour sessions.");
+      const message = e.response?.data?.detail || "Could not look up 1.5-hour sessions."; setError(message); notifyToast(message, "error");
     } finally { setBusy(""); }
   };
   const renderSessionChoices = (index, list) => (

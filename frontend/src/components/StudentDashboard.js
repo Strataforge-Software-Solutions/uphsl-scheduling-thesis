@@ -25,7 +25,7 @@ function StudentDashboard({ studentId }) {
 
   const handleLogout = () => {
     logout();
-    window.location.href = "/login";
+    window.location.href = "/login?signedOut=1";
   };
 
   return (
@@ -42,7 +42,7 @@ function StudentDashboard({ studentId }) {
       />
 
       <div className="app-main">
-        <TopBar crumb="My Timetable" userName={user?.username} />
+        <TopBar crumb="My Timetable" userName={user?.username} navItems={NAV_ITEMS} onNavigate={() => {}} />
         <PageHeader
           eyebrow="Student Portal"
           title="My Timetable"

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import API from "../services/api";
+import { notifyToast } from "../services/toast";
 import { formatDateTime } from "../utils/formatDateTime";
 
 /* Select / Approve / Publish / Back to draft / Remove (with Undo) / History for the Schedules tab.
@@ -109,8 +110,10 @@ export function useScheduleActions(reload) {
     try {
       const r = await API.post("/engine/schedules/approve_bulk/", { ids, to_status: to });
       setResult({ ...r.data, to });
+      const action = { approved: "approved", published: "published", draft: "moved back to draft" }[to] || "updated";
+      notifyToast(`${r.data.updated ?? ids.length} schedule${(r.data.updated ?? ids.length) === 1 ? "" : "s"} ${action}.`);
     } catch (e) {
-      setResult({ to, error: e.response?.data?.detail || "Could not change the status." });
+      const message = e.response?.data?.detail || "Could not change the status."; setResult({ to, error: message }); notifyToast(message, "error");
     } finally { setBusy(""); reload(); }
   };
   const askRemove = async (ids) => {
@@ -118,7 +121,7 @@ export function useScheduleActions(reload) {
     try {
       const r = await API.post("/engine/schedules/remove_preview/", { ids });
       setRemoval({ plan: r.data, confirmShared: false });
-    } catch (e) { setError(e.response?.data?.detail || "Could not prepare the removal."); }
+    } catch (e) { const message = e.response?.data?.detail || "Could not prepare the removal."; setError(message); notifyToast(message, "error"); }
     finally { setBusy(""); }
   };
   const doRemove = async () => {
@@ -127,10 +130,11 @@ export function useScheduleActions(reload) {
     try {
       const r = await API.post("/engine/schedules/remove_bulk/", { ids, confirm_shared: removal.confirmShared });
       setRemoval(null);
+      notifyToast(`Removed ${r.data.removed} schedule period${r.data.removed === 1 ? "" : "s"}.`);
       setUndo({ token: r.data.undo_token, until: Date.now() + r.data.undo_minutes * 60000,
         text: `Removed ${r.data.removed} period${r.data.removed === 1 ? "" : "s"} (${r.data.classes.map((c) => c.code).join(", ")}).` });
     } catch (e) {
-      setRemoval((x) => ({ ...x, error: e.response?.data?.detail || "Could not remove." }));
+      const message = e.response?.data?.detail || "Could not remove."; setRemoval((x) => ({ ...x, error: message })); notifyToast(message, "error");
     } finally { setBusy(""); reload(); }
   };
   const doUndo = async () => {
@@ -138,8 +142,9 @@ export function useScheduleActions(reload) {
     try {
       const r = await API.post("/engine/schedules/undo_remove/", { token: undo.token });
       setUndo({ ...undo, done: `Restored ${r.data.restored} period${r.data.restored === 1 ? "" : "s"}.`, until: Date.now() + 4000, token: null });
+      notifyToast(`Restored ${r.data.restored} schedule period${r.data.restored === 1 ? "" : "s"}.`);
     } catch (e) {
-      setUndo({ ...undo, done: e.response?.data?.detail || "Could not undo.", until: Date.now() + 8000, token: null });
+      const message = e.response?.data?.detail || "Could not undo."; setUndo({ ...undo, done: message, until: Date.now() + 8000, token: null }); notifyToast(message, "error");
     } finally { setBusy(""); reload(); }
   };
   const showHistory = async (ids, label) => {

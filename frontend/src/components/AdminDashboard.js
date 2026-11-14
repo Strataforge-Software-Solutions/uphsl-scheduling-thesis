@@ -1,5 +1,6 @@
 import CustomSelect from "./CustomSelect";
 import React, { useState } from "react";
+import { notifyToast } from "../services/toast";
 import { useMainScrollReset } from "../services/useMainScrollReset";
 import API, { logout, getCurrentUser } from "../services/api";
 import Sidebar from "./Sidebar";
@@ -129,8 +130,8 @@ export function Accounts({ level } = {}) {
 
   const act = async (key, fn) => {
     setBusy(key); setToast(null);
-    try { const res = await fn(); setToast({ ok: true, text: res.data.detail }); reload(); }
-    catch (e) { setToast({ ok: false, text: e.response?.data?.detail || "Request failed." }); }
+    try { const res = await fn(); const message = res.data.detail || "Action completed."; setToast({ ok: true, text: message }); notifyToast(message); reload(); }
+    catch (e) { const message = e.response?.data?.detail || "Request failed."; setToast({ ok: false, text: message }); notifyToast(message, "error"); }
     finally { setBusy(""); }
   };
   const editDepts = (r) => {
@@ -223,9 +224,9 @@ function DataTools() {
     setBusy(true); setMsg(null);
     try {
       const res = await API.post("/accounts/admin/clear-generated/", { ...f, apply });
-      if (apply) { setMsg({ ok: true, text: `Deleted ${res.data.count} row(s).` }); setPreview(null); }
+      if (apply) { const message = `Deleted ${res.data.count} row(s).`; setMsg({ ok: true, text: message }); notifyToast(message); setPreview(null); }
       else setPreview(res.data);
-    } catch (e) { setMsg({ ok: false, text: e.response?.data?.detail || "Request failed." }); }
+    } catch (e) { const message = e.response?.data?.detail || "Request failed."; setMsg({ ok: false, text: message }); notifyToast(message, "error"); }
     finally { setBusy(false); }
   };
   return (
@@ -303,13 +304,13 @@ function AdminDashboard() {
   useMainScrollReset(tab);
   const user = getCurrentUser();
   const h = HEADERS[tab];
-  const handleLogout = () => { logout(); window.location.href = "/login"; };
+  const handleLogout = () => { logout(); window.location.href = "/login?signedOut=1"; };
   return (
     <div className="app-shell">
       <Sidebar brandLabel="U-FAST" workspaceLabel="IT Admin" items={NAV} activeKey={tab} onSelect={setTab}
         userName={user?.username || "Admin"} userRole="IT administrator" onSignOut={handleLogout} />
       <div className="app-main">
-        <TopBar crumb={h.title} userName={user?.username} />
+        <TopBar crumb={h.title} userName={user?.username} navItems={NAV} onNavigate={setTab} />
         <PageHeader eyebrow="IT ADMIN WORKSPACE" title={h.title} subtitle={h.subtitle} />
         <div className="app-page-body motion-page-content" key={tab}>
           {tab === "overview" && <><HowToUse role="admin" tab="overview" /><Overview /><AdminHealthCard /><AccountHygieneCard /></>}

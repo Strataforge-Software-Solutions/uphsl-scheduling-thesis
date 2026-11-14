@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import API from "../services/api";
+import { notifyToast } from "../services/toast";
 
 /* Classes the generator could not place, with a Resolve button per class and "Resolve all".
    Resolve re-arranges the few classes that are in the way (another room, teacher or time) with every scheduling rule kept,
@@ -25,9 +26,11 @@ export default function UnplacedResolve({ items, semester, schoolYear, onDone, t
       const next = { ...done };
       (res.data.results || []).forEach((r) => { next[`${r.section_id}-${r.subject_id}`] = r; });
       setDone(next);
+      notifyToast("Schedule placement suggestions applied.");
       if (onDone) onDone(res.data);
     } catch (e) {
-      setError(e.response?.data?.detail || "Could not place the class. Please try again.");
+      const message = e.response?.data?.detail || "Could not place the class. Please try again.";
+      setError(message); notifyToast(message, "error");
     } finally { setBusy(""); }
   };
 

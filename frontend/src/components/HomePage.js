@@ -5,11 +5,39 @@ import pendingTasksImage from "../assets/pending-tasks-illustration.png";
 import schedulingStatusImage from "../assets/scheduling-status-illustration.png";
 import recentNotificationsImage from "../assets/recent-notifications-illustration.png";
 import { AnimatedMetricValue } from "./Charts";
+import { notificationTarget, jumpTo } from "../services/jump";
 
 /* Homepage shown first on the Dean, Registrar and SHS / JHS Principal dashboards.
    Props: role ("dean" | "registrar" | "principal"), name, scope (e.g. college or school level), nav (sidebar items),
    onNavigate(tabKey), stats [{label, value, accent}], tasks [{text, tab, tone}], status [text], extra (optional node). */
 const ROLE = { dean: "Dean", registrar: "Registrar", principal: "Principal" };
+const NOTIFICATION_TYPE = { schedule_update: "Schedule", conflict_alert: "Conflict", exam_assignment: "Exam", substitute_assignment: "Coverage" };
+
+function parseMoveNotice(message = "") {
+  const match = message.match(/^(.+?) asks to move (.+?) from (.+?) to (.+?)\. See Schedules > Gen Ed move requests\.?$/i);
+  return match ? { requester: match[1], subject: match[2], currentTime: match[3], requestedTime: match[4] } : null;
+}
+
+function timeAgo(iso) {
+  if (!iso) return "";
+  const minutes = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+function taskActionLabel(task) {
+  const text = task.text.toLowerCase();
+  if (text.includes("draft")) return "Review drafts";
+  if (text.includes("conflict")) return "Review conflicts";
+  if (text.includes("overload")) return "View suggestions";
+  if (text.includes("unverified")) return "Review curriculum";
+  if (text.includes("not generated") || text.includes("no timetable")) return "Generate schedule";
+  if (text.includes("approval") || text.includes("timetable")) return "Review schedules";
+  return "Open";
+}
 
 function StatIcon({ label }) {
   const name = label.toLowerCase();
@@ -116,15 +144,21 @@ export default function HomePage({ role, name, scope, nav = [], onNavigate, stat
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))", gap: 16 }}>
+      <div className="home-insight-grid">
         <div className="home-insight-card home-pending-card">
-          <h3 className="home-insight-title"><InsightHeadingIcon type="pending" />Pending tasks</h3>
-          {tasks.length === 0 ? <p className="home-insight-body">No pending tasks.</p> : (
-            <ul className="home-task-list" style={{ paddingLeft: 0, listStyle: "none", fontSize: 13 }}>
+          <h3 className="home-insight-title">
+            <InsightHeadingIcon type="pending" />Pending tasks
+            <span className={`home-insight-state${tasks.length ? " needs-action" : " all-clear"}`}>{tasks.length ? "Needs attention" : "All clear"}</span>
+          </h3>
+          {tasks.length === 0 ? (
+            <div className="home-insight-empty"><span aria-hidden="true">✓</span><div><strong>You’re all caught up</strong><small>No tasks need your attention right now.</small></div></div>
+          ) : (
+            <ul className="home-task-list">
               {tasks.map((t, i) => (
-                <li key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid #f3f4f6" }}>
-                  <span className={t.tone === "bad" ? "is-bad" : ""}>{t.text}</span>
-                  {t.tab && <button className="home-task-open" type="button" onClick={() => onNavigate(t.tab)}>Open</button>}
+                <li key={i} className={`home-task-row${t.tone === "bad" ? " is-urgent" : ""}`}>
+                  <span className="home-task-indicator" aria-hidden="true">{t.tone === "bad" ? "!" : "•"}</span>
+                  <span className={`home-task-text${t.tone === "bad" ? " is-bad" : ""}`}>{t.text}</span>
+                  {t.tab && <button className="home-task-open" type="button" onClick={() => onNavigate(t.tab)}>{taskActionLabel(t)}<span aria-hidden="true">→</span></button>}
                 </li>
               ))}
             </ul>
@@ -133,17 +167,45 @@ export default function HomePage({ role, name, scope, nav = [], onNavigate, stat
         </div>
         <div className="home-insight-card home-status-card">
           <h3 className="home-insight-title"><InsightHeadingIcon type="status" />Scheduling status</h3>
-          {status.length === 0 ? <p className="home-insight-body">Loading…</p> : (
-            <ul className="home-insight-list">{status.map((s, i) => <li key={i}>{s}</li>)}</ul>
+          {!status ? <p className="home-insight-body">Loading schedule status…</p> : status.error ? (
+            <p className="home-insight-body">{status.error}</p>
+          ) : (
+            <>
+              <div className="home-status-summary">{status.summary}</div>
+              <div className="home-status-metrics">
+                {status.metrics.map((metric) => (
+                  <div className={`home-status-metric tone-${metric.tone || "neutral"}`} key={metric.label}>
+                    <span>{metric.label}</span><strong>{metric.value}</strong>
+                  </div>
+                ))}
+              </div>
+              <ul className="home-status-checks">
+                {status.checks.map((check) => (
+                  <li className={`tone-${check.tone || "ok"}`} key={check.label}><span aria-hidden="true">{check.tone === "warn" || check.tone === "bad" ? "!" : "✓"}</span>{check.label}</li>
+                ))}
+              </ul>
+            </>
           )}
           <img className="home-insight-illustration" src={schedulingStatusImage} alt="" aria-hidden="true" />
         </div>
         <div className="home-insight-card home-notifications-card">
           <h3 className="home-insight-title"><InsightHeadingIcon type="notifications" />Recent notifications</h3>
-          {notes === null ? <p className="home-insight-body">Loading…</p>
+          {notes === null ? <p className="home-insight-body">Checking for recent updates…</p>
             : notes.length === 0 ? <p className="home-insight-body">No notifications.</p> : (
               <ul className="home-insight-list home-notification-list">
-                {notes.slice(0, 3).map((n) => <li className={n.is_read ? "is-read" : "is-unread"} key={n.id} title={n.message || n.title}>{n.message || n.title}</li>)}
+                {notes.slice(0, 3).map((n) => {
+                  const move = parseMoveNotice(n.message || "");
+                  const target = notificationTarget(n);
+                  return (
+                    <li className={n.is_read ? "is-read" : "is-unread"} key={n.id}>
+                      <button type="button" className="home-notification-item" disabled={!target} onClick={() => { onNavigate("schedules"); jumpTo(target); }} title={target ? "Review this move request" : undefined}>
+                        <span className="home-notification-topline"><small>{move ? "Move request" : NOTIFICATION_TYPE[n.notif_type] || "Update"}</small><time>{timeAgo(n.created_at)}</time></span>
+                        <strong className="home-notification-title">{move?.subject || n.message || n.title}</strong>
+                        {move && <span className="home-notification-detail">{move.requester} · {move.currentTime} <span aria-hidden="true">→</span> {move.requestedTime}</span>}
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>)}
           <img className="home-insight-illustration" src={recentNotificationsImage} alt="" aria-hidden="true" />
         </div>

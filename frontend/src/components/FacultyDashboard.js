@@ -10,6 +10,7 @@ import { getCachedCurriculumData, loadCurriculumData, updateCurriculumCache } fr
 import { prefetchDashboardPage } from "../services/pagePrefetch";
 import API, { getCurrentUser, getSchedules, logout, displayName } from "../services/api";
 import { formatSchedule } from "../utils/formatSchedule";
+import { notifyToast } from "../services/toast";
 import { LecLabTag, buildLecLabIndex } from "../utils/lecLab";
 import { changedScheduleIds, mergeSchedulesByDay, sortByDayTime } from "../utils/mergeSchedules";
 import Sidebar from "./Sidebar";
@@ -107,7 +108,7 @@ function FacultyDashboard({ name, department, departments = [department], facult
 
   const handleLogout = () => {
     logout();
-    window.location.href = "/login";
+    window.location.href = "/login?signedOut=1";
   };
 
   const eyebrow = facultyType === "dean" ? `${department} · Dean View` : facultyType === "part_time" ? `Part-time Faculty · ${department}` : `Full-time Faculty · ${department}`;
@@ -134,7 +135,7 @@ function FacultyDashboard({ name, department, departments = [department], facult
       />
 
       <div className="app-main">
-        <TopBar crumb={crumb} userName={facultyType === "dean" ? displayName(user) : user?.username} />
+        <TopBar crumb={crumb} userName={facultyType === "dean" ? displayName(user) : user?.username} navItems={navItems} onNavigate={setActiveTab} />
         <PageHeader eyebrow={eyebrow.toUpperCase()} title={title} subtitle={subtitle} />
 
         <div className="app-page-body motion-page-content" key={activeTab}>
@@ -265,10 +266,11 @@ function AvailabilityRow({ row, onChanged, onDeleted }) {
       const res = await API.patch(`/faculty/availability/${row.id}/`, {
         day, preference, start_time: start, end_time: end,
       });
+      notifyToast("Availability block saved.");
       setEditing(false);
       onChanged?.(res.data);
     } catch (err) {
-      setError(err.response?.data?.detail || "Could not save this change.");
+      const message = err.response?.data?.detail || "Could not save this change."; setError(message); notifyToast(message, "error");
     } finally {
       setSaving(false);
     }
@@ -278,9 +280,10 @@ function AvailabilityRow({ row, onChanged, onDeleted }) {
     if (!(await confirmDialog({ title: "Remove availability?", message: "Remove this availability block? The Dean and Registrar will no longer see it.", confirmLabel: "Remove availability" }))) return;
     try {
       await API.delete(`/faculty/availability/${row.id}/`);
+      notifyToast("Availability block removed.");
       onDeleted?.(row.id);
     } catch (err) {
-      alert(err.response?.data?.detail || "Could not remove this block.");
+      notifyToast(err.response?.data?.detail || "Could not remove this block.", "error");
     }
   };
 
@@ -843,11 +846,12 @@ function DeanCoverageTab({ department, departments = [department] }) {
       const res = await API.post("/faculty/absences/", {
         faculty: form.faculty, date: form.date, reason: form.reason, status: "approved",
       });
+      notifyToast("Absence report submitted.");
       setForm({ faculty: "", date: "", reason: "" });
       load();
       await getSuggestions(res.data.id);
     } catch (err) {
-      setError("Could not record absence -- " + (err.response?.data?.detail || "check the fields above."));
+      const message = "Could not record absence -- " + (err.response?.data?.detail || "check the fields above."); setError(message); notifyToast(message, "error");
       setBusy(false);
     }
   };
@@ -862,7 +866,7 @@ function DeanCoverageTab({ department, departments = [department] }) {
       const res = await API.post("/engine/suggest-substitute/", { absence_id: absenceId });
       setSuggestions(res.data.suggestions);
     } catch (err) {
-      setError("Could not generate coverage suggestions.");
+      setError("Could not generate coverage suggestions."); notifyToast("Could not generate coverage suggestions.", "error");
       setSuggestions(null);
     } finally {
       setLoadingSuggestionsId(null);
@@ -875,8 +879,9 @@ function DeanCoverageTab({ department, departments = [department] }) {
     setBusy(true);
     try {
       await API.post("/engine/apply-coverage/", { coverage_suggestion_id: coverageSuggestionId });
+      notifyToast("Coverage applied.");
     } catch (err) {
-      setError(err.response?.data?.detail || "Could not apply this coverage.");
+      const message = err.response?.data?.detail || "Could not apply this coverage."; setError(message); notifyToast(message, "error");
     }
     await getSuggestions(activeAbsenceId);
     load();
@@ -1648,10 +1653,11 @@ function AvailabilityForm({ onSaved }) {
     setSaving(true);
     try {
       await API.post("/faculty/availability/", { day, preference, start_time: start, end_time: end });
+      notifyToast("Availability block added.");
       setStart(""); setEnd("");
       onSaved?.();
     } catch (err) {
-      setError(err.response?.data?.detail || "Could not save this availability block.");
+      const message = err.response?.data?.detail || "Could not save this availability block."; setError(message); notifyToast(message, "error");
     } finally {
       setSaving(false);
     }

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import API from "../services/api";
+import { notifyToast } from "../services/toast";
 import ScheduleProblemsModal from "./ScheduleProblemsModal";
 import CustomSelect from "./CustomSelect";
 import usePopupPresence from "./usePopupPresence";
@@ -88,11 +89,11 @@ export default function PrintPreviewButton({ params, disabled = false, onFixed, 
         try { setClash(JSON.parse(await err.response.data.text())); }
         catch (_e) { setClash({ total: 1, conflicts: [], detail: "This table has conflicts. Fix them in the Conflicts tab before printing." }); }
       } else if (st === 404) {
-        alert("No classes match these report filters.");
+        notifyToast("No classes match these report filters.", "warning");
       } else {
         let msg = "";
         try { msg = JSON.parse(await err.response.data.text()).detail || ""; } catch (_e) { /* not JSON */ }
-        alert(msg || "Could not create the report. Check that the backend is running, then try again.");
+        notifyToast(msg || "Could not create the report. Check that the backend is running, then try again.", "error");
       }
     } finally {
       setBusy(false);

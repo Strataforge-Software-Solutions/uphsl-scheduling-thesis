@@ -10,6 +10,7 @@ import { useMainScrollReset } from "../services/useMainScrollReset";
 import { getCachedCurriculumData, loadCurriculumData, updateCurriculumCache } from "../services/curriculumCache";
 import { prefetchDashboardPage } from "../services/pagePrefetch";
 import API, { getCurrentUser, getSchedules, logout } from "../services/api";
+import { notifyToast } from "../services/toast";
 import { formatSchedule } from "../utils/formatSchedule";
 import { LecLabTag, buildLecLabIndex } from "../utils/lecLab";
 import { changedScheduleIds, mergeSchedulesByDay, sortByDayTime } from "../utils/mergeSchedules";
@@ -102,7 +103,7 @@ function RegistrarDashboard() {
 
   const handleLogout = () => {
     logout();
-    window.location.href = "/login";
+    window.location.href = "/login?signedOut=1";
   };
 
   const header = TAB_HEADERS[activeTab];
@@ -122,7 +123,7 @@ function RegistrarDashboard() {
       />
 
       <div className="app-main">
-        <TopBar crumb={header.title} userName={user?.username} />
+        <TopBar crumb={header.title} userName={user?.username} navItems={NAV_ITEMS} onNavigate={setActiveTab} />
         <PageHeader
           eyebrow={header.eyebrow}
           title={header.title}
@@ -343,6 +344,7 @@ function SchedulesTab() {
       }
       setEditClash(null); setEditPicked({});
       setEditingGroup(null);
+      notifyToast("Schedule changes saved.");
       load();
     } catch (err) {
       const data = err.response?.data;
@@ -359,6 +361,7 @@ function SchedulesTab() {
       }
       const msg = data?.detail || (data?.non_field_errors ? "That teacher, room, or time is already booked -- pick a different one." : "");
       setSaveError(msg || `${JSON.stringify(data || "Could not save.")}`);
+      notifyToast(msg || "Could not save the schedule changes.", "error");
       load();
     } finally {
       setSavingEdit(false);
@@ -1117,11 +1120,13 @@ function CoverageTab() {
       const res = await API.post("/faculty/absences/", {
         faculty: form.faculty, date: form.date, reason: form.reason, status: "approved",
       });
+      notifyToast("Faculty absence recorded.");
       setForm({ faculty: "", date: "", reason: "" });
       load();
       await getSuggestions(res.data.id);
     } catch (err) {
-      setError("Could not record absence -- " + (err.response?.data?.detail || "check the fields above."));
+      const message = "Could not record absence -- " + (err.response?.data?.detail || "check the fields above.");
+      setError(message); notifyToast(message, "error");
       setBusy(false);
     }
   };
@@ -1135,8 +1140,9 @@ function CoverageTab() {
     try {
       const res = await API.post("/engine/suggest-substitute/", { absence_id: absenceId });
       setSuggestions(res.data.suggestions);
+      if (!(res.data.suggestions || []).length) notifyToast("No suitable coverage suggestions were found.", "warning");
     } catch (err) {
-      setError("Could not generate coverage suggestions.");
+      setError("Could not generate coverage suggestions."); notifyToast("Could not generate coverage suggestions.", "error");
       setSuggestions(null);
     } finally {
       setLoadingSuggestionsId(null);
@@ -1149,8 +1155,10 @@ function CoverageTab() {
     setBusy(true);
     try {
       await API.post("/engine/apply-coverage/", { coverage_suggestion_id: coverageSuggestionId });
+      notifyToast("Coverage applied.");
     } catch (err) {
-      setError(err.response?.data?.detail || "Could not apply this coverage.");
+      const message = err.response?.data?.detail || "Could not apply this coverage.";
+      setError(message); notifyToast(message, "error");
     }
     await getSuggestions(activeAbsenceId);
     load();
@@ -1158,6 +1166,7 @@ function CoverageTab() {
 
   const updateTolerance = async (minutes) => {
     await API.patch("/engine/scheduling-config/", { student_overlap_tolerance_minutes: minutes });
+    notifyToast("Exam grace window saved.");
     load();
   };
 
