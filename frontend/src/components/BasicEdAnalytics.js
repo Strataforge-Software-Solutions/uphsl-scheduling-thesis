@@ -1,7 +1,7 @@
 import CustomSelect from "./CustomSelect";
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Badge from "./Badge";
-import { StatTile, HBarChart } from "./Charts";
+import { CollapsibleChartPanel, StatTile, HBarChart } from "./Charts";
 import { be, errText, inputStyle, cardStyle, btn, btnPrimary, Notice } from "./basicEdUi";
 import { periodOptionsAll } from "../utils/terms";
 import { formatTime } from "../utils/formatDateTime";
@@ -30,7 +30,7 @@ function LoadBar({ value, max, status }) {
   return (
     <div style={{ minWidth: 110 }}>
       <div style={{ background: "#e8eef7", borderRadius: 4, height: 8, overflow: "hidden" }}>
-        <div style={{ width: `${pct}%`, height: "100%", background: (STATUS[status] || STATUS.balanced).color }} />
+        <div className="motion-meter-fill" style={{ width: `${pct}%`, height: "100%", background: (STATUS[status] || STATUS.balanced).color }} />
       </div>
       <div style={{ fontSize: 12, color: "#6b7280", marginTop: 3 }}>{fmt(value)} / {max} h</div>
     </div>
@@ -118,7 +118,7 @@ export default function BasicEdAnalytics({ level, overview }) {
   };
 
   if (error) return <Notice tone="error">{error} <button style={btn} onClick={() => load(false)}>Retry</button></Notice>;
-  if (!data) return <p style={{ color: "#6b7280" }}>Loading analytics…</p>;
+  if (!data) return <div className="analytics-chart-grid" aria-label="Loading analytics">{[0, 1].map((i) => <div className="analytics-chart-card" key={i}><HBarChart loading /></div>)}</div>;
   const s = data.summary;
   const chart = rows.slice(0, 40).map((t) => ({ label: t.full_name, value: t.hours }));
   const lbl = (n) => (periodOptions.find(([k]) => k === n) || [n, `Period ${n}`])[1];
@@ -155,19 +155,16 @@ export default function BasicEdAnalytics({ level, overview }) {
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 20, marginBottom: 20 }}>
-            <div style={{ ...cardStyle, marginBottom: 0 }}>
-              <h4 style={{ marginTop: 0, color: "#003366" }}>Teacher Workload</h4>
+            <CollapsibleChartPanel title="Teacher Workload" style={{ ...cardStyle, marginBottom: 0 }}>
               <div style={{ maxHeight: 360, overflowY: "auto" }}><HBarChart data={chart} unit=" hrs" emptyText="No teachers match." /></div>
-            </div>
+            </CollapsibleChartPanel>
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-              <div style={{ ...cardStyle, marginBottom: 0 }}>
-                <h4 style={{ marginTop: 0, color: "#003366" }}>Class Hours by Day</h4>
+              <CollapsibleChartPanel title="Class Hours by Day" style={{ ...cardStyle, marginBottom: 0 }}>
                 <HBarChart data={Object.entries(data.hours_by_day).map(([d, n]) => ({ label: DAY_NAME[d] || d, value: n }))} unit=" hrs" emptyText="No classes yet." />
-              </div>
-              <div style={{ ...cardStyle, marginBottom: 0 }}>
-                <h4 style={{ marginTop: 0, color: "#003366" }}>Load Status</h4>
+              </CollapsibleChartPanel>
+              <CollapsibleChartPanel title="Load Status" style={{ ...cardStyle, marginBottom: 0 }}>
                 <HBarChart color="#003366" unit=" teachers" data={Object.entries(STATUS).map(([k, v]) => ({ label: v.label, value: s[k] }))} />
-              </div>
+              </CollapsibleChartPanel>
             </div>
           </div>
 

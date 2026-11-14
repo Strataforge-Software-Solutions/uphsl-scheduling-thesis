@@ -32,12 +32,12 @@ function useClassData() {
 
 function classHome(role, [d, failed], nav, onNavigate, name, scope, labelMap, hideIntro = false) {
   const stats = [
-    { label: "Class periods", value: d ? d.class_periods : null },
-    { label: "Draft", value: d ? d.draft : null },
-    { label: "Approved", value: d ? d.approved : null },
-    { label: "Published", value: d ? d.published : null, accent: "#15803d" },
-    { label: "Conflicts", value: d ? d.conflicts : null, accent: d && d.conflicts ? "#b91c1c" : "#15803d" },
-    { label: "Overloaded teachers", value: d ? d.overloaded : null, accent: d && d.overloaded ? "#b91c1c" : "#15803d" },
+    { label: "Class periods", value: d ? d.class_periods : null, tab: "schedules" },
+    { label: "Draft", value: d ? d.draft : null, tab: "schedules" },
+    { label: "Approved", value: d ? d.approved : null, tab: "schedules" },
+    { label: "Published", value: d ? d.published : null, accent: "#15803d", tab: "schedules" },
+    { label: "Conflicts", value: d ? d.conflicts : null, accent: d && d.conflicts ? "#b91c1c" : "#15803d", tab: "conflicts" },
+    { label: "Overloaded teachers", value: d ? d.overloaded : null, accent: d && d.overloaded ? "#b91c1c" : "#15803d", tab: "analytics" },
   ];
   const tasks = [];
   if (d) {
@@ -65,11 +65,11 @@ export function RegistrarHome({ nav, onNavigate, name }) {
 export function PrincipalHome({ level, levelName, overview, nav, onNavigate, name, extra }) {
   const c = overview.counts;
   const stats = [
-    { label: "Sections", value: c.sections }, { label: "Teachers", value: c.faculty }, { label: "Rooms", value: c.rooms },
-    { label: "Timetables", value: overview.runs.length },
-    { label: "Periods placed", value: overview.runs.reduce((n, r) => n + (r.entry_count || 0), 0) },
-    { label: "Awaiting approval", value: c.pending_review, accent: c.pending_review ? "#b45309" : "#15803d" },
-    { label: "Open conflicts", value: c.open_conflicts, accent: c.open_conflicts ? "#b91c1c" : "#15803d" },
+    { label: "Sections", value: c.sections, tab: "sections" }, { label: "Teachers", value: c.faculty, tab: "faculty" }, { label: "Rooms", value: c.rooms },
+    { label: "Timetables", value: overview.runs.length, tab: "schedules" },
+    { label: "Periods placed", value: overview.runs.reduce((n, r) => n + (r.entry_count || 0), 0), tab: "schedules" },
+    { label: "Awaiting approval", value: c.pending_review, accent: c.pending_review ? "#b45309" : "#15803d", tab: "schedules" },
+    { label: "Open conflicts", value: c.open_conflicts, accent: c.open_conflicts ? "#b91c1c" : "#15803d", tab: "schedules" },
   ];
   const tasks = [];
   if (!overview.runs.length) tasks.push({ text: "No timetable generated yet.", tab: "schedules", tone: "warn" });

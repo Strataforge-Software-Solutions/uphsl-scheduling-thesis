@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import API from "../services/api";
 import Badge from "./Badge";
 import RoomSelect from "./RoomSelect";
-import { StatTile, HBarChart } from "./Charts";
+import { CollapsibleChartPanel, StatTile, HBarChart } from "./Charts";
 import { periodInfo } from "../utils/terms";
 import { be, errText, inputStyle, cardStyle, btn, btnPrimary, Field, Modal, Notice, DAYS, hhmm, ampm, STATUS_LABEL, STATUS_TONE } from "./basicEdUi";
 import { formatDateTime } from "../utils/formatDateTime";
@@ -337,10 +337,14 @@ function RunDetail({ level, id, overview, periodLabel, onBack, user }) {
         <div style={cardStyle}>
           {!report ? "Loading report…" : (
             <>
-              <h4 style={{ marginTop: 0 }}>Teacher workload (hours per week)</h4>
-              <HBarChart data={report.teachers.map((t) => ({ label: `${t.name} (${t.load_pct}%)`, value: t.hours }))} unit=" h" />
-              <h4>Room utilization</h4>
-              <HBarChart data={report.rooms.map((r) => ({ label: `${r.name} (${r.utilization_pct}%)`, value: r.hours }))} unit=" h" color="#0f766e" />
+              <div className="basic-ed-report-chart-grid">
+                <CollapsibleChartPanel title="Teacher workload (hours per week)">
+                  <HBarChart data={report.teachers.map((t) => ({ label: `${t.name} (${t.load_pct}%)`, value: t.hours }))} unit=" h" />
+                </CollapsibleChartPanel>
+                <CollapsibleChartPanel title="Room utilization">
+                  <HBarChart data={report.rooms.map((r) => ({ label: `${r.name} (${r.utilization_pct}%)`, value: r.hours }))} unit=" h" color="#0f766e" />
+                </CollapsibleChartPanel>
+              </div>
               <h4>Calendar (class days after holidays, examination blocks and suspensions)</h4>
               {report.calendar.length === 0 ? <p style={{ color: "#6b7280", fontSize: "13px" }}>Link this {periodLabel.toLowerCase()} to its terms in the Calendar tab.</p> : (
                 <table style={{ fontSize: "13px", borderCollapse: "collapse" }}><tbody>

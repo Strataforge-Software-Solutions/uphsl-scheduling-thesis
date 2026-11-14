@@ -51,20 +51,30 @@ export function WorkloadWarningList({ warnings, title = "Faculty workload warnin
 export function ReplacementList({ suggestions }) {
   if (!suggestions) return null;
   if (suggestions.length === 0) {
-    return <div style={{ fontSize: "13px", color: "#6b7280", marginTop: "4px" }}>No replacement faculty matches this subject, is free at that time, and has hours left.</div>;
+    return <div className="workload-replacements-empty">No replacement faculty is available for this class within their weekly limit.</div>;
   }
   return (
-    <div style={{ fontSize: "13px", color: "#374151", marginTop: "4px" }}>
-      Suggested replacements (matching specialization, free at that time, hours to spare):
-      <ul style={{ margin: "4px 0 0 18px", padding: 0 }}>
+    <section className="workload-replacements" aria-label="Suggested replacement faculty">
+      <div className="workload-replacements-heading">
+        <strong>Suggested replacements</strong>
+        <span>Qualified, available at this time, and within weekly limit</span>
+      </div>
+      <ul className="workload-replacements-list">
         {suggestions.map((s) => (
-          <li key={s.faculty_id}>
-            {s.full_name} ({TYPE_LABEL[s.faculty_type] || s.faculty_type}) — {fmt(s.current_hours)} / {fmt(s.max_hours)} h now,
-            {" "}{fmt(s.remaining_after)} h to spare after taking it{s.same_department ? " · same college" : ""}
+          <li className="workload-replacement-card" key={s.faculty_id}>
+            <div className="workload-replacement-person">
+              <strong>{s.full_name}</strong>
+              <span>{TYPE_LABEL[s.faculty_type] || s.faculty_type}</span>
+              {s.same_department && <span className="workload-replacement-department">Same college</span>}
+            </div>
+            <div className="workload-replacement-metrics">
+              <span><strong>{fmt(s.current_hours)} / {fmt(s.max_hours)} h</strong><small>Current load</small></span>
+              <span className="workload-replacement-spare"><strong>{fmt(s.remaining_after)} h</strong><small>Spare after class</small></span>
+            </div>
           </li>
         ))}
       </ul>
-    </div>
+    </section>
   );
 }
 
@@ -72,7 +82,7 @@ function Bar({ value, max, over }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
   return (
     <div style={{ background: "#e8eef7", borderRadius: 4, height: "8px", minWidth: "90px", overflow: "hidden" }}>
-      <div style={{ width: `${pct}%`, height: "100%", background: over ? "#c0392b" : pct >= 90 ? "#e0a72e" : "#2e7d52" }} />
+      <div className="motion-meter-fill" style={{ width: `${pct}%`, height: "100%", background: over ? "#c0392b" : pct >= 90 ? "#e0a72e" : "#2e7d52" }} />
     </div>
   );
 }

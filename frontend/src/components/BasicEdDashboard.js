@@ -22,7 +22,8 @@ import { Accounts } from "./AdminDashboard";
 import API, { onSchedulesChanged } from "../services/api";
 import { periodHeading } from "../utils/terms";
 import "./DashboardTheme.css";
-import { useLandingTab } from "../services/preferences";
+import { useDashboardTab } from "../services/preferences";
+import { useMainScrollReset } from "../services/useMainScrollReset";
 import { formatDateTime } from "../utils/formatDateTime";
 import { useConfirmDialog } from "./ConfirmDialog";
 
@@ -66,8 +67,9 @@ const LEVEL_NAME = { SHS: "Senior High School", JHS: "Junior High School" };
 
 function BasicEdDashboard({ level }) {
   const user = getCurrentUser();
-  const landing = useLandingTab(user?.role === "admin" ? NAV_ADMIN : NAV, "overview");
-  const [tab, setTab] = useState(landing);
+  const navItems = user?.role === "admin" ? NAV_ADMIN : NAV;
+  const [tab, setTab] = useDashboardTab(navItems, "overview", `${user?.role === "admin" ? "admin" : "principal"}-${level}`);
+  useMainScrollReset(tab);
   const [overview, setOverview] = useState(null);
   const [error, setError] = useState("");
   const [slow, setSlow] = useState(false);
@@ -80,7 +82,7 @@ function BasicEdDashboard({ level }) {
   const reload = useCallback(() => {
     be.get(level, "overview/").then((r) => { setOverview(r.data); setError(""); }).catch((e) => setError(errText(e, "Could not load the dashboard.")));
   }, [level]);
-  useEffect(() => { setOverview(null); setTab("overview"); }, [level]);
+  useEffect(() => { setOverview(null); }, [level]);
   // Refresh overview data only while it is visible; reopening Home and schedule changes always trigger a fresh read.
   useEffect(() => {
     if (tab !== "overview") return undefined;
@@ -118,12 +120,12 @@ function BasicEdDashboard({ level }) {
   return (
     <div className="app-shell">
       <Sidebar brandLabel="U-FAST" workspaceLabel={isAdmin ? `IT Admin · ${level}` : `${level} · ${overview?.config.building || LEVEL_NAME[level]}`}
-        items={isAdmin ? NAV_ADMIN : NAV} activeKey={tab} onSelect={setTab}
+        items={navItems} activeKey={tab} onSelect={setTab}
         userName={(isAdmin ? user?.username : displayName(user)) || "User"} userRole={isAdmin ? "IT administrator" : `${level} Principal`} onSignOut={handleLogout} />
       <div className="app-main">
         <TopBar crumb={title} userName={isAdmin ? user?.username : displayName(user)} />
         <PageHeader eyebrow={isAdmin ? `IT ADMIN WORKSPACE · ${level}` : `${LEVEL_NAME[level]} Workspace`} title={title} subtitle={subtitle} />
-        <div className="app-page-body">
+        <div className="app-page-body motion-page-content" key={level + "-" + tab}>
           {error && <Notice tone="error">{error} <button style={btn} onClick={reload}>Retry</button></Notice>}
           {!overview && !error && <p style={{ color: "#6b7280" }}>Loading…{slow && <> Still waiting for the server: slow connection or database, or the latest <code>python manage.py migrate</code> has not been run. <button style={btn} onClick={reload}>Retry</button></>}</p>}
           {overview && isAdmin && tab === "overview" && <AdminOverview level={level} overview={overview} go={setTab} />}

@@ -1,5 +1,6 @@
 import CustomSelect from "./CustomSelect";
 import React, { useState } from "react";
+import { useMainScrollReset } from "../services/useMainScrollReset";
 import API, { logout, getCurrentUser } from "../services/api";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
@@ -10,9 +11,10 @@ import { AddStaffModal, BulkCreateAccounts } from "./AccountTools";
 import { AdminHealthCard, AccountHygieneCard, AuditTrailCard } from "./InsightCards";
 import HowToUse from "./HowToUse";
 import AuditLogs from "./AuditLogs";
-import { useLandingTab } from "../services/preferences";
+import { useDashboardTab } from "../services/preferences";
 import { formatDateTime } from "../utils/formatDateTime";
 import { useConfirmDialog } from "./ConfirmDialog";
+import { AnimatedMetricValue } from "./Charts";
 
 /* IT-admin workspace: setup health + counts, account tools, and clear-generated tools.
    Shown for role "admin" (or a Django superuser with no regular U-FAST role). */
@@ -58,7 +60,7 @@ function useLoad(fn, deps) {
 function Stat({ label, value }) {
   return (
     <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "8px 12px", minWidth: "120px" }}>
-      <div style={{ fontSize: "18px", fontWeight: 600, color: "#111827", fontVariantNumeric: "tabular-nums" }}>{value}</div>
+      <div style={{ fontSize: "18px", fontWeight: 600, color: "#111827", fontVariantNumeric: "tabular-nums" }}><AnimatedMetricValue value={value} /></div>
       <div style={{ fontSize: "12px", color: "#6b7280" }}>{label}</div>
     </div>
   );
@@ -297,8 +299,8 @@ function Activity() {
 }
 
 function AdminDashboard() {
-  const landing = useLandingTab(NAV, "overview");
-  const [tab, setTab] = useState(landing);
+  const [tab, setTab] = useDashboardTab(NAV, "overview", "admin-college");
+  useMainScrollReset(tab);
   const user = getCurrentUser();
   const h = HEADERS[tab];
   const handleLogout = () => { logout(); window.location.href = "/login"; };
@@ -309,7 +311,7 @@ function AdminDashboard() {
       <div className="app-main">
         <TopBar crumb={h.title} userName={user?.username} />
         <PageHeader eyebrow="IT ADMIN WORKSPACE" title={h.title} subtitle={h.subtitle} />
-        <div className="app-page-body">
+        <div className="app-page-body motion-page-content" key={tab}>
           {tab === "overview" && <><HowToUse role="admin" tab="overview" /><Overview /><AdminHealthCard /><AccountHygieneCard /></>}
           {tab === "accounts" && <Accounts />}
           {tab === "rooms" && <AdminRooms />}

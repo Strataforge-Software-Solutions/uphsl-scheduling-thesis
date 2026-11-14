@@ -1,5 +1,6 @@
 import CustomSelect from "../components/CustomSelect";
 import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import API, { changePassword, markPasswordChanged, refreshCurrentUser } from "../services/api";
 import { usePreferences, DEFAULT_PREFS, initialsOf } from "../services/preferences";
@@ -7,6 +8,7 @@ import { formatDate } from "../utils/formatDateTime";
 import { APP_INFO, SUPPORT } from "../config/appInfo";
 import { HELP_STEPS } from "../components/howto";
 import PasswordInput from "../components/PasswordInput";
+import usePopupPresence from "../components/usePopupPresence";
 import "../components/DashboardTheme.css";
 import "./Settings.css";
 
@@ -69,11 +71,23 @@ function roleKey(user) {
   return user.role;
 }
 
-function Message({ msg }) {
-  return (
-    <div role="status" aria-live="polite" className="settings-msg-slot">
-      {msg && <p className={`settings-msg ${msg.ok ? "ok" : "err"}`}>{msg.text}</p>}
-    </div>
+function Message({ msg, offset = 0 }) {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    if (!msg) { setVisible(false); return undefined; }
+    setVisible(true);
+    const timer = window.setTimeout(() => setVisible(false), msg.ok ? 3800 : 6000);
+    return () => window.clearTimeout(timer);
+  }, [msg]);
+  const { present, closing } = usePopupPresence(visible, 180);
+  if (!msg || !present) return null;
+  return createPortal(
+    <div role={msg.ok ? "status" : "alert"} aria-live={msg.ok ? "polite" : "assertive"} aria-atomic="true"
+      className={`settings-toast ${msg.ok ? "ok" : "err"} popup-slide${closing ? " is-closing" : ""}`} style={{ "--toast-offset": `${offset * 76}px` }} aria-hidden={closing} inert={closing ? "" : undefined}>
+      <SettingsIcon name={msg.ok ? "check_square" : "alert"} />
+      <p className="settings-msg">{msg.text}</p>
+    </div>,
+    document.body,
   );
 }
 
@@ -212,7 +226,7 @@ function ProfileSection({ headingRef }) {
             )}
           </div>
           {chosen && <p className="ui-help">Preview. Press Upload picture to keep it.</p>}
-          <Message msg={picMsg} />
+          <Message msg={picMsg} offset={1} />
         </div>
       </div>
 
@@ -419,7 +433,7 @@ function NotificationsSection({ headingRef }) {
           <button type="button" className="ui-btn secondary" onClick={markAll} disabled={marking}>
             <SettingsIcon name="check_square" />{marking ? "Marking…" : "Mark all as read"}
           </button>
-          <Message msg={markMsg} />
+          <Message msg={markMsg} offset={1} />
         </div>
         <div className="settings-actions">
           <button type="button" className="ui-btn" onClick={s.onSave} disabled={s.busy || !s.dirty}>{s.busy === "save" ? "Saving…" : "Save"}</button>
@@ -580,7 +594,7 @@ export default function Settings({ user }) {
             </div>
             <button type="button" className="ui-btn secondary" onClick={() => navigate("/dashboard")}>Back to dashboard</button>
           </div>
-          {body}
+          <div className="motion-page-content" key={active}>{body}</div>
         </main>
       </div>
     </div>

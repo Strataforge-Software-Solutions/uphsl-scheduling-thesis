@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { HistoricalHint } from "./Charts";
 import RoomSelect from "./RoomSelect";
 import TeacherPicker from "./TeacherPicker";
@@ -55,6 +56,21 @@ export default function ScheduleEditModal({
   const [removeError, setRemoveError] = useState("");
   const idsKey = group ? group.ids.join(",") : "";
   useEffect(() => {
+    if (!group) return undefined;
+    const previousRootOverflow = document.documentElement.style.overflow;
+    const previousOverflow = document.body.style.overflow;
+    const previousPaddingRight = document.body.style.paddingRight;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    if (scrollbarWidth > 0) document.body.style.paddingRight = `${scrollbarWidth}px`;
+    return () => {
+      document.documentElement.style.overflow = previousRootOverflow;
+      document.body.style.overflow = previousOverflow;
+      document.body.style.paddingRight = previousPaddingRight;
+    };
+  }, [!!group]);
+  useEffect(() => {
     if (!idsKey) return undefined;
     let live = true;
     setTOpts(null);
@@ -67,20 +83,24 @@ export default function ScheduleEditModal({
   const multiPeriod = group.ids.length > 1;
   const roomRank = (r) => (r.id === roomAssignment?.preferred ? 0 : roomAssignment?.alts?.includes(r.id) ? 1 : 2);
 
-  return (
+  return createPortal((
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Edit schedule"
       style={{
         position: "fixed", inset: 0, background: "rgba(15, 23, 42, 0.45)",
         display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000,
-        padding: "16px",
+        padding: "16px", boxSizing: "border-box", overflow: "hidden",
       }}
       onClick={(e) => { if (e.target === e.currentTarget && !saving) onCancel(); }}
     >
       <div style={{
         background: "white", borderRadius: 6, width: "100%", maxWidth: "620px",
-        boxShadow: "var(--shadow-pop)", maxHeight: "90vh", overflowY: "auto",
+        boxShadow: "var(--shadow-pop)", maxHeight: "min(90vh, 900px)", minHeight: 0,
+        display: "flex", flexDirection: "column", overflow: "hidden",
       }}>
-        <div style={{ padding: "22px 26px 18px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div style={{ padding: "22px 26px 18px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", flex: "0 0 auto" }}>
           <div>
             <h2 style={{ margin: 0, fontSize: "20px", color: "#111827" }}>Edit schedule</h2>
             <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#6b7280" }}>
@@ -102,7 +122,7 @@ export default function ScheduleEditModal({
 
         <div style={{ borderTop: "1px solid #e8edf3" }} />
 
-        <div style={{ padding: "22px 26px" }}>
+        <div style={{ padding: "22px 26px", overflowY: "auto", minHeight: 0, overscrollBehavior: "contain" }}>
           {tOpts?.shared && (
             <div role="note" style={{ margin: "0 0 14px", padding: "10px 12px", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 6, fontSize: 13, color: "#1e3a8a" }}>
               <strong>Shared class:</strong> {tOpts.shared.sections.join(" + ")} · {tOpts.shared.students} students.{" "}
@@ -279,7 +299,7 @@ export default function ScheduleEditModal({
 
         <div style={{
           borderTop: "1px solid #e8edf3", padding: "16px 26px", display: "flex",
-          justifyContent: "flex-end", gap: "10px",
+          justifyContent: "flex-end", gap: "10px", flex: "0 0 auto",
         }}>
           <button
             onClick={onCancel}
@@ -310,5 +330,5 @@ export default function ScheduleEditModal({
           onConfirm={(reason) => { setEditForm({ ...editForm, teacher: String(ask.id), override_reason: reason }); setAsk(null); }} />
       )}
     </div>
-  );
+  ), document.body);
 }

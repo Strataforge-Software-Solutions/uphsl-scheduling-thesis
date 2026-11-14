@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import "./DashboardTheme.css";
+import usePopupPresence from "./usePopupPresence";
 
 function parseTime(value) {
   const match = String(value || "").match(/^(\d{1,2}):(\d{2})/);
@@ -23,6 +24,7 @@ export default function CustomTimePicker({ value = "", onChange, className = "",
   const dialogId = React.useId();
   const selected = useMemo(() => parseTime(value), [value]);
   const [open, setOpen] = useState(false);
+  const { present: menuPresent, closing: menuClosing } = usePopupPresence(open);
   const [draft, setDraft] = useState(() => selected || { hour: 8, minute: 0, period: "AM" });
 
   useEffect(() => { if (!open && selected) setDraft(selected); }, [open, selected]);
@@ -38,11 +40,11 @@ export default function CustomTimePicker({ value = "", onChange, className = "",
     };
   }, [open]);
   useEffect(() => {
-    if (open) {
+    if (open && menuPresent) {
       hourRefs.current[draft.hour - 1]?.scrollIntoView({ block: "center" });
       minuteRefs.current[draft.minute]?.scrollIntoView({ block: "center" });
     }
-  }, [open, draft.hour, draft.minute]);
+  }, [open, menuPresent, draft.hour, draft.minute]);
 
   const updatePart = (key, partValue) => {
     const next = { ...draft, [key]: partValue };
@@ -82,8 +84,8 @@ export default function CustomTimePicker({ value = "", onChange, className = "",
         <span>{displayValue}</span>
         <svg className="custom-time-chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7 5 5 5-5" /></svg>
       </button>
-      {open && (
-        <div id={dialogId} className="custom-time-menu" role="dialog" aria-label="Choose a time">
+      {menuPresent && (
+        <div id={dialogId} className={`custom-time-menu popup-slide${menuClosing ? " is-closing" : ""}`} role="dialog" aria-label="Choose a time" aria-hidden={menuClosing} inert={menuClosing ? "" : undefined}>
           <div className="custom-time-columns">
             <div className="custom-time-column" role="group" aria-label="Hour">
               <div className="custom-time-column-label">Hour</div>

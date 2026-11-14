@@ -474,27 +474,29 @@ function ExamSchedulePanel({ role, programId }) {
         </button>
         {showManual && (
           <div>
-            <CustomSelect value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })}>
-              <option value="">-- Subject --</option>
-              {ownedSubjects.map((s) => <option key={s.id} value={s.id}>{s.code} - {s.title}</option>)}
-            </CustomSelect>
-            <CustomSelect value={form.section} onChange={(e) => setForm({ ...form, section: e.target.value })}>
-              <option value="">-- Section --</option>
-              {sections.filter((s) => !programId || String(s.program) === String(programId))
-                .map((s) => <option key={s.id} value={s.id}>{s.name} · {s.year_level} · {s.semester}</option>)}
-            </CustomSelect>
-            <CustomSelect value={form.proctor} onChange={(e) => setForm({ ...form, proctor: e.target.value })}>
-              <option value="">-- Proctor --</option>
-              {facultyList.map((f) => <option key={f.id} value={f.id}>{f.full_name && f.full_name !== f.username ? `${f.full_name} (${f.username})` : f.username}</option>)}
-            </CustomSelect>
-            <RoomSelect rooms={rooms} value={form.room} onChange={(v) => setForm({ ...form, room: v })} autoLabel="-- Room --" width={170} />
-            <CustomDatePicker value={form.exam_date} onChange={(e) => setForm({ ...form, exam_date: e.target.value })} aria-label="Exam date" />
-            <CustomTimePicker value={form.start_time} onChange={(e) => setForm({ ...form, start_time: e.target.value })} aria-label="Exam start time" />
-            <CustomTimePicker value={form.end_time} onChange={(e) => setForm({ ...form, end_time: e.target.value })} aria-label="Exam end time" />
-            <CustomSelect value={form.exam_period} onChange={(e) => setForm({ ...form, exam_period: e.target.value })}>
-              {PERIODS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </CustomSelect>
-            <button onClick={addExam}>Add Exam Slot</button>
+            <div className="exam-manual-fields">
+              <CustomSelect className="exam-manual-subject" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })}>
+                <option value="">-- Subject --</option>
+                {ownedSubjects.map((s) => <option key={s.id} value={s.id}>{s.code} - {s.title}</option>)}
+              </CustomSelect>
+              <CustomSelect className="exam-manual-section" value={form.section} onChange={(e) => setForm({ ...form, section: e.target.value })}>
+                <option value="">-- Section --</option>
+                {sections.filter((s) => !programId || String(s.program) === String(programId))
+                  .map((s) => <option key={s.id} value={s.id}>{s.name} · {s.year_level} · {s.semester}</option>)}
+              </CustomSelect>
+              <CustomSelect className="exam-manual-proctor" value={form.proctor} onChange={(e) => setForm({ ...form, proctor: e.target.value })}>
+                <option value="">-- Proctor --</option>
+                {facultyList.map((f) => <option key={f.id} value={f.id}>{f.full_name && f.full_name !== f.username ? `${f.full_name} (${f.username})` : f.username}</option>)}
+              </CustomSelect>
+              <RoomSelect rooms={rooms} value={form.room} onChange={(v) => setForm({ ...form, room: v })} autoLabel="-- Room --" width={170} />
+              <CustomDatePicker className="exam-manual-date" value={form.exam_date} onChange={(e) => setForm({ ...form, exam_date: e.target.value })} aria-label="Exam date" />
+              <CustomTimePicker className="exam-manual-time" value={form.start_time} onChange={(e) => setForm({ ...form, start_time: e.target.value })} aria-label="Exam start time" />
+              <CustomTimePicker className="exam-manual-time" value={form.end_time} onChange={(e) => setForm({ ...form, end_time: e.target.value })} aria-label="Exam end time" />
+              <CustomSelect className="exam-manual-period" value={form.exam_period} onChange={(e) => setForm({ ...form, exam_period: e.target.value })}>
+                {PERIODS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </CustomSelect>
+              <button className="exam-manual-add" onClick={addExam}>Add Exam Slot</button>
+            </div>
             {form.exam_date && (
               <HistoricalHint day={weekdayOf(form.exam_date)} startTime={form.start_time} endTime={form.end_time}
                 roomName={rooms.find((r) => String(r.id) === String(form.room))?.name} />

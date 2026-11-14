@@ -49,7 +49,7 @@ function StudentDashboard({ studentId }) {
           subtitle="Your class schedule for this term."
         />
 
-        <div className="app-page-body">
+        <div className="app-page-body motion-page-content">
           {loading ? (
             <p>Loading…</p>
           ) : (

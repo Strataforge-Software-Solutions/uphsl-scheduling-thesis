@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import API from "../services/api";
 import { formatDateTime } from "../utils/formatDateTime";
 
@@ -83,8 +84,24 @@ export function useScheduleActions(reload) {
   const [hist, setHist] = useState(null);          // {label, events} | {error}
   const [error, setError] = useState("");
   const [now, setNow] = useState(Date.now());
+  const modalOpen = !!(result || removal || hist);
   useEffect(() => { if (!undo) return undefined; const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, [undo]);
   useEffect(() => { if (undo && now > undo.until) setUndo(null); }, [now, undo]);
+  useEffect(() => {
+    if (!modalOpen) return undefined;
+    const previousRootOverflow = document.documentElement.style.overflow;
+    const previousOverflow = document.body.style.overflow;
+    const previousPaddingRight = document.body.style.paddingRight;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    if (scrollbarWidth > 0) document.body.style.paddingRight = `${scrollbarWidth}px`;
+    return () => {
+      document.documentElement.style.overflow = previousRootOverflow;
+      document.body.style.overflow = previousOverflow;
+      document.body.style.paddingRight = previousPaddingRight;
+    };
+  }, [modalOpen]);
 
   const changeStatus = async (ids, to) => {
     if (!ids.length) return;
@@ -132,7 +149,7 @@ export function useScheduleActions(reload) {
   };
 
   const verb = { approved: "approved", published: "published", draft: "moved back to draft" };
-  const dialogs = (
+  const dialogs = createPortal((
     <>
       {error && <div role="alert" style={{ position: "fixed", bottom: 16, left: "50%", transform: "translateX(-50%)", zIndex: 1200, background: "#fef2f2", color: C.bad, border: "1px solid #fecaca", borderRadius: 6, padding: "8px 14px", fontSize: 13 }}>
         {error} <button onClick={() => setError("")} style={btnStyle("#ffffff", C.bad, "1px solid #fecaca")}>OK</button></div>}
@@ -212,6 +229,6 @@ export function useScheduleActions(reload) {
         </div>
       )}
     </>
-  );
+  ), document.body);
   return { busy: !!busy, changeStatus, askRemove, showHistory, dialogs };
 }

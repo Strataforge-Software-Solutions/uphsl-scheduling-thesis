@@ -32,6 +32,15 @@ function Chevron({ collapsed }) {
  */
 function Sidebar({ brandLabel, workspaceLabel, items, activeKey, onSelect, onPrefetch, userName, userRole, onSignOut }) {
   const [collapsedGroups, setCollapsedGroups] = React.useState({});
+  const [compactNav, setCompactNav] = React.useState(false);
+  React.useEffect(() => {
+    const media = typeof window.matchMedia === "function" ? window.matchMedia("(max-width: 820px)") : null;
+    if (!media) { setCompactNav(window.innerWidth <= 820); return undefined; }
+    const update = () => setCompactNav(media.matches);
+    update();
+    media.addEventListener?.("change", update);
+    return () => media.removeEventListener?.("change", update);
+  }, []);
 
   const sections = [];
   let currentSection = null;
@@ -45,6 +54,11 @@ function Sidebar({ brandLabel, workspaceLabel, items, activeKey, onSelect, onPre
       sections.push({ item });
     }
   });
+
+  const activeSection = sections.find((section) => section.items?.some((item) => item.key === activeKey))?.group;
+  React.useEffect(() => {
+    if (activeSection) setCollapsedGroups((old) => old[activeSection] ? { ...old, [activeSection]: false } : old);
+  }, [activeSection]);
 
   const toggleGroup = (group) => setCollapsedGroups((old) => ({ ...old, [group]: !old[group] }));
   const prefetch = (item) => onPrefetch?.(item.key);
@@ -83,7 +97,7 @@ function Sidebar({ brandLabel, workspaceLabel, items, activeKey, onSelect, onPre
       <ul className="app-sidebar-nav">
         {sections.map((section) => {
           if (section.item) return navItem(section.item);
-          const collapsed = Boolean(collapsedGroups[section.group]);
+          const collapsed = !compactNav && Boolean(collapsedGroups[section.group]);
           const groupId = `sidebar-${section.group.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
           const containsActive = section.items.some((item) => item.key === activeKey);
           return (
@@ -99,11 +113,13 @@ function Sidebar({ brandLabel, workspaceLabel, items, activeKey, onSelect, onPre
                 <span className="app-nav-section-name">{section.group}</span>
                 <Chevron collapsed={collapsed} />
               </button>
-              {!collapsed && (
-                <ul className="app-nav-subnav" id={groupId}>
+              <div id={groupId} className={`app-nav-subnav-panel${collapsed ? " is-collapsed" : ""}`} aria-hidden={collapsed} inert={collapsed ? "" : undefined}>
+                <div className="app-nav-subnav-inner">
+                  <ul className="app-nav-subnav">
                   {section.items.map(navItem)}
-                </ul>
-              )}
+                  </ul>
+                </div>
+              </div>
             </li>
           );
         })}

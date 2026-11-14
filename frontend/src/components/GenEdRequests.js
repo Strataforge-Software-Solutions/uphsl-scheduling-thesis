@@ -158,18 +158,19 @@ export function GenEdRequestsPanel({ role, onChanged, refreshKey = 0 }) {
   };
   const shown = open ? data.items : data.items.filter((x) => x.status === "pending");
   return (
-    <div ref={boxRef} id="gened-requests" tabIndex={-1} style={{ border: "1px solid #fde68a", background: "#fffbeb", borderRadius: 6, padding: "10px 14px", margin: "0 0 14px",
-      scrollMarginTop: 72, outline: flash ? "2px solid #003366" : "none", outlineOffset: 2 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <strong style={{ color: "#92400e", fontSize: 14 }}>
-          Gen Ed move requests {isRegistrar ? "from the Deans" : "(your college)"}: {data.pending} pending
+    <div ref={boxRef} id="gened-requests" className={`gened-requests-panel${flash ? " is-highlighted" : ""}`} tabIndex={-1}
+      style={{ scrollMarginTop: 72 }}>
+      <div className="gened-requests-heading">
+        <strong className="gened-requests-title">
+          Gen Ed move requests {isRegistrar ? "from the Deans" : "(your college)"}
+          <span className={`gened-requests-count${data.pending ? " has-pending" : " is-clear"}`}>{data.pending} pending</span>
         </strong>
-        <button style={{ ...btn, fontSize: 12 }} onClick={() => setOpen((o) => !o)}>{open ? "Show pending only" : `Show all (${data.items.length})`}</button>
+        <button className="gened-requests-toggle" onClick={() => setOpen((o) => !o)}>{open ? "Show pending only" : `Show all (${data.items.length})`}</button>
       </div>
       {msg && <div role="status" style={{ marginTop: 6, fontSize: 13, color: msg.ok ? "#166534" : "#991b1b" }}>{msg.text}</div>}
-      {shown.length === 0 && <div style={{ fontSize: 13, color: "#6b7280", marginTop: 6 }}>No pending requests.</div>}
+      {shown.length === 0 && <div className="gened-requests-empty" role="status">No pending requests.</div>}
       {shown.map((x) => (
-        <div key={x.id} style={{ background: "white", border: "1px solid #f1e3b5", borderRadius: 6, padding: "8px 10px", marginTop: 8, fontSize: 13 }}>
+        <div key={x.id} className="gened-request-item">
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "baseline" }}>
             <span style={{ background: TONE[x.status][0], color: TONE[x.status][1], borderRadius: 4, padding: "1px 8px", fontWeight: 600, fontSize: 12 }}>{x.status_label}</span>
             <b>{x.subject}</b><span style={{ color: "#4b5563" }}>{x.section}</span>

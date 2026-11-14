@@ -21,8 +21,8 @@ function Bar({ value, max, after }) {
   const pct = (v) => (max > 0 ? Math.min(100, (v / max) * 100) : 0);
   return (
     <div style={{ background: "#e8eef7", borderRadius: 4, height: 8, overflow: "hidden", position: "relative", minWidth: 120 }}>
-      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${pct(after)}%`, background: "#9db8dc" }} />
-      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${pct(value)}%`, background: "#2e7d52" }} />
+      <div className="motion-meter-fill" style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${pct(after)}%`, background: "#9db8dc" }} />
+      <div className="motion-meter-fill" style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${pct(value)}%`, background: "#2e7d52" }} />
     </div>
   );
 }

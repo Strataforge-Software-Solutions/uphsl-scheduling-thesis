@@ -3,20 +3,21 @@ import CustomDatePicker from "./CustomDatePicker";
 import HowToUse, { SimplifiedGuide } from "./HowToUse";
 import { reportLoadError } from "../services/loadError";
 import { RegistrarHome } from "./HomeWrappers";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { onJump } from "../services/jump";
-import { useLandingTab } from "../services/preferences";
+import { useDashboardTab } from "../services/preferences";
+import { useMainScrollReset } from "../services/useMainScrollReset";
 import { getCachedCurriculumData, loadCurriculumData, updateCurriculumCache } from "../services/curriculumCache";
 import { prefetchDashboardPage } from "../services/pagePrefetch";
 import API, { getCurrentUser, getSchedules, logout } from "../services/api";
 import { formatSchedule } from "../utils/formatSchedule";
 import { LecLabTag, buildLecLabIndex } from "../utils/lecLab";
-import { mergeSchedulesByDay, sortByDayTime } from "../utils/mergeSchedules";
+import { changedScheduleIds, mergeSchedulesByDay, sortByDayTime } from "../utils/mergeSchedules";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import PageHeader from "./PageHeader";
 import Badge from "./Badge";
-import { StatTile, HBarChart, RecentActivity } from "./Charts";
+import { CollapsibleChartPanel, StatTile, HBarChart, RecentActivity } from "./Charts";
 import { kindLabel } from "../utils/labels";
 import ScheduleEditModal from "./ScheduleEditModal";
 import ScheduleProblemsModal from "./ScheduleProblemsModal";
@@ -27,6 +28,7 @@ import { GenEdCoverageCard, RoomHeatmapCard, DependenciesCard, CapacityCard, Ins
 import ClashDialog from "./ClashDialog";
 import ExamSchedulePanel from "./ExamSchedulePanel";
 import GenerateSchedulePanel from "./GenerateSchedulePanel";
+import TeacherPicker from "./TeacherPicker";
 import ErrorBoundary from "./ErrorBoundary";
 import ConflictChecker from "./ConflictChecker";
 import { useConfirmDialog } from "./ConfirmDialog";
@@ -70,9 +72,9 @@ const TAB_HEADERS = {
 const STANDARD_YEARS = ["1st Year", "2nd Year", "3rd Year", "4th Year", "5th Year"];
 
 function RegistrarDashboard() {
-  const landing = useLandingTab(NAV_ITEMS, "home");
-  const [activeTab, setActiveTab] = useState(landing);
-  useEffect(() => onJump((t) => { if (t === "gened-requests") setActiveTab("schedules"); }), []);
+  const [activeTab, setActiveTab] = useDashboardTab(NAV_ITEMS, "home", "registrar");
+  useMainScrollReset(activeTab);
+  useEffect(() => onJump((t) => { if (t === "gened-requests") setActiveTab("schedules"); }), [setActiveTab]);
   const [colleges, setColleges] = useState([]);
   const [programs, setPrograms] = useState([]);
   const [college, setCollege] = useState("");
@@ -128,7 +130,7 @@ function RegistrarDashboard() {
           supportingText={activeTab === "home" ? <><strong>{user?.username || "Registrar"}</strong> · Registrar · {HOME_INTRO.registrar}</> : null}
         />
 
-        <div className="app-page-body">
+        <div className="app-page-body motion-page-content" key={activeTab}>
           {activeTab !== "home" && <HowToUse role="registrar" tab={activeTab} />}
           {activeTab === "home" && <RegistrarHome nav={NAV_ITEMS} onNavigate={setActiveTab} name={user?.username} hideIntro />}
           {["curriculum", "exams"].includes(activeTab) && (
@@ -171,6 +173,9 @@ function StatusPill({ status }) {
 
 function SchedulesTab() {
   const [schedules, setSchedules] = useState([]);
+  const [changedIds, setChangedIds] = useState(() => new Set());
+  const previousSchedules = useRef(null);
+  const changedTimer = useRef(null);
   const [rooms, setRooms] = useState([]);
   const [faculty, setFaculty] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -215,7 +220,15 @@ function SchedulesTab() {
           return;
         }
         setError("");
-        setSchedules(schedRes.value.data);
+        const nextSchedules = schedRes.value.data;
+        if (previousSchedules.current) {
+          const changed = changedScheduleIds(previousSchedules.current, nextSchedules);
+          setChangedIds(changed);
+          if (changedTimer.current) window.clearTimeout(changedTimer.current);
+          if (changed.size) changedTimer.current = window.setTimeout(() => setChangedIds(new Set()), 2800);
+        }
+        previousSchedules.current = nextSchedules;
+        setSchedules(nextSchedules);
         // Rooms/faculty only feed the Edit dialog's dropdowns -- if one of
         // them fails the table should still show.
         if (roomRes.status === "fulfilled") setRooms(roomRes.value.data);
@@ -224,7 +237,7 @@ function SchedulesTab() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); return () => { if (changedTimer.current) window.clearTimeout(changedTimer.current); }; }, []);
 
   const collegeOptions = [...new Set(schedules.map((s) => s.department).filter(Boolean))].sort();
   // A college/department (e.g. "Computer Studies") can hold several programs
@@ -270,6 +283,8 @@ function SchedulesTab() {
   const isMine = (row) => row.subject_classification === "minor";
   const draftCount = filtered.filter((s) => isMine(s) && s.status === "draft").length;
   const approvedCount = filtered.filter((s) => isMine(s) && s.status === "approved").length;
+  const activeExtraFilterCount = [programFilter, yearLevel, semester, typeFilter].filter(Boolean).length;
+  const hasAnyFilter = Boolean(search || collegeFilter || statusFilter || activeExtraFilterCount);
 
   // Select / Approve / Publish / Back to draft / Remove act on the TICKED rows only (ScheduleActions.js; the server checks every rule).
   const actions = useScheduleActions(() => { setSelected([]); load(); });
@@ -391,44 +406,50 @@ function SchedulesTab() {
       </div>
       <GenEdRequestsPanel role="registrar" onChanged={load} />
 
-      <div className="coverage-panel schedule-filter-panel" style={{
+      <div className="coverage-panel schedule-filter-panel schedule-filter-layout" style={{
         display: "flex", flexWrap: "wrap", gap: "10px", alignItems: "center",
         background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "12px 14px", marginBottom: "16px",
       }}>
         <input
-          placeholder="Search subjects, teachers, sections"
+          aria-label="Search schedules"
+          placeholder="Search by subject, teacher, or section"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          style={{ ...filterInputStyle, flex: "1 1 220px", minWidth: "200px" }}
+          style={{ ...filterInputStyle, flex: "1 1 280px", minWidth: "200px" }}
         />
-        <CustomSelect value={collegeFilter} onChange={(e) => { setCollegeFilter(e.target.value); setProgramFilter(""); }} style={filterInputStyle}>
+        <CustomSelect className="schedule-college-filter" aria-label="Filter by college" value={collegeFilter} onChange={(e) => { setCollegeFilter(e.target.value); setProgramFilter(""); }} style={filterInputStyle}>
           <option value="">All colleges</option>
           {collegeOptions.map((c) => <option key={c} value={c}>{c}</option>)}
         </CustomSelect>
-        <CustomSelect value={programFilter} onChange={(e) => setProgramFilter(e.target.value)} style={filterInputStyle}>
-          <option value="">All programs</option>
-          {programOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-        </CustomSelect>
-        <CustomSelect value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={filterInputStyle}>
+        <CustomSelect aria-label="Filter by status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={filterInputStyle}>
           <option value="">All statuses</option>
           <option value="draft">Draft</option>
           <option value="approved">Approved</option>
           <option value="published">Published</option>
         </CustomSelect>
-        <CustomSelect value={yearLevel} onChange={(e) => setYearLevel(e.target.value)} style={filterInputStyle}>
-          <option value="">All year levels</option>
-          {yearLevelOptions.map((y) => <option key={y} value={y}>{y}</option>)}
-        </CustomSelect>
-        <CustomSelect value={semester} onChange={(e) => setSemester(e.target.value)} style={filterInputStyle}>
-          <option value="">All semesters</option>
-          {semesterOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-        </CustomSelect>
-        <CustomSelect value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={filterInputStyle}>
-          <option value="">Gen Ed &amp; program subjects</option>
-          <option value="minor">Gen Ed only</option>
-          <option value="major">Program subjects only</option>
-        </CustomSelect>
-        <button onClick={resetFilters} style={{ ...filterInputStyle, color: "#111827" }}>Reset</button>
+        {hasAnyFilter && <button className="schedule-reset-filters" onClick={resetFilters}>Reset filters</button>}
+        <details className="schedule-advanced-filters">
+          <summary>More filters{activeExtraFilterCount ? ` · ${activeExtraFilterCount} active` : ""}</summary>
+          <div className="schedule-advanced-filter-fields">
+            <CustomSelect className="schedule-program-filter" aria-label="Filter by program" value={programFilter} onChange={(e) => setProgramFilter(e.target.value)} style={filterInputStyle}>
+              <option value="">All programs</option>
+              {programOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+            </CustomSelect>
+            <CustomSelect aria-label="Filter by year level" value={yearLevel} onChange={(e) => setYearLevel(e.target.value)} style={filterInputStyle}>
+              <option value="">All year levels</option>
+              {yearLevelOptions.map((y) => <option key={y} value={y}>{y}</option>)}
+            </CustomSelect>
+            <CustomSelect aria-label="Filter by semester" value={semester} onChange={(e) => setSemester(e.target.value)} style={filterInputStyle}>
+              <option value="">All semesters</option>
+              {semesterOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+            </CustomSelect>
+            <CustomSelect aria-label="Filter by subject type" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={filterInputStyle}>
+              <option value="">Gen Ed &amp; program subjects</option>
+              <option value="minor">Gen Ed only</option>
+              <option value="major">Program subjects only</option>
+            </CustomSelect>
+          </div>
+        </details>
       </div>
 
       <section className="coverage-panel schedule-table-panel"><div className="coverage-table-wrap">
@@ -444,7 +465,7 @@ function SchedulesTab() {
         </thead>
         <tbody>
           {pageGroups.map((g) => (
-            <tr key={g.key} style={selected.includes(g.key) ? { background: "#eef6ff" } : undefined}>
+            <tr key={g.key} className={g.ids.some((id) => changedIds.has(String(id))) ? "schedule-row-changed" : undefined} style={selected.includes(g.key) ? { background: "#eef6ff" } : undefined}>
               <td>{isMine(g) && <input type="checkbox" aria-label={`Select ${g.subject_code} ${g.section_name}`} checked={selected.includes(g.key)} onChange={() => toggle(g.key)} />}</td>
               <td>{g.subject_code} — {g.subject_title}<LecLabTag row={g} index={lecLabIndex} /></td>
               <td><Badge tone={g.subject_classification === "major" ? "success" : "neutral"}>{kindLabel(g.subject_classification, g.program_name)}</Badge></td>
@@ -991,7 +1012,7 @@ function AnalyticsTab() {
   }, [attempt, sem]);
 
   if (loadError) return <p style={{ color: "red" }}>{loadError} <button onClick={() => setAttempt((n) => n + 1)}>Try again</button></p>;
-  if (!data) return <p>Loading analytics…</p>;
+  if (!data) return <div className="analytics-chart-grid" aria-label="Loading analytics">{[0, 1].map((i) => <div className="analytics-chart-card" key={i}><HBarChart loading /></div>)}</div>;
 
   return (
     <div className="registrar-analytics-view">
@@ -1000,7 +1021,7 @@ function AnalyticsTab() {
       {data.semesters && data.semesters.length > 1 && (
         <p className="analytics-filter-note" style={{ fontSize: "13px", color: "#374151" }}>
           Semester:{" "}
-          <CustomSelect value={data.semester || ""} onChange={(e) => setSem(e.target.value)}>
+          <CustomSelect className="registrar-analytics-semester" value={data.semester || ""} onChange={(e) => setSem(e.target.value)}>
             {data.semesters.map((s) => <option key={s} value={s}>{s}</option>)}
           </CustomSelect>{" "}
           (1st and 2nd Sem use the same rooms and teachers, so each is shown on its own.)
@@ -1018,46 +1039,41 @@ function AnalyticsTab() {
       </div>
 
       <div className="analytics-chart-grid">
-        <div className="analytics-chart-card">
-          <h4 className="analytics-chart-title"><AnalyticsIcon type="people" />Teacher Workload</h4>
+        <CollapsibleChartPanel title={<><AnalyticsIcon type="people" />Teacher Workload</>} ariaTitle="Teacher Workload">
           <HBarChart
-            data={Object.entries(data.teacher_workload).map(([t, c]) => ({ label: t, value: c })).sort((a, b) => b.value - a.value)}
+            data={Object.entries(data.teacher_workload).map(([t, c]) => ({ label: t, name: data.teacher_names?.[t], value: c })).sort((a, b) => b.value - a.value)}
             unit=" hrs"
             emptyText="No schedule entries yet."
           />
-        </div>
-        <div className="analytics-chart-card">
-          <h4 className="analytics-chart-title"><AnalyticsIcon type="room" />Room Utilization</h4>
+        </CollapsibleChartPanel>
+        <CollapsibleChartPanel title={<><AnalyticsIcon type="room" />Room Utilization</>} ariaTitle="Room Utilization">
           <HBarChart
             data={Object.entries(data.room_utilization).map(([r, c]) => ({ label: r, value: c })).sort((a, b) => b.value - a.value)}
             color="#b8860b"
             unit=" hrs"
             emptyText="No schedule entries yet."
           />
-        </div>
+        </CollapsibleChartPanel>
       </div>
 
       <div className="analytics-chart-grid analytics-chart-grid-secondary">
-        <div className="analytics-chart-card">
-          <h4 className="analytics-chart-title"><AnalyticsIcon type="calendar" />Class Hours by Day</h4>
+        <CollapsibleChartPanel title={<><AnalyticsIcon type="calendar" />Class Hours by Day</>} ariaTitle="Class Hours by Day">
           <HBarChart
             data={Object.entries(data.class_hours_by_day || {}).map(([d, n]) => ({ label: d, value: n }))}
             unit=" hrs" emptyText="No schedule entries yet."
           />
-        </div>
-        <div className="analytics-chart-card">
-          <h4 className="analytics-chart-title"><AnalyticsIcon type="layers" />Schedule Status</h4>
+        </CollapsibleChartPanel>
+        <CollapsibleChartPanel title={<><AnalyticsIcon type="layers" />Schedule Status</>} ariaTitle="Schedule Status">
           <HBarChart
             data={Object.entries(data.schedule_status || {}).map(([k, n]) => ({ label: k.charAt(0).toUpperCase() + k.slice(1), value: n }))}
             color="#b8860b" unit=" hrs" emptyText="No schedule entries yet."
           />
-        </div>
+        </CollapsibleChartPanel>
       </div>
 
-      <div className="analytics-chart-card analytics-activity-card">
-        <h4 className="analytics-chart-title"><AnalyticsIcon type="clock" />Recent Activity</h4>
+      <CollapsibleChartPanel className="analytics-chart-card analytics-activity-card" title={<><AnalyticsIcon type="clock" />Recent Activity</>} ariaTitle="Recent Activity">
         <RecentActivity items={data.recent_activity} />
-      </div>
+      </CollapsibleChartPanel>
     </div>
   );
 }
@@ -1077,8 +1093,14 @@ function CoverageTab() {
   const [suggestions, setSuggestions] = useState(null);
   const [activeAbsenceId, setActiveAbsenceId] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [loadingSuggestionsId, setLoadingSuggestionsId] = useState(null);
   const [error, setError] = useState("");
   const [config, setConfig] = useState(null);
+  const facultyPickerOptions = React.useMemo(() => facultyList.map((f) => ({
+    id: f.id,
+    label: f.full_name && f.full_name !== f.username ? `${f.full_name} (${f.username})` : f.username,
+    search: `${f.full_name || ""} ${f.username || ""}`,
+  })), [facultyList]);
 
   const load = () => {
     API.get("/faculty/profiles/").then((res) => setFacultyList(res.data)).catch(reportLoadError("the faculty list"));
@@ -1105,6 +1127,8 @@ function CoverageTab() {
   };
 
   const getSuggestions = async (absenceId) => {
+    if (loadingSuggestionsId !== null) return;
+    setLoadingSuggestionsId(absenceId);
     setBusy(true);
     setError("");
     setActiveAbsenceId(absenceId);
@@ -1115,6 +1139,7 @@ function CoverageTab() {
       setError("Could not generate coverage suggestions.");
       setSuggestions(null);
     } finally {
+      setLoadingSuggestionsId(null);
       setBusy(false);
     }
   };
@@ -1179,10 +1204,9 @@ function CoverageTab() {
           </div>
           <div className="coverage-form-grid">
             <label>Faculty <span aria-hidden="true">*</span>
-              <CustomSelect className="faculty-picker-select" value={form.faculty} onChange={(e) => setForm({ ...form, faculty: e.target.value })}>
-                <option value="">Select faculty member</option>
-                {facultyList.map((f) => <option key={f.id} value={f.id}>{f.full_name && f.full_name !== f.username ? `${f.full_name} (${f.username})` : f.username}</option>)}
-              </CustomSelect>
+              <TeacherPicker className="coverage-faculty-picker" options={facultyPickerOptions} value={form.faculty}
+                onChange={(faculty) => setForm((current) => ({ ...current, faculty }))} emptyLabel="Select faculty member"
+                placeholder="Select faculty member" ariaLabel="Faculty member" emptyText="No faculty found" footer="Search by name or employee ID." />
             </label>
             <label>Absence date <span aria-hidden="true">*</span>
               <CustomDatePicker value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} aria-label="Absence date" />
@@ -1232,8 +1256,12 @@ function CoverageTab() {
       {suggestions && (
         <section className="coverage-panel coverage-suggestions-panel">
           <h3>Coverage suggestions</h3>
-          {suggestions.length === 0 && <p>No classes found for that faculty on that weekday.</p>}
-          <table>
+          {suggestions.length === 0 ? (
+            <div className="coverage-empty-suggestions" role="status">
+              <strong>No coverage suggestions</strong>
+              <p>No scheduled classes were found for this faculty on the selected absence date.</p>
+            </div>
+          ) : <table>
             <thead><tr><th>Class</th><th>Needs</th><th>Time</th><th>Suggested faculty</th><th>Their specialization</th><th>Reason</th><th></th></tr></thead>
             <tbody>
               {suggestions.map((s) => (
@@ -1258,7 +1286,7 @@ function CoverageTab() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table>}
         </section>
       )}
 
@@ -1281,7 +1309,9 @@ function CoverageTab() {
                 {a.coverage_status === "suggested" && <Badge tone="warning">Coverage pending</Badge>}
                 {(!a.coverage_status || a.coverage_status === "none") && <Badge tone="neutral">Open</Badge>}
               </td>
-              <td><button className="coverage-view-button" onClick={() => getSuggestions(a.id)}>↻ &nbsp;View / Re-run suggestions</button></td>
+              <td><button className="coverage-view-button" onClick={() => getSuggestions(a.id)} disabled={loadingSuggestionsId !== null} aria-busy={loadingSuggestionsId === a.id}>
+                {loadingSuggestionsId === a.id ? <><span className="coverage-button-spinner" aria-hidden="true" />Finding suggestions…</> : <>↻ &nbsp;View / Re-run suggestions</>}
+              </button></td>
             </tr>
           ))}
           {activeAbsences.length === 0 && <tr><td className="coverage-empty" colSpan="6">No absence reports yet. Reports will appear here.</td></tr>}

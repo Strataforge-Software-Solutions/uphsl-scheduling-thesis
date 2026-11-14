@@ -118,7 +118,7 @@ export default function ReplacementModal({ faculty, onClose, onChanged }) {
                           </div>
                           <div className="replacement-workload">
                             <div className="replacement-workload-label"><span>Weekly workload</span><strong>{c.current_hours} / {c.max_hours} h</strong></div>
-                            <div className="replacement-workload-track"><span style={{ width: `${loadPct}%` }} /></div>
+                            <div className="replacement-workload-track"><span className="motion-meter-fill" style={{ width: `${loadPct}%` }} /></div>
                           </div>
                         </div>
                         <button className="replacement-assign" onClick={() => assign(cls, c)} disabled={!!busyKey}>

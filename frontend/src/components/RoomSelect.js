@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import usePopupPresence from "./usePopupPresence";
 
 /* The Room dropdown used by every scheduling screen (Dean, Registrar, SHS / JHS Principal).
    - a search box at the top filters by room name, label, building or room number ("309", "D-309", "309D", "lab c", "alta");
@@ -28,6 +29,7 @@ export default function RoomSelect({
   style = {}, ariaLabel = "Room", width = 190,
 }) {
   const [open, setOpen] = useState(false);
+  const { present: menuPresent, closing: menuClosing } = usePopupPresence(open);
   const [q, setQ] = useState("");
   const [pos, setPos] = useState(null);
   const btn = useRef(null), panel = useRef(null), input = useRef(null);
@@ -44,7 +46,6 @@ export default function RoomSelect({
     const below = vh - r.bottom;
     const w = Math.min(Math.max(r.width, 260), vw - 16);          // the list stays on screen on a narrow window
     setPos({ left: Math.max(8, Math.min(r.left, vw - w - 8)), top: below > 280 ? r.bottom + 2 : undefined, bottom: below > 280 ? undefined : vh - r.top + 2, width: w });
-    setTimeout(() => input.current?.focus(), 0);
     const away = (e) => { if (!panel.current?.contains(e.target) && !btn.current?.contains(e.target)) setOpen(false); };
     const close = (e) => { if (!panel.current?.contains(e.target)) setOpen(false); };
     document.addEventListener("mousedown", away);
@@ -52,6 +53,7 @@ export default function RoomSelect({
     window.addEventListener("resize", close);
     return () => { document.removeEventListener("mousedown", away); window.removeEventListener("scroll", close, true); window.removeEventListener("resize", close); };
   }, [open]);
+  useEffect(() => { if (open && menuPresent) input.current?.focus(); }, [open, menuPresent]);
 
   const shown = useMemo(() => rooms.filter((r) => roomMatches(r, q) || (String(r.id) === String(value) && !q)), [rooms, q, value]);
   const groups = useMemo(() => {
@@ -67,13 +69,13 @@ export default function RoomSelect({
 
   return (
     <>
-      <button type="button" ref={btn} aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(!open)}
+      <button type="button" ref={btn} className="room-select-trigger" aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(!open)}
         style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, width, maxWidth: "100%", textAlign: "left", background: "white", border: "1px solid #d1d5db",
           borderRadius: 6, padding: "6px 8px", fontSize: 13, cursor: "pointer", boxSizing: "border-box", color: "#111827", fontWeight: 400, ...style }}>
         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{text}</span><span aria-hidden="true" style={{ color: "#6b7280", fontSize: 10 }}>▼</span>
       </button>
-      {open && pos && (
-        <div ref={panel} role="listbox" style={{ position: "fixed", zIndex: 3000, left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width, background: "white", border: "1px solid #d1d5db",
+      {menuPresent && pos && (
+        <div ref={panel} role="listbox" className={`room-select-menu popup-slide${menuClosing ? " is-closing" : ""}`} aria-hidden={menuClosing} inert={menuClosing ? "" : undefined} style={{ position: "fixed", zIndex: 3000, left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width, background: "white", border: "1px solid #d1d5db",
           borderRadius: 6, boxShadow: "var(--shadow-pop)" }}>
           <div style={{ padding: 8, borderBottom: "1px solid #f3f4f6" }}>
             <input ref={input} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search room name, building or number…" aria-label="Search rooms"

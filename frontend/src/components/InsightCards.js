@@ -1,6 +1,7 @@
 import CustomSelect from "./CustomSelect";
 import React, { useEffect, useState } from "react";
 import API from "../services/api";
+import { AnimatedMetricValue } from "./Charts";
 import { formatDateTime, formatTime } from "../utils/formatDateTime";
 
 /* New read-only insight cards (additive). They only call the GET endpoints under /api/analytics/... and never change data.
@@ -85,7 +86,7 @@ export function Metric({ label, value, tone, onClick, active }) {
     <button className={analyticsMetric ? "analytics-insight-metric" : undefined} type="button" onClick={onClick} disabled={!onClick}
       style={{ textAlign: "left", background: active ? "#eef6ff" : "#f9fafb", color: "#111827", border: `1px solid ${active ? C.navy : C.line}`,
         borderRadius: 6, padding: "10px 14px", minWidth: 140, flex: "1 1 140px", cursor: onClick ? "pointer" : "default", boxShadow: "none" }}>
-      <div className={`analytics-insight-metric-value tone-${tone || "default"}`}>{value}</div>
+      <div className={`analytics-insight-metric-value tone-${tone || "default"}`}><AnimatedMetricValue value={value} /></div>
       <div className="analytics-insight-metric-label">{label}</div>
     </button>
   );
@@ -93,15 +94,16 @@ export function Metric({ label, value, tone, onClick, active }) {
 
 export function SimpleTable({ columns, rows, empty = "No data yet.", max = 200, csvName }) {
   const title = React.useContext(CardTitle);
+  const analyticsInsight = ANALYTICS_INSIGHT_TITLES.has(title);
   if (!rows || !rows.length) return <p style={{ color: C.muted, fontSize: 13, margin: "6px 0" }}>{empty}</p>;
   return (
     <>
-    <div style={{ textAlign: "right", marginTop: 6 }}>
+    <div style={{ textAlign: "right", marginTop: analyticsInsight ? 12 : 6, marginBottom: analyticsInsight ? 8 : 0 }}>
       <button type="button" onClick={() => downloadCsv(csvName || title, columns, rows)} style={linkBtn} title="Download every row of this table as a CSV file">
         ⬇ Export CSV ({rows.length})</button>
     </div>
     <div className="scroll-box" style={{ maxHeight: 320, overflowY: "auto" }}>
-      <table className="sched-compact" style={{ marginTop: 6 }}>
+      <table className="sched-compact" style={{ marginTop: analyticsInsight ? 0 : 6 }}>
         <thead><tr>{columns.map((c) => <th key={c.key}>{c.label}</th>)}</tr></thead>
         <tbody>
           {rows.slice(0, max).map((r, i) => (
@@ -223,7 +225,7 @@ export function AuditTrailCard() {
 function Progress({ parts, total }) {
   if (!total) return <span style={{ fontSize: 12, color: C.muted }}>No classes</span>;
   return (
-    <div title={parts.map((p) => `${p.label}: ${p.value}`).join(" · ")} style={{ display: "flex", height: 12, borderRadius: 6, overflow: "hidden", background: "#eef2f7", minWidth: 120 }}>
+    <div className="motion-meter-reveal" key={parts.map((p) => `${p.label}:${p.value}`).join("|")} title={parts.map((p) => `${p.label}: ${p.value}`).join(" · ")} style={{ display: "flex", height: 12, borderRadius: 6, overflow: "hidden", background: "#eef2f7", minWidth: 120 }}>
       {parts.filter((p) => p.value > 0).map((p) => <div key={p.label} style={{ width: `${(p.value / total) * 100}%`, background: p.color }} />)}
     </div>
   );
@@ -321,7 +323,7 @@ export function LabCapacityCard({ filters = {} }) {
             <div key={x.day} style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4, fontSize: 13 }}>
               <span style={{ width: 34, color: C.muted }}>{x.day}</span>
               <div style={{ flex: 1, background: "#eef2f7", borderRadius: 6, height: 12, overflow: "hidden" }}>
-                <div style={{ width: `${x.used_pct}%`, height: "100%", background: x.used_pct >= 90 ? "#b91c1c" : x.used_pct >= 70 ? "#b45309" : "#003366" }} />
+                <div className="motion-meter-fill" style={{ width: `${x.used_pct}%`, height: "100%", background: x.used_pct >= 90 ? "#b91c1c" : x.used_pct >= 70 ? "#b45309" : "#003366" }} />
               </div>
               <span style={{ width: 150, color: "#374151" }}>{x.used_hours} h used · {x.free_hours} h free</span>
             </div>

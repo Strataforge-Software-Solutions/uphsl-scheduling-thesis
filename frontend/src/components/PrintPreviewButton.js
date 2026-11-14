@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import API from "../services/api";
 import ScheduleProblemsModal from "./ScheduleProblemsModal";
+import CustomSelect from "./CustomSelect";
+import usePopupPresence from "./usePopupPresence";
 
 /* "Print Report" exports a schedule table in PDF, XLSX, or CSV using the table's filters. A table with
    conflicts is never printed silently: the server answers 409 and this shows them, with "Fix them now" and "Print anyway (marked NOT
@@ -27,6 +29,7 @@ export default function PrintPreviewButton({ params, disabled = false, onFixed, 
   const [clash, setClash] = useState(null);
   const [fixing, setFixing] = useState(false);
   const [asking, setAsking] = useState(false);
+  const { present: dialogPresent, closing: dialogClosing } = usePopupPresence(asking);
   const [year, setYear] = useState(defaultYear || ALL);
   const [term, setTerm] = useState(params?.semester || ALL);
   const [format, setFormat] = useState("pdf");
@@ -103,20 +106,20 @@ export default function PrintPreviewButton({ params, disabled = false, onFixed, 
           style={{ background: "#003366", color: "white" }} title="Choose a term and download the schedule report as PDF, XLSX, or CSV">
           {busy ? "Preparing report…" : "Print Report"}
         </button>
-        {asking && (
-          <div role="dialog" aria-label="Choose report options" style={{ position: "absolute", right: 0, top: "100%", marginTop: 6, zIndex: 1100, width: "min(320px, 90vw)",
+        {dialogPresent && (
+          <div role="dialog" aria-label="Choose report options" aria-hidden={dialogClosing} inert={dialogClosing ? "" : undefined} className={`popup-slide${dialogClosing ? " is-closing" : ""}`} style={{ position: "absolute", right: 0, top: "100%", marginTop: 6, zIndex: 1100, width: "min(320px, 90vw)",
             background: "white", border: "1px solid #d1d5db", borderRadius: 6, boxShadow: "var(--shadow-pop)", padding: "10px 12px", textAlign: "left" }}>
             <div style={{ fontWeight: 600, color: "#003366", fontSize: 13, marginBottom: 8 }}>Print report</div>
             <label style={{ display: "grid", gap: 4, fontSize: 12, color: "#374151", marginBottom: 8 }}>Semester / term
-              <select value={term} onChange={(e) => setTerm(e.target.value)} style={{ padding: "7px 8px", border: "1px solid #cbd5e1", borderRadius: 5, color: "#111827", background: "white" }}>
+              <CustomSelect value={term} onChange={(e) => setTerm(e.target.value)} style={{ width: "100%", padding: "7px 8px", border: "1px solid #cbd5e1", borderRadius: 5, color: "#111827", background: "white" }}>
                 <option value={ALL}>All semesters / terms</option>
                 {terms.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
+              </CustomSelect>
             </label>
             <label style={{ display: "grid", gap: 4, fontSize: 12, color: "#374151", marginBottom: 8 }}>File format
-              <select value={format} onChange={(e) => setFormat(e.target.value)} style={{ padding: "7px 8px", border: "1px solid #cbd5e1", borderRadius: 5, color: "#111827", background: "white" }}>
+              <CustomSelect value={format} onChange={(e) => setFormat(e.target.value)} style={{ width: "100%", padding: "7px 8px", border: "1px solid #cbd5e1", borderRadius: 5, color: "#111827", background: "white" }}>
                 <option value="pdf">PDF (preview / print)</option><option value="xlsx">Excel workbook (.xlsx)</option><option value="csv">CSV (.csv)</option>
-              </select>
+              </CustomSelect>
             </label>
             {years.length > 0 && <div style={{ fontWeight: 600, color: "#003366", fontSize: 12, margin: "8px 0 4px" }}>Year level</div>}
             {years.map((y) => (

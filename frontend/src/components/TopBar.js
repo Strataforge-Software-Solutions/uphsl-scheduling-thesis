@@ -5,6 +5,7 @@ import { notificationTarget, jumpTo } from "../services/jump";
 import { useNavigate } from "react-router-dom";
 import { usePreferences, initialsOf } from "../services/preferences";
 import { formatDate } from "../utils/formatDateTime";
+import usePopupPresence from "./usePopupPresence";
 
 // what each notification is about, as a short word (no icons)
 const TYPE_LABEL = {
@@ -46,6 +47,7 @@ function timeAgo(iso) {
    dropdown is actually opened. */
 function NotificationBell() {
   const [open, setOpen] = useState(false);
+  const { present: menuPresent, closing: menuClosing } = usePopupPresence(open);
   const [unreadCount, setUnreadCount] = useState(0);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -132,8 +134,8 @@ function NotificationBell() {
         )}
       </button>
 
-      {open && (
-        <div role="dialog" aria-label="Notifications" style={{
+      {menuPresent && (
+        <div role="dialog" aria-label="Notifications" aria-hidden={menuClosing} inert={menuClosing ? "" : undefined} className={`popup-slide${menuClosing ? " is-closing" : ""}`} style={{
           position: "absolute", right: 0, top: "calc(100% + 6px)", width: "min(360px, 92vw)", maxHeight: "420px",
           overflowY: "auto", background: "white", borderRadius: 6, border: "1px solid #e5e7eb",
           boxShadow: "var(--shadow-pop)", zIndex: 1000,
@@ -194,6 +196,7 @@ function AvatarMenu({ userName }) {
   const { pictureUrl, profile } = usePreferences();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const { present: menuPresent, closing: menuClosing } = usePopupPresence(open);
   const wrap = useRef(null);
   useEffect(() => {
     if (!open) return undefined;
@@ -213,12 +216,20 @@ function AvatarMenu({ userName }) {
           ? <img className="app-avatar-img" src={pictureUrl} alt="" width="30" height="30" />
           : <span className="app-avatar-circle small" aria-hidden="true">{initials}</span>}
       </button>
-      {open && (
-        <div className="app-avatar-menu" role="menu">
+      {menuPresent && (
+        <div className={`app-avatar-menu popup-slide${menuClosing ? " is-closing" : ""}`} role="menu" aria-hidden={menuClosing} inert={menuClosing ? "" : undefined}>
           <div className="app-avatar-menu-head">
             <div className="app-avatar-menu-name">{name}</div>
             {profile && <div className="app-avatar-menu-role">{profile.role}</div>}
           </div>
+          <button type="button" role="menuitem" className="app-avatar-menu-item" onClick={() => {
+            setOpen(false);
+            const lockedAt = Date.now();
+            if (!sessionStorage.getItem("app_session_started_at")) sessionStorage.setItem("app_session_started_at", String(lockedAt));
+            sessionStorage.setItem("app_lock_started_at", String(lockedAt));
+            sessionStorage.setItem("app_screen_locked", "true");
+            window.dispatchEvent(new Event("app-screen-lock"));
+          }}>Lock screen</button>
           <button type="button" role="menuitem" className="app-avatar-menu-item" onClick={() => { setOpen(false); navigate("/settings"); }}>My settings</button>
           <button type="button" role="menuitem" className="app-avatar-menu-item app-avatar-menu-signout" onClick={() => { setOpen(false); logout(); window.location.href = "/login"; }}>Sign out</button>
         </div>

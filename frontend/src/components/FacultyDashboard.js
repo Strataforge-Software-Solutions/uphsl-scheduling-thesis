@@ -1,21 +1,22 @@
 import CustomSelect from "./CustomSelect";
 import CustomDatePicker from "./CustomDatePicker";
 import CustomTimePicker from "./CustomTimePicker";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { onJump } from "../services/jump";
-import { useLandingTab } from "../services/preferences";
+import { useDashboardTab } from "../services/preferences";
+import { useMainScrollReset } from "../services/useMainScrollReset";
 import { reportLoadError } from "../services/loadError";
 import { getCachedCurriculumData, loadCurriculumData, updateCurriculumCache } from "../services/curriculumCache";
 import { prefetchDashboardPage } from "../services/pagePrefetch";
 import API, { getCurrentUser, getSchedules, logout, displayName } from "../services/api";
 import { formatSchedule } from "../utils/formatSchedule";
 import { LecLabTag, buildLecLabIndex } from "../utils/lecLab";
-import { mergeSchedulesByDay, sortByDayTime } from "../utils/mergeSchedules";
+import { changedScheduleIds, mergeSchedulesByDay, sortByDayTime } from "../utils/mergeSchedules";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import PageHeader from "./PageHeader";
 import Badge from "./Badge";
-import { StatTile, HBarChart, RecentActivity } from "./Charts";
+import { AnimatedMetricValue, CollapsibleChartPanel, StatTile, HBarChart, RecentActivity } from "./Charts";
 import ScheduleEditModal from "./ScheduleEditModal";
 import { RequestMoveModal, GenEdRequestsPanel } from "./GenEdRequests";
 import PrintPreviewButton, { printYears, printTerms } from "./PrintPreviewButton";
@@ -98,9 +99,10 @@ const DEAN_HEADERS = {
  */
 function FacultyDashboard({ name, department, departments = [department], facultyType }) {
   const navItems = facultyType === "dean" ? DEAN_NAV : facultyType === "part_time" ? PART_TIME_NAV : FULL_TIME_NAV;
-  const landing = useLandingTab(navItems, navItems.find((i) => i.key).key);
-  const [activeTab, setActiveTab] = useState(landing);
-  useEffect(() => onJump((t) => { if (t === "gened-requests" && facultyType === "dean") setActiveTab("schedules"); }), [facultyType]);
+  const [activeTab, setActiveTab] = useDashboardTab(navItems, navItems.find((i) => i.key).key, `faculty-${facultyType || "default"}`);
+  useMainScrollReset(activeTab);
+  const handleJump = React.useCallback((t) => { if (t === "gened-requests" && facultyType === "dean") setActiveTab("schedules"); }, [facultyType, setActiveTab]);
+  useEffect(() => onJump(handleJump), [handleJump]);
   const user = getCurrentUser();
 
   const handleLogout = () => {
@@ -135,7 +137,7 @@ function FacultyDashboard({ name, department, departments = [department], facult
         <TopBar crumb={crumb} userName={facultyType === "dean" ? displayName(user) : user?.username} />
         <PageHeader eyebrow={eyebrow.toUpperCase()} title={title} subtitle={subtitle} />
 
-        <div className="app-page-body">
+        <div className="app-page-body motion-page-content" key={activeTab}>
           {facultyType === "dean" && activeTab !== "home" && <HowToUse role="dean" tab={activeTab} />}
           {facultyType === "dean" && <DeanView onNavigate={setActiveTab} name={displayName(user)} department={department} departments={departments} activeTab={activeTab} />}
           {facultyType === "full_time" && activeTab === "schedule" && (
@@ -197,20 +199,20 @@ function WorkloadSummary({ username }) {
   return (
     <div style={cardStyle}>
       <div style={statStyle}>
-        <div style={numStyle}>{totalHours}h</div>
+        <div style={numStyle}><AnimatedMetricValue value={`${totalHours}h`} /></div>
         <div style={labelStyle}>Hours / week</div>
       </div>
       <div style={statStyle}>
-        <div style={numStyle}>{classCount}</div>
+        <div style={numStyle}><AnimatedMetricValue value={classCount} /></div>
         <div style={labelStyle}>Class periods</div>
       </div>
       <div style={statStyle}>
-        <div style={{ ...numStyle, color: isOverload ? "#b91c1c" : "#003366" }}>{target}h</div>
+        <div style={{ ...numStyle, color: isOverload ? "#b91c1c" : "#003366" }}><AnimatedMetricValue value={`${target}h`} /></div>
         <div style={labelStyle}>Target load</div>
       </div>
       <div style={{ flex: 1, minWidth: "180px" }}>
         <div style={{ height: "10px", borderRadius: "6px", background: "#eef1f5", overflow: "hidden" }}>
-          <div style={{
+          <div className="motion-meter-fill" style={{
             width: `${percent}%`, height: "100%",
             background: isOverload ? "#b91c1c" : "#003366",
           }} />
@@ -443,6 +445,9 @@ function DeanView({ department, departments = [department], activeTab, onNavigat
 
 function ScheduleManager({ programId, programName = "", departments = [] }) {
   const [schedules, setSchedules] = useState([]);
+  const [changedIds, setChangedIds] = useState(() => new Set());
+  const previousSchedules = useRef(null);
+  const changedTimer = useRef(null);
   const [rooms, setRooms] = useState([]);
   const [roomAssign, setRoomAssign] = useState({});     // subject id -> the Dean's preferred / alternative / fixed rooms
   const [faculty, setFaculty] = useState([]);
@@ -471,7 +476,17 @@ function ScheduleManager({ programId, programName = "", departments = [] }) {
   const [statusFilter, setStatusFilter] = useState("");
 
   const load = () => {
-    getSchedules().then((res) => setSchedules(res.data));
+    getSchedules().then((res) => {
+      const nextSchedules = res.data;
+      if (previousSchedules.current) {
+        const changed = changedScheduleIds(previousSchedules.current, nextSchedules);
+        setChangedIds(changed);
+        if (changedTimer.current) window.clearTimeout(changedTimer.current);
+        if (changed.size) changedTimer.current = window.setTimeout(() => setChangedIds(new Set()), 2800);
+      }
+      previousSchedules.current = nextSchedules;
+      setSchedules(nextSchedules);
+    });
     API.get("/rooms/").then((res) => setRooms(res.data));
     API.get("/rooms/dean/overview/", { params: { program_id: programId || undefined } }).then((res) => {
       const m = {};
@@ -484,6 +499,7 @@ function ScheduleManager({ programId, programName = "", departments = [] }) {
   // load only when the program changes (load is re-created every render; listing it would reload in a loop)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   React.useEffect(() => { load(); }, [programId]);
+  React.useEffect(() => () => { if (changedTimer.current) window.clearTimeout(changedTimer.current); }, []);
   // an overload resolved from the suggestions window changes teachers in the real schedule: reload the table
   React.useEffect(() => onWorkloadChanged(() => load()), [programId]);   // eslint-disable-line react-hooks/exhaustive-deps
   // Reset the Year Level / Semester filter whenever the program changes --
@@ -677,7 +693,7 @@ function ScheduleManager({ programId, programName = "", departments = [] }) {
         </thead>
         <tbody>
           {grouped.map((g) => (
-            <tr key={g.key} style={selected.includes(g.key) ? { background: "#eef6ff" } : undefined}>
+            <tr key={g.key} className={g.ids.some((id) => changedIds.has(String(id))) ? "schedule-row-changed" : undefined} style={selected.includes(g.key) ? { background: "#eef6ff" } : undefined}>
               <td>
                 {isMine(g) && (
                   <input type="checkbox" aria-label={`Select ${g.subject_title}`} checked={selected.includes(g.key)}
@@ -804,6 +820,7 @@ function DeanCoverageTab({ department, departments = [department] }) {
   const [suggestions, setSuggestions] = useState(null);
   const [activeAbsenceId, setActiveAbsenceId] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [loadingSuggestionsId, setLoadingSuggestionsId] = useState(null);
   const [error, setError] = useState("");
 
   // Was `!f.department || f.department === department` -- treating a blank/null
@@ -836,6 +853,8 @@ function DeanCoverageTab({ department, departments = [department] }) {
   };
 
   const getSuggestions = async (absenceId) => {
+    if (loadingSuggestionsId !== null) return;
+    setLoadingSuggestionsId(absenceId);
     setBusy(true);
     setError("");
     setActiveAbsenceId(absenceId);
@@ -846,6 +865,7 @@ function DeanCoverageTab({ department, departments = [department] }) {
       setError("Could not generate coverage suggestions.");
       setSuggestions(null);
     } finally {
+      setLoadingSuggestionsId(null);
       setBusy(false);
     }
   };
@@ -880,10 +900,14 @@ function DeanCoverageTab({ department, departments = [department] }) {
       {busy && <p>Finding coverage…</p>}
 
       {suggestions && (
-        <div style={{ marginBottom: "24px" }}>
+        <section className="coverage-panel coverage-suggestions-panel" style={{ marginBottom: "24px" }}>
           <h4>Coverage suggestions</h4>
-          {suggestions.length === 0 && <p>No classes found for that faculty on that weekday.</p>}
-          <table>
+          {suggestions.length === 0 ? (
+            <div className="coverage-empty-suggestions" role="status">
+              <strong>No coverage suggestions</strong>
+              <p>No scheduled classes were found for this faculty on the selected absence date.</p>
+            </div>
+          ) : <table>
             <thead><tr><th>Class</th><th>Needs</th><th>Time</th><th>Suggested faculty</th><th>Their specialization</th><th>Reason</th><th></th></tr></thead>
             <tbody>
               {suggestions.map((s) => (
@@ -904,8 +928,8 @@ function DeanCoverageTab({ department, departments = [department] }) {
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+          </table>}
+        </section>
       )}
 
       <h3>Recent absences — {department}</h3>
@@ -922,7 +946,9 @@ function DeanCoverageTab({ department, departments = [department] }) {
                 {a.coverage_status === "suggested" && <Badge tone="warning">Suggested</Badge>}
                 {(!a.coverage_status || a.coverage_status === "none") && <Badge tone="neutral">None yet</Badge>}
               </td>
-              <td><button onClick={() => getSuggestions(a.id)}>View / Re-run suggestions</button></td>
+              <td><button className="coverage-view-button" onClick={() => getSuggestions(a.id)} disabled={loadingSuggestionsId !== null} aria-busy={loadingSuggestionsId === a.id}>
+                {loadingSuggestionsId === a.id ? <><span className="coverage-button-spinner" aria-hidden="true" />Finding suggestions…</> : "View / Re-run suggestions"}
+              </button></td>
             </tr>
           ))}
         </tbody>
@@ -1273,9 +1299,9 @@ function AnalyticsPanel() {
   }, [attempt, sem]);
 
   if (loadError) return <p style={{ color: "red" }}>{loadError} <button onClick={() => setAttempt((n) => n + 1)}>Try again</button></p>;
-  if (!data) return <p>Loading analytics…</p>;
+  if (!data) return <div className="analytics-chart-grid" aria-label="Loading analytics">{[0, 1].map((i) => <div className="analytics-chart-card" key={i}><HBarChart loading /></div>)}</div>;
 
-  const workload = Object.entries(data.teacher_workload).map(([t, c]) => ({ label: t, value: c })).sort((a, b) => b.value - a.value);
+  const workload = Object.entries(data.teacher_workload).map(([t, c]) => ({ label: t, name: data.teacher_names?.[t], value: c })).sort((a, b) => b.value - a.value);
   const rooms = Object.entries(data.room_utilization).map(([r, c]) => ({ label: r, value: c })).sort((a, b) => b.value - a.value);
 
   return (
@@ -1296,29 +1322,24 @@ function AnalyticsPanel() {
         <StatTile label="Teachers With Load" value={workload.length} />
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px" }}>
-        <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "18px 20px" }}>
-          <h4 style={{ marginTop: 0, color: "#003366" }}>Teacher Workload</h4>
+        <CollapsibleChartPanel title="Teacher Workload" style={{ padding: "18px 20px" }}>
           <HBarChart data={workload} unit=" hrs" emptyText="No schedule entries yet." />
-        </div>
-        <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "18px 20px" }}>
-          <h4 style={{ marginTop: 0, color: "#003366" }}>Room Utilization</h4>
+        </CollapsibleChartPanel>
+        <CollapsibleChartPanel title="Room Utilization" style={{ padding: "18px 20px" }}>
           <HBarChart data={rooms} color="#b8860b" unit=" hrs" emptyText="No schedule entries yet." />
-        </div>
+        </CollapsibleChartPanel>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px", marginTop: "20px" }}>
-        <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "18px 20px" }}>
-          <h4 style={{ marginTop: 0, color: "#003366" }}>Class Hours by Day</h4>
+        <CollapsibleChartPanel title="Class Hours by Day" style={{ padding: "18px 20px" }}>
           <HBarChart data={Object.entries(data.class_hours_by_day || {}).map(([d, n]) => ({ label: d, value: n }))} unit=" hrs" emptyText="No schedule entries yet." />
-        </div>
-        <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "18px 20px" }}>
-          <h4 style={{ marginTop: 0, color: "#003366" }}>Schedule Status</h4>
+        </CollapsibleChartPanel>
+        <CollapsibleChartPanel title="Schedule Status" style={{ padding: "18px 20px" }}>
           <HBarChart data={Object.entries(data.schedule_status || {}).map(([k, n]) => ({ label: k.charAt(0).toUpperCase() + k.slice(1), value: n }))} color="#b8860b" unit=" hrs" emptyText="No schedule entries yet." />
-        </div>
+        </CollapsibleChartPanel>
       </div>
-      <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 6, padding: "18px 20px", marginTop: "20px" }}>
-        <h4 style={{ marginTop: 0, color: "#003366" }}>Recent Activity</h4>
+      <CollapsibleChartPanel title="Recent Activity" style={{ padding: "18px 20px", marginTop: "20px" }}>
         <RecentActivity items={data.recent_activity} />
-      </div>
+      </CollapsibleChartPanel>
     </div>
   );
 }

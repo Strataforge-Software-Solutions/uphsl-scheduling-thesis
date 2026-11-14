@@ -9,15 +9,16 @@ import { errText, cardStyle, Notice, DAYS, hhmm, ampm } from "./basicEdUi";
 import { MyAvailability } from "./BasicEdAvailability";
 import "./DashboardTheme.css";
 import { OverrideBadge } from "./AssignAnywayDialog";
-import { useLandingTab } from "../services/preferences";
+import { useDashboardTab } from "../services/preferences";
+import { useMainScrollReset } from "../services/useMainScrollReset";
 
 /* SHS / JHS teacher: sees only their own published timetable and profile. */
 function BasicEdTeacher() {
   const user = getCurrentUser();
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
-  const landing = useLandingTab([{ key: "schedule" }, { key: "profile" }], "schedule");
-  const [tab, setTab] = useState(landing);
+  const [tab, setTab] = useDashboardTab([{ key: "schedule" }, { key: "profile" }], "schedule", `teacher-${user.school_level}`);
+  useMainScrollReset(tab);
   const load = () => API.get("/basic-ed/my/schedule/").then((r) => setData(r.data)).catch((e) => setError(errText(e)));
   useEffect(() => { load(); }, []);
   const p = data?.profile;
@@ -33,7 +34,7 @@ function BasicEdTeacher() {
       <div className="app-main">
         <TopBar crumb={tab === "schedule" ? "My Schedule" : "My Profile"} userName={user.username} />
         <PageHeader eyebrow={`${user.school_level} Faculty`} title={tab === "schedule" ? "My Schedule" : "My Profile"} subtitle={tab === "schedule" ? "Your classes, rooms and sections once the principal publishes the schedule." : "Your teaching profile."} />
-        <div className="app-page-body">
+        <div className="app-page-body motion-page-content" key={tab}>
           {error && <Notice tone="error">{error}</Notice>}
           {p && tab === "schedule" && (
             <>

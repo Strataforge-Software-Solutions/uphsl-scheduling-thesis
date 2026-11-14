@@ -1,6 +1,7 @@
 import React, { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import "./DashboardTheme.css";
+import usePopupPresence from "./usePopupPresence";
 
 function textOf(node) {
   if (node == null || typeof node === "boolean") return "";
@@ -23,6 +24,7 @@ export default function CustomSelect({
   const typeaheadRef = useRef("");
   const typeaheadTimerRef = useRef(null);
   const [open, setOpen] = useState(false);
+  const { present: menuPresent, closing: menuClosing } = usePopupPresence(open);
   const [menuPosition, setMenuPosition] = useState(null);
   const options = useMemo(() => React.Children.toArray(children)
     .filter((child) => React.isValidElement(child) && child.type === "option")
@@ -40,8 +42,8 @@ export default function CustomSelect({
 
   useEffect(() => setActiveIndex(selectedIndex), [selectedIndex]);
   useEffect(() => {
-    if (open) optionRefs.current[activeIndex]?.focus();
-  }, [open, activeIndex]);
+    if (open && menuPresent) optionRefs.current[activeIndex]?.focus();
+  }, [open, activeIndex, menuPresent]);
   useEffect(() => {
     if (!open) return undefined;
     const closeOutside = (event) => {
@@ -161,9 +163,9 @@ export default function CustomSelect({
         <span className="custom-select-value">{selectedOption?.label ?? "Select an option"}</span>
         <svg className="custom-select-chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7 5 5 5-5" /></svg>
       </button>
-      {open && (!portalMenu || menuPosition) && (() => {
+      {menuPresent && (!portalMenu || menuPosition) && (() => {
         const menu = (
-        <div ref={menuRef} id={menuId} className="custom-select-menu" role="listbox" aria-label={ariaLabel}
+        <div ref={menuRef} id={menuId} className={`custom-select-menu popup-slide${menuClosing ? " is-closing" : ""}`} role="listbox" aria-label={ariaLabel} aria-hidden={menuClosing} inert={menuClosing ? "" : undefined}
           style={portalMenu ? { position: "fixed", left: menuPosition.left, width: menuPosition.width,
             top: menuPosition.top ?? "auto", bottom: menuPosition.bottom ?? "auto",
             maxHeight: menuPosition.maxHeight, zIndex: 5000 } : undefined}>

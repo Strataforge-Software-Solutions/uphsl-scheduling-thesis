@@ -4,6 +4,7 @@ import { HOWTO, HOME_INTRO } from "./howto";
 import pendingTasksImage from "../assets/pending-tasks-illustration.png";
 import schedulingStatusImage from "../assets/scheduling-status-illustration.png";
 import recentNotificationsImage from "../assets/recent-notifications-illustration.png";
+import { AnimatedMetricValue } from "./Charts";
 
 /* Homepage shown first on the Dean, Registrar and SHS / JHS Principal dashboards.
    Props: role ("dean" | "registrar" | "principal"), name, scope (e.g. college or school level), nav (sidebar items),
@@ -99,15 +100,19 @@ export default function HomePage({ role, name, scope, nav = [], onNavigate, stat
       {stats.length > 0 && (
         // one compact summary line (label above value), separated by thin rules -- not a row of big tiles
         <div className="home-summary-card" aria-label="Summary">
-          {stats.map((s, i) => (
-            <div className="home-stat-item" key={s.label}>
+          {stats.map((s) => {
+            const clickable = Boolean(s.tab && nav.some((item) => item.key === s.tab));
+            const StatItem = clickable ? "button" : "div";
+            return (
+            <StatItem className={`home-stat-item${clickable ? " is-clickable" : ""}`} key={s.label}
+              {...(clickable ? { type: "button", onClick: () => onNavigate(s.tab), "aria-label": `Open ${s.label} in ${nav.find((item) => item.key === s.tab)?.label || "details"}` } : {})}>
               <div className="home-stat-icon"><StatIcon label={s.label} /></div>
               <div className="home-stat-copy">
                 <div className="home-stat-label">{s.label}</div>
-                <div className="home-stat-value" style={s.accent && s.accent !== "#15803d" ? { color: s.accent } : undefined}>{s.value ?? "…"}</div>
+                <div className="home-stat-value" style={s.accent && s.accent !== "#15803d" ? { color: s.accent } : undefined}><AnimatedMetricValue value={s.value ?? "…"} /></div>
               </div>
-            </div>
-          ))}
+            </StatItem>
+          );})}
         </div>
       )}
 

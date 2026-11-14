@@ -1,4 +1,5 @@
 from engine.models import Schedule
+from django.contrib.auth import get_user_model
 from django.db.models import Count
 
 
@@ -108,12 +109,19 @@ def compute_analytics(department=None, semester=None):
         # entirely. A shared (merged) class still counts once (same seen-teacher rule as above). Rooms, efficiency, hours by day and
         # recent activity above stay based on this college's classes.
         teacher_workload = _own_faculty_workload(department, semester)
+    usernames = list(teacher_workload)
+    user_model = get_user_model()
+    teacher_names = {
+        user.username: (user.get_full_name().strip() or user.username)
+        for user in user_model.objects.filter(username__in=usernames).only("username", "first_name", "last_name")
+    }
     loads = list(teacher_workload.values())
     workload_std_dev = _std_dev(loads) if loads else 0
 
     return {
         "room_utilization": room_utilization,
         "teacher_workload": teacher_workload,
+        "teacher_names": teacher_names,
         "schedule_efficiency": efficiency,
         "workload_std_dev": workload_std_dev,
         "class_hours_by_day": {d: n for d, n in hours_by_day.items() if n or d != "Sun"},

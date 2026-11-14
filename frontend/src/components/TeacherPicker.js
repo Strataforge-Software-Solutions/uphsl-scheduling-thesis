@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import usePopupPresence from "./usePopupPresence";
 
 /* ONE searchable teacher list, used by the Edit dialog, the Generate dialog's Professor column and the overload replacement picker.
    The list it is given is already the server's (only teachers the rules allow); this only filters and picks.
@@ -38,8 +39,9 @@ function grouped(list) {
 }
 
 export default function TeacherPicker({ options, value, onChange, emptyLabel, placeholder = "Choose a teacher", disabled = false,
-  ariaLabel = "Teacher", title, compact = false, valueLabel = "", groupNotes = {}, footer = "", emptyText = "No teacher found" }) {
+  ariaLabel = "Teacher", title, compact = false, valueLabel = "", groupNotes = {}, footer = "", emptyText = "No teacher found", className = "" }) {
   const [open, setOpen] = useState(false);
+  const { present: menuPresent, closing: menuClosing } = usePopupPresence(open);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const wrap = useRef(null), input = useRef(null), list = useRef(null), pop = useRef(null);
@@ -79,7 +81,7 @@ export default function TeacherPicker({ options, value, onChange, emptyLabel, pl
     window.addEventListener("scroll", place, true);
     return () => { window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); };
   }, [open]);
-  useEffect(() => { if (open && input.current) input.current.focus(); }, [open, pos]);
+  useEffect(() => { if (open && menuPresent && input.current) input.current.focus(); }, [open, menuPresent, pos]);
   useEffect(() => { setActive(0); }, [query, open]);
   useEffect(() => {
     const el = list.current && list.current.querySelector('[data-active="true"]');
@@ -99,8 +101,8 @@ export default function TeacherPicker({ options, value, onChange, emptyLabel, pl
   const listId = `${ariaLabel.replace(/\W+/g, "-")}-list`;
 
   return (
-    <div ref={wrap} style={{ position: "relative", width: "100%", minWidth: 0 }}>
-      <button type="button" disabled={disabled} aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} title={title}
+    <div ref={wrap} className={className || undefined} style={{ position: "relative", width: "100%", minWidth: 0 }}>
+      <button type="button" className="teacher-picker-trigger" disabled={disabled} aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} title={title}
         onClick={() => setOpen((o) => !o)}
         onKeyDown={(e) => { if (["ArrowDown", "Enter", " "].includes(e.key) && !open) { e.preventDefault(); setOpen(true); } }}
         style={{ width: "100%", textAlign: "left", background: disabled ? "#f3f4f6" : "white", color: "#111827", border: "1px solid #d1d5db",
@@ -108,8 +110,8 @@ export default function TeacherPicker({ options, value, onChange, emptyLabel, pl
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", boxShadow: "none", boxSizing: "border-box" }}>
         {fieldText}<span aria-hidden="true" style={{ float: "right", color: "#6b7280", marginLeft: 6 }}>▾</span>
       </button>
-      {open && pos && createPortal(
-        <div ref={pop} style={{ position: "fixed", zIndex: 5000, left: pos.left, width: pos.width, top: pos.top, bottom: pos.bottom,
+      {menuPresent && pos && createPortal(
+        <div ref={pop} className={`teacher-picker-menu popup-slide${menuClosing ? " is-closing" : ""}`} aria-hidden={menuClosing} inert={menuClosing ? "" : undefined} style={{ position: "fixed", zIndex: 5000, left: pos.left, width: pos.width, top: pos.top, bottom: pos.bottom,
           background: "white", border: "1px solid #d1d5db", borderRadius: 6, boxShadow: "var(--shadow-pop)" }}>
           <input ref={input} value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={onKey} role="combobox"
             aria-expanded="true" aria-controls={listId} aria-autocomplete="list" aria-label={`Search ${ariaLabel}`}
@@ -147,7 +149,7 @@ export default function TeacherPicker({ options, value, onChange, emptyLabel, pl
                   {emptyLabel && !query.trim() && row({ id: "", label: emptyLabel })}
                   {shown.map((g) => (
                     <div key={`g-${g.group}`} role="group" aria-label={g.group || "Teachers"}>
-                      {g.group && <div style={{ padding: "6px 12px 2px", fontSize: 12, fontWeight: 600, color: "#374151" }}>{g.group}</div>}
+                      {g.group && <div className="teacher-picker-group-heading" style={{ padding: "6px 12px 2px", fontSize: 12, fontWeight: 600, color: "#374151" }}>{g.group}</div>}
                       {g.group && groupNotes[g.group] && <div style={{ padding: "0 12px 4px", fontSize: 12, color: "#92400e" }}>{groupNotes[g.group]}</div>}
                       {g.items.map(row)}
                     </div>

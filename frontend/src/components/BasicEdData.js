@@ -4,6 +4,7 @@ import { statusText } from "./BasicEdAvailability";
 import API from "../services/api";
 import { reportLoadError } from "../services/loadError";
 import Badge from "./Badge";
+import { AnimatedMetricValue } from "./Charts";
 import { periodOptionsAll, periodName } from "../utils/terms";
 import { be, errText, inputStyle, cardStyle, btn, btnPrimary, Field, Modal, Notice } from "./basicEdUi";
 import { useConfirmDialog } from "./ConfirmDialog";
@@ -225,7 +226,7 @@ export function FacultyTab({ level }) {
             <td className="basic-ed-specialization-cell" title={f.specializations || "No specializations added"}>{f.specializations || "—"}</td>
             <td>
               {(() => { const max = Number(f.max_weekly_hours) || 30; const hours = Number(f.weekly_hours) || 0; return (
-                <div className="basic-ed-load-meter"><div><strong>{hours.toFixed(1)}</strong><span> / {max} h</span></div><div className="basic-ed-load-track"><span style={{ width: `${Math.min(100, hours / max * 100)}%` }} /></div></div>
+                <div className="basic-ed-load-meter"><div><strong><AnimatedMetricValue value={hours.toFixed(1)} /></strong><span> / {max} h</span></div><div className="basic-ed-load-track"><span className="motion-meter-fill" style={{ width: `${Math.min(100, hours / max * 100)}%` }} /></div></div>
               ); })()}
             </td>
             <td><span className="basic-ed-availability-text">{statusText({ status: f.availability_status, submitted_at: f.availability_submitted_at })}</span></td>

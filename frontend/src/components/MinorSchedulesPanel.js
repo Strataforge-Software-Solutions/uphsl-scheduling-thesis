@@ -1,8 +1,10 @@
 import CustomSelect from "./CustomSelect";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import API from "../services/api";
 import UnplacedResolve from "./UnplacedResolve";
 import { SimplifiedGuide } from "./HowToUse";
+import { AnimatedMetricValue } from "./Charts";
 
 /* Generate All Minor Schedules: Gen Ed (minor) subjects of CCS, RadTech, Nursing and BAComm in one validated action,
    the departments' minor schedules side by side (shared / separate section, conflicts), and a conflict report. */
@@ -32,40 +34,116 @@ function Tag({ bg, fg, children }) {
 }
 
 /* One section of one subject in one department: who (program + section + students), how it is shared, and when / where. */
-function Cell({ c }) {
+function Cell({ c, onOpen }) {
   const bad = c.conflicts.length > 0;
   const m = MODE[c.mode] || MODE.separate;
   const others = c.shared_with || [];
   return (
-    <div style={{ border: `1px solid ${bad ? "#fca5a5" : "#e5e7eb"}`, borderLeft: `4px solid ${bad ? "#dc2626" : c.mode === "shared" ? "#22c55e" : "#6b7280"}`,
-      background: bad ? "#fef2f2" : "#fff", borderRadius: 6, padding: "9px 11px", marginBottom: 8, lineHeight: 1.45 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 6, alignItems: "baseline" }}>
-        <span style={{ minWidth: 0, fontWeight: 600, color: "#111827", overflowWrap: "anywhere" }}>{c.program.replace(/^BS |^BA /, "")} {c.section}</span>
-        <span style={{ color: "#6b7280", fontSize: 11, textAlign: "right" }}>{c.students} student{c.students === 1 ? "" : "s"}</span>
+    <button type="button" className={`minor-comparison-entry${bad ? " has-conflict" : c.mode === "shared" ? " is-shared" : ""}`}
+      aria-haspopup="dialog" aria-label={`View details for ${c.program} ${c.section}`} onClick={() => onOpen(c)}>
+      <div className="minor-comparison-entry-heading">
+        <span className="minor-comparison-program">{c.program.replace(/^BS |^BA /, "")} {c.section}</span>
+        <span className="minor-comparison-students">{c.students} student{c.students === 1 ? "" : "s"}</span>
       </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, margin: "6px 0" }}>
-        <Tag bg={m.bg} fg={m.fg}>{c.mode === "shared" ? "Shared section" : c.mode === "separate" ? "Separate section" : "Not scheduled"}</Tag>
+      <div className="minor-comparison-badges">
+        <Tag bg={m.bg} fg={m.fg}>{m.label}</Tag>
         {c.scheduled && (bad ? <Tag bg="#fee2e2" fg="#991b1b">Conflict</Tag> : <Tag bg="#ecfdf5" fg="#166534">No conflict</Tag>)}
       </div>
       {c.mode === "shared" && others.length > 0 && (
-        <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 5, overflowWrap: "anywhere" }} title={others.join(", ")}>
+        <div className="minor-comparison-shared-with" title={others.join(", ")}>
           <span style={{ color: "#6b7280" }}>With: </span>{others.join(", ")}
         </div>)}
-      {bad && <div style={{ fontSize: 12, color: "#991b1b", marginBottom: 5, overflowWrap: "anywhere" }}>{c.conflicts.join(", ")}</div>}
+      {bad && <div className="minor-comparison-conflict">{c.conflicts.join(", ")}</div>}
       {c.blocks.map((b, i) => (
-        <div key={i} style={{ borderTop: i ? "1px dashed #e5e7eb" : "none", paddingTop: i ? 5 : 0, marginTop: i ? 5 : 0 }}>
-          <div style={{ color: "#003366", fontWeight: 600 }}>{b.day} {b.time}</div>
-          <div style={{ color: "#374151", overflowWrap: "anywhere" }}>Room {b.room}</div>
-          <div style={{ color: "#6b7280", overflowWrap: "anywhere" }}>{b.teacher}</div>
+        <div key={i} className={`minor-comparison-block${i ? " is-additional" : ""}`}>
+          <div className="minor-comparison-block-time">{b.day} · {b.time}</div>
+          <div className="minor-comparison-block-room">Room {b.room}</div>
+          <div className="minor-comparison-block-teacher">{b.teacher}</div>
         </div>
       ))}
-    </div>
+    </button>
+  );
+}
+
+function MinorScheduleDetailModal({ detail, onClose }) {
+  const closeRef = useRef(null);
+  const { subject, department, cell } = detail;
+  const mode = MODE[cell.mode] || MODE.separate;
+  const conflicts = cell.conflicts || [];
+
+  useEffect(() => {
+    const previousFocus = document.activeElement;
+    const previousRootOverflow = document.documentElement.style.overflow;
+    const previousOverflow = document.body.style.overflow;
+    const previousPaddingRight = document.body.style.paddingRight;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    const onKeyDown = (event) => { if (event.key === "Escape") onClose(); };
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    if (scrollbarWidth > 0) document.body.style.paddingRight = `${scrollbarWidth}px`;
+    document.addEventListener("keydown", onKeyDown);
+    closeRef.current?.focus();
+    return () => {
+      document.documentElement.style.overflow = previousRootOverflow;
+      document.body.style.overflow = previousOverflow;
+      document.body.style.paddingRight = previousPaddingRight;
+      document.removeEventListener("keydown", onKeyDown);
+      previousFocus?.focus?.();
+    };
+  }, [onClose]);
+
+  return createPortal(
+    <div className="minor-detail-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="minor-detail-modal" role="dialog" aria-modal="true" aria-labelledby="minor-detail-title">
+        <header className="minor-detail-header">
+          <div>
+            <div className="minor-detail-eyebrow">{DEPT_NAME[department] || department} · Schedule details</div>
+            <h2 id="minor-detail-title">{subject.code} — {subject.title}</h2>
+            <p>{subject.year_level} · {subject.units} unit{subject.units === 1 ? "" : "s"}</p>
+          </div>
+          <button ref={closeRef} type="button" className="minor-detail-close" onClick={onClose} aria-label="Close schedule details">×</button>
+        </header>
+        <div className="minor-detail-body">
+          <div className="minor-detail-summary">
+            <div><span>Department</span><strong>{DEPT_NAME[department] || department}</strong></div>
+            <div><span>Program and section</span><strong>{cell.program} · {cell.section}</strong></div>
+            <div><span>Enrollment</span><strong>{cell.students} student{cell.students === 1 ? "" : "s"}</strong></div>
+          </div>
+          <section className="minor-detail-status-card" aria-label="Schedule status">
+            <div className="minor-comparison-badges">
+              <Tag bg={mode.bg} fg={mode.fg}>{mode.label}</Tag>
+              {cell.scheduled && (conflicts.length
+                ? <Tag bg="#fee2e2" fg="#991b1b">Conflict</Tag>
+                : <Tag bg="#ecfdf5" fg="#166534">No conflict</Tag>)}
+            </div>
+            {cell.mode === "shared" && (cell.shared_with || []).length > 0 && (
+              <div className="minor-detail-shared"><strong>Shared with</strong><span>{cell.shared_with.join(", ")}</span></div>
+            )}
+            {conflicts.length > 0 && <div className="minor-detail-conflicts"><strong>Conflict details</strong><ul>{conflicts.map((conflict, index) => <li key={index}>{conflict}</li>)}</ul></div>}
+          </section>
+          <section className="minor-detail-schedule">
+            <h3>Scheduled periods</h3>
+            {cell.blocks?.length ? cell.blocks.map((block, index) => (
+              <div className="minor-detail-period" key={`${block.day}-${block.time}-${index}`}>
+                <div><span>Day and time</span><strong>{block.day} · {block.time}</strong></div>
+                <div><span>Room</span><strong>{block.room || "Not assigned"}</strong></div>
+                <div><span>Teacher</span><strong>{block.teacher || "Not assigned"}</strong></div>
+              </div>
+            )) : <p className="minor-detail-empty">No exam or class periods are scheduled for this section yet.</p>}
+          </section>
+        </div>
+        <footer className="minor-detail-footer"><button type="button" onClick={onClose}>Close</button></footer>
+      </section>
+    </div>,
+    document.body,
   );
 }
 
 export function Comparison({ data }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [selectedDetail, setSelectedDetail] = useState(null);
+  const closeDetail = useCallback(() => setSelectedDetail(null), []);
   useEffect(() => { setPage(1); }, [data]);
   if (!data) return null;
   if (!data.groups.length) return <p style={{ fontSize: 13, color: "#6b7280" }}>No minor subjects found for this semester and year level.</p>;
@@ -76,13 +154,16 @@ export function Comparison({ data }) {
   const visibleGroups = data.groups.slice(startIndex, startIndex + pageSize);
   const firstRow = startIndex + 1;
   const lastRow = Math.min(startIndex + pageSize, data.groups.length);
-  const subjectWidth = 16;
-  const departmentWidth = (100 - subjectWidth) / cols.length;
+  const subjectWidth = 250;
+  const departmentWidth = 180;
   const head = { ...th, padding: "10px 8px", background: "#e8eef6", color: "#003366", borderBottom: "2px solid #d1d5db", fontSize: 12 };
   return (
     <div className="minor-comparison">
       <div className="minor-comparison-pagination">
-        <span className="minor-comparison-count">Showing {firstRow}–{lastRow} of {data.groups.length} subjects</span>
+        <div className="minor-comparison-count-group">
+          <span className="minor-comparison-count">Showing {firstRow}–{lastRow} of {data.groups.length} subjects</span>
+          {cols.length > 4 && <span className="minor-comparison-scroll-hint">Scroll sideways to compare all departments</span>}
+        </div>
         <div className="minor-comparison-controls">
           <div className="minor-comparison-page-actions">
             <button type="button" onClick={() => setPage(1)} disabled={currentPage === 1} aria-label="First page">«</button>
@@ -99,26 +180,25 @@ export function Comparison({ data }) {
         </div>
       </div>
       <div className="minor-comparison-table-wrap">
-        <table className="minor-schedule-table minor-comparison-table" style={{ borderCollapse: "separate", borderSpacing: 0, width: "100%", tableLayout: "fixed" }}>
-          <colgroup><col style={{ width: `${subjectWidth}%` }} />{cols.map((d) => <col key={d} style={{ width: `${departmentWidth}%` }} />)}</colgroup>
+        <table className="minor-schedule-table minor-comparison-table" style={{ borderCollapse: "separate", borderSpacing: 0, width: "100%", minWidth: `${subjectWidth + departmentWidth * cols.length}px`, tableLayout: "fixed" }}>
+          <colgroup><col style={{ width: subjectWidth }} />{cols.map((d) => <col key={d} style={{ width: departmentWidth }} />)}</colgroup>
           <thead>
             <tr>
-              <th style={head}>Subject</th>
+              <th className="minor-comparison-subject-head" style={head}>Subject</th>
               {cols.map((d) => <th key={d} style={head}>{DEPT_NAME[d] || d}</th>)}
             </tr>
           </thead>
           <tbody>
-          {visibleGroups.map((g, i) => {
+          {visibleGroups.map((g) => {
             const m = MODE[g.mode] || MODE.separate;
-            const bg = (startIndex + i) % 2 ? "#f9fafb" : "#ffffff";
-            const cell = { ...td, padding: "9px 7px", background: bg, borderBottom: "1px solid #e5e7eb", verticalAlign: "top", overflowWrap: "anywhere" };
+            const cell = { ...td, padding: "10px 9px", borderBottom: "1px solid #e5e7eb", verticalAlign: "top", overflowWrap: "anywhere" };
             return (
-              <tr key={i}>
-                <td style={{ ...cell, borderRight: "1px solid #e5e7eb" }}>
-                  <div style={{ fontWeight: 600, color: "#111827", overflowWrap: "anywhere" }}>{g.code}</div>
-                  <div style={{ color: "#111827", margin: "2px 0 4px", overflowWrap: "anywhere" }}>{g.title}</div>
-                  <div style={{ color: "#6b7280", fontSize: 12, marginBottom: 6 }}>{g.year_level} · {g.units} unit{g.units === 1 ? "" : "s"}</div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+              <tr key={g.code}>
+                <td className="minor-comparison-subject-cell" style={{ ...cell, borderRight: "1px solid #e5e7eb" }}>
+                  <div className="minor-comparison-subject-code">{g.code}</div>
+                  <div className="minor-comparison-subject-name">{g.title}</div>
+                  <div className="minor-comparison-subject-meta">{g.year_level} · {g.units} unit{g.units === 1 ? "" : "s"}</div>
+                  <div className="minor-comparison-badges">
                     <Tag bg={m.bg} fg={m.fg}>{m.label}</Tag>{g.conflict && <Tag bg="#fee2e2" fg="#991b1b">Has conflict</Tag>}
                   </div>
                 </td>
@@ -126,8 +206,8 @@ export function Comparison({ data }) {
                   const cells = g.cells.filter((c) => c.department === d);
                   return (
                     <td key={d} style={cell}>
-                      {cells.length ? cells.map((c) => <Cell key={c.section_id} c={c} />)
-                        : <div style={{ color: "#6b7280", fontSize: 12, textAlign: "center", padding: "10px 0" }}>Not in this curriculum</div>}
+                      {cells.length ? cells.map((c) => <Cell key={c.section_id} c={c} onOpen={(item) => setSelectedDetail({ subject: g, department: d, cell: item })} />)
+                        : <div className="minor-comparison-empty" title="Not included in this department's curriculum" aria-label="Not included in this department's curriculum">—</div>}
                     </td>
                   );
                 })}
@@ -137,6 +217,7 @@ export function Comparison({ data }) {
           </tbody>
         </table>
       </div>
+      {selectedDetail && <MinorScheduleDetailModal detail={selectedDetail} onClose={closeDetail} />}
     </div>
   );
 }
@@ -214,7 +295,7 @@ export default function MinorSchedulesPanel() {
   };
 
   const stat = (label, value, color) => (
-    <div style={{ minWidth: 130 }}><div style={{ fontSize: 18, fontWeight: 600, color: color || "#111827", fontVariantNumeric: "tabular-nums" }}>{value}</div><div style={{ fontSize: 12, color: "#6b7280" }}>{label}</div></div>
+    <div style={{ minWidth: 130 }}><div style={{ fontSize: 18, fontWeight: 600, color: color || "#111827", fontVariantNumeric: "tabular-nums" }}><AnimatedMetricValue value={value} /></div><div style={{ fontSize: 12, color: "#6b7280" }}>{label}</div></div>
   );
   const scoped = (live?.conflicts || []).filter((c) => (yearLevel === "All" || [c.a.year_level, c.b.year_level].includes(yearLevel)));
   const ok = result && !result.blocked && result.validated;

@@ -198,6 +198,15 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
   const scopeSubjects = (allSubjects || []).filter((s) => String(s.program) === String(programId) && s.year_level === yearLevel
     && s.semester === semester && s.classification === kindWord);
   const badRows = scopeSubjects.filter((s) => timeWindowProblem(s, picks[s.id]?.start, picks[s.id]?.end)).map((s) => s.code).sort();
+  const generateHint = !programId
+    ? "Choose a program to load its available year levels and semesters."
+    : loadingCombos
+      ? "Loading the year levels and semesters for this program…"
+      : !yearLevel || !semester
+        ? "Choose a year level and semester to review the subjects."
+        : badRows.length
+          ? `Correct the time settings for ${badRows.length} subject${badRows.length === 1 ? "" : "s"} before generating.`
+          : "The schedule will be checked for room, teacher, and time conflicts before it is saved.";
 
   const run = async (onlyMissing = false) => {
     if (!programId || !yearLevel || !semester || badRows.length) return;
@@ -260,11 +269,10 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
       </div>
       <section className="coverage-panel generate-controls-panel">
       <div className="generate-schedule-controls">
-        <CustomSelect className="generate-program-select" value={programId} onChange={(e) => setProgramId(e.target.value)}>
-          <option value="">-- Program --</option>
+        <CustomSelect className="generate-program-select" aria-label="Program" value={programId} onChange={(e) => setProgramId(e.target.value)}>
+          <option value="">Select a program</option>
           {programs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </CustomSelect>
-        {loadingCombos && <span>Loading year/semester options…</span>}
         {combos.length > 0 && (
           <>
             <CustomSelect className="generate-year-select" value={yearLevel} onChange={(e) => setYearLevel(e.target.value)} aria-label="Year level">
@@ -276,8 +284,9 @@ function GenerateSchedulePanel({ role, departments, initialProgramId = "", onGen
           </>
         )}
         <button onClick={() => run(false)} disabled={running || !programId || !yearLevel || !semester || badRows.length > 0}
-          style={{ color: "white" }} title={badRows.length ? `Fix the Start / End Time of ${badRows.join(", ")} first.` : undefined}>{running ? "Generating…" : "Generate"}</button>
+          style={{ color: "white" }} title={badRows.length ? `Fix the Start / End Time of ${badRows.join(", ")} first.` : undefined}>{running ? "Generating…" : "Generate schedule"}</button>
       </div>
+      <p className="generate-control-hint" role="status" aria-live="polite">{running ? "Generating and checking the schedule…" : generateHint}</p>
       </section>
 
       {!loadingCombos && programId && combos.length === 0 && (

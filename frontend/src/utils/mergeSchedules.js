@@ -79,6 +79,18 @@ export function mergeSchedulesByDay(schedules) {
   return groups;
 }
 
+// Returns schedule ids that were added or had a visible scheduling field
+// changed since the last successful refresh.
+export function changedScheduleIds(previous, current) {
+  if (!Array.isArray(previous) || !Array.isArray(current)) return new Set();
+  const fields = ["subject_code", "section_name", "room", "teacher", "timeslot_day", "timeslot_start", "timeslot_end", "status"];
+  const oldById = new Map(previous.map((row) => [String(row.id), row]));
+  return new Set(current.filter((row) => {
+    const old = oldById.get(String(row.id));
+    return !old || fields.some((field) => String(old[field] ?? "") !== String(row[field] ?? ""));
+  }).map((row) => String(row.id)));
+}
+
 const DAY_ORDER = { mon: 0, tue: 1, wed: 2, thu: 3, fri: 4, sat: 5, sun: 6 };
 
 // Puts merged rows in real weekly order (Mon -> Sun, earliest time first

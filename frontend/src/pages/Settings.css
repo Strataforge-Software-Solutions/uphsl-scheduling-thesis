@@ -45,10 +45,19 @@
 
 .settings-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-4); }
 .settings-actions.tight { margin-top: 0; }
+.settings-toast {
+  position: fixed; z-index: 12000; top: calc(20px + var(--toast-offset, 0px)); right: 24px;
+  display: flex; align-items: flex-start; gap: 10px;
+  width: min(420px, calc(100vw - 32px)); padding: 12px 14px;
+  border: 1px solid; border-radius: 12px; box-shadow: 0 12px 32px rgba(15, 23, 42, .18);
+}
+.settings-toast > .settings-nav-icon { width: 18px; height: 18px; flex: 0 0 18px; margin-top: 1px; }
+.settings-toast.ok { color: #166534; background: #f0fdf4; border-color: #bbf7d0; }
+.settings-toast.err { color: #b91c1c; background: #fef2f2; border-color: #fecaca; }
+.settings-msg { margin: 0; color: inherit; font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+.settings-msg.err { margin: var(--sp-2) 0 0; padding: 6px 10px; border: 1px solid #fecaca; border-radius: var(--r-sm); color: #b91c1c; background: #fef2f2; }
 .settings-msg-slot { min-height: 0; }
-.settings-msg { margin: var(--sp-2) 0 0; font-size: 13px; padding: 6px 10px; border-radius: var(--r-sm); border: 1px solid; }
-.settings-msg.ok { color: var(--c-ok); background: var(--c-ok-bg); border-color: var(--c-ok-line); }
-.settings-msg.err { color: var(--c-err); background: var(--c-err-bg); border-color: var(--c-err-line); }
+.settings-mark-all-row .settings-msg-slot { min-height: 0; }
 
 .settings-picture { display: flex; gap: var(--sp-4); align-items: flex-start; margin-bottom: var(--sp-5); }
 .settings-avatar { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; flex: 0 0 auto; border: 1px solid var(--c-line); }
@@ -297,6 +306,9 @@ html[data-theme="dark"] .settings-appearance-help,
 html[data-theme="dark"] .settings-readonly dt { color: #9aabc0; }
 html[data-theme="dark"] .settings-brand,
 html[data-theme="dark"] .settings-title-icon { color: #9cc5ff; }
+html[data-theme="dark"] .settings-toast.ok { color: #bbf7d0; background: #123324; border-color: #286243; }
+html[data-theme="dark"] .settings-toast.err,
+html[data-theme="dark"] .settings-msg.err { color: #fecaca; background: #3a1b22; border-color: #6b2b38; }
 html[data-theme="dark"] .settings-top-title::after,
 html[data-theme="dark"] .settings-top::after { color: #c4d0df; }
 html[data-theme="dark"] .settings-picture,
@@ -363,6 +375,7 @@ html[data-theme="dark"] .settings-about-grid { background: #17263a; border-color
   .settings-live-preview { padding: 16px 0 0; border-left: 0; border-top: 1px solid #dbe4ef; }
 }
 @media (max-width: 560px) {
+  .settings-toast { top: 12px; right: 12px; width: calc(100vw - 24px); }
   .settings-top { padding: 10px 16px; }
   .settings-top-title::after { display: none; }
   .settings-top::after { content: "Account"; }

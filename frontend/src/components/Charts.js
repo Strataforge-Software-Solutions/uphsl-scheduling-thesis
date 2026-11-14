@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import API from "../services/api";
 import { formatDate } from "../utils/formatDateTime";
 
@@ -11,6 +11,47 @@ import { formatDate } from "../utils/formatDateTime";
 // a figure is colored only when the color means something (red = problem, amber = needs attention); otherwise plain text
 const STATUS_ACCENT = new Set(["#b91c1c", "#b91c1c", "#c0392b", "#dc2626", "#991b1b", "#b45309", "#92400e", "#96690a"]);
 
+export function AnimatedMetricValue({ value }) {
+  const text = value === null || value === undefined ? "" : String(value);
+  const match = /^(-?\d+(?:\.\d+)?)(.*)$/.exec(text);
+  const suffix = match?.[2] || "";
+  const numeric = Boolean(match) && !suffix.trimStart().startsWith("/");
+  const target = numeric ? Number(match[1]) : 0;
+  const decimals = numeric ? (match[1].split(".")[1] || "").length : 0;
+  const initialReduced = typeof window !== "undefined" && typeof window.matchMedia === "function"
+    && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const initialSetting = typeof document === "undefined" ? "off" : document.documentElement.getAttribute("data-reduce-motion");
+  const initialValue = initialSetting === "on" || (initialSetting !== "off" && initialReduced) ? target : 0;
+  const [display, setDisplay] = useState(() => {
+    if (!numeric || !Number.isFinite(target)) return target;
+    return initialValue;
+  });
+  const displayRef = useRef(display);
+
+  useEffect(() => {
+    if (!numeric || !Number.isFinite(target)) { displayRef.current = target; setDisplay(target); return undefined; }
+    const motionSetting = document.documentElement.getAttribute("data-reduce-motion");
+    const systemReduced = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (motionSetting === "on" || (motionSetting !== "off" && systemReduced)) { displayRef.current = target; setDisplay(target); return undefined; }
+    if (typeof window.requestAnimationFrame !== "function") { displayRef.current = target; setDisplay(target); return undefined; }
+    const from = displayRef.current;
+    const started = performance.now();
+    let frame = 0;
+    const step = (now) => {
+      const progress = Math.min(1, (now - started) / 650);
+      const next = from + (target - from) * (1 - Math.pow(1 - progress, 3));
+      displayRef.current = next;
+      setDisplay(next);
+      if (progress < 1) frame = window.requestAnimationFrame(step);
+    };
+    frame = window.requestAnimationFrame(step);
+    return () => window.cancelAnimationFrame(frame);
+  }, [text, numeric, target]);
+
+  const shown = numeric && Number.isFinite(target) ? `${display.toFixed(decimals)}${suffix}` : text;
+  return <span aria-label={text}>{shown}</span>;
+}
+
 export function StatTile({ label, value, accent = "#003366", icon }) {
   return (
     <div className={icon ? "analytics-stat-tile analytics-stat-tile-with-icon" : "analytics-stat-tile"} style={{
@@ -20,26 +61,54 @@ export function StatTile({ label, value, accent = "#003366", icon }) {
       {icon && <div className="analytics-stat-icon">{icon}</div>}
       <div className="analytics-stat-copy">
         <div style={{ fontSize: "12px", color: "#6b7280", marginBottom: "2px" }}>{label}</div>
-        <div style={{ fontSize: "18px", fontWeight: 600, color: STATUS_ACCENT.has(String(accent).toLowerCase()) ? accent : "#111827",
-          fontVariantNumeric: "tabular-nums" }}>{value}</div>
+        <div className="analytics-stat-value" style={{ fontSize: "18px", fontWeight: 600, color: STATUS_ACCENT.has(String(accent).toLowerCase()) ? accent : "#111827",
+          fontVariantNumeric: "tabular-nums" }}><AnimatedMetricValue value={value} /></div>
       </div>
     </div>
   );
 }
 
+export function CollapsibleChartPanel({ title, ariaTitle, children, className = "analytics-chart-card", style }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const label = ariaTitle || (typeof title === "string" ? title : "analytics panel");
+  return (
+    <section className={`analytics-collapsible-panel ${className}`} style={style}>
+      <div className="analytics-collapsible-heading">
+        <h4 className="analytics-chart-title">{title}</h4>
+        <button
+          type="button"
+          className="analytics-collapse-button"
+          aria-expanded={!collapsed}
+          aria-label={`${collapsed ? "Expand" : "Collapse"} ${label}`}
+          onClick={() => setCollapsed((value) => !value)}
+        >
+          <span>{collapsed ? "Expand" : "Collapse"}</span>
+          <svg viewBox="0 0 16 16" aria-hidden="true" className={collapsed ? "is-collapsed" : ""}>
+            <path d="m3.5 6 4.5 4 4.5-4" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      </div>
+      <div className={`analytics-collapsible-content${collapsed ? " is-collapsed" : ""}`} aria-hidden={collapsed}>
+        <div className="analytics-collapsible-inner" inert={collapsed ? "" : undefined}>{children}</div>
+      </div>
+    </section>
+  );
+}
+
 /* Horizontal bar chart -- labels can be long (usernames, room names), so
    bars run left-to-right instead of a vertical column chart. */
-export function HBarChart({ data, color = "#003366", unit = "", emptyText = "No data yet." }) {
+export function HBarChart({ data, color = "#003366", unit = "", emptyText = "No data yet.", loading = false }) {
+  if (loading) return <div className="chart-skeleton-list" role="status" aria-label="Loading chart data">{Array.from({ length: 5 }, (_, i) => <div className="chart-skeleton-row" key={i}><span /><i /><span /></div>)}</div>;
   if (!data || data.length === 0) {
     return <p style={{ color: "#6b7280", fontSize: "13px" }}>{emptyText}</p>;
   }
   const max = Math.max(...data.map((d) => d.value), 1);
   return (
-    <div className="chart-scroll" style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-      {data.map((d) => (
-        <div key={d.label} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+    <div className="chart-scroll chart-bar-list" role="list" aria-label="Chart data" tabIndex={0} style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+      {data.map((d, index) => (
+        <div key={d.label} className="chart-bar-row" role="listitem" aria-label={`${d.name ? `${d.name} (${d.label})` : d.label}: ${d.value}${unit}`} title={`${d.name ? `${d.name} (${d.label})` : d.label}: ${d.value}${unit}`} data-tooltip={d.name ? `${d.name} (${d.label}) · ${d.value}${unit}` : undefined} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
           <div
-            title={d.label}
+            title={d.name ? `${d.name} (${d.label})` : d.label}
             style={{
               width: "130px", flexShrink: 0, fontSize: "13px", color: "#111827",
               textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
@@ -49,14 +118,15 @@ export function HBarChart({ data, color = "#003366", unit = "", emptyText = "No 
           </div>
           <div style={{ flex: 1, background: "#f3f4f6", borderRadius: 2, height: "14px" }}>
             <div
+              className="motion-chart-bar"
               style={{
                 width: `${Math.max(2, (d.value / max) * 100)}%`, background: color,
-                height: "100%", borderRadius: 2,
+                height: "100%", borderRadius: 2, animationDelay: `${Math.min(index * 28, 196)}ms`,
               }}
             />
           </div>
           <div style={{ minWidth: "56px", flexShrink: 0, fontSize: "13px", color: "#111827", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
-            {d.value}{unit}
+            <AnimatedMetricValue value={`${d.value}${unit}`} />
           </div>
         </div>
       ))}

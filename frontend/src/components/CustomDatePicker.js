@@ -1,6 +1,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import "./DashboardTheme.css";
+import usePopupPresence from "./usePopupPresence";
 
 const toISODate = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 const parseISODate = (value) => {
@@ -24,14 +25,12 @@ export default function CustomDatePicker({ value, defaultValue = "", onChange, o
   const maxDate = useMemo(() => parseISODate(max), [max]);
   const today = useMemo(() => new Date(), []);
   const [open, setOpen] = useState(false);
+  const { present: calendarPresent, closing: calendarClosing } = usePopupPresence(open);
   const [calendarPosition, setCalendarPosition] = useState(null);
   const [viewMonth, setViewMonth] = useState(() => new Date((selectedDate || today).getFullYear(), (selectedDate || today).getMonth(), 1));
 
   useLayoutEffect(() => {
-    if (!open) {
-      setCalendarPosition(null);
-      return undefined;
-    }
+    if (!open || !calendarPresent) return undefined;
     const updateCalendarPosition = () => {
       const trigger = triggerRef.current;
       const calendar = calendarRef.current;
@@ -53,7 +52,7 @@ export default function CustomDatePicker({ value, defaultValue = "", onChange, o
       window.removeEventListener("resize", updateCalendarPosition);
       window.removeEventListener("scroll", updateCalendarPosition, true);
     };
-  }, [open, viewMonth]);
+  }, [open, calendarPresent, viewMonth]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -83,12 +82,12 @@ export default function CustomDatePicker({ value, defaultValue = "", onChange, o
   }, [viewMonth]);
 
   useEffect(() => {
-    if (open) {
+    if (open && calendarPresent) {
       const showingCurrentMonth = today.getFullYear() === viewMonth.getFullYear() && today.getMonth() === viewMonth.getMonth();
       const focusDate = selectedDate && selectedDate.getFullYear() === viewMonth.getFullYear() && selectedDate.getMonth() === viewMonth.getMonth() ? selectedDate.getDate() : (showingCurrentMonth ? today.getDate() : 1);
       dayRefs.current[focusDate - 1]?.focus();
     }
-  }, [open, selectedDate, today, viewMonth]);
+  }, [open, calendarPresent, selectedDate, today, viewMonth]);
 
   const changeDate = (date) => {
     if (date && ((minDate && date < minDate) || (maxDate && date > maxDate))) return;
@@ -135,8 +134,8 @@ export default function CustomDatePicker({ value, defaultValue = "", onChange, o
         <span>{selectedDate ? selectedDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "Choose date"}</span>
         <svg className="custom-date-chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7 5 5 5-5" /></svg>
       </button>
-      {open && createPortal(
-        <div ref={calendarRef} id={dialogId} className="custom-calendar" role="dialog" aria-label="Choose a date"
+      {calendarPresent && createPortal(
+        <div ref={calendarRef} id={dialogId} className={`custom-calendar popup-slide${calendarClosing ? " is-closing" : ""}`} role="dialog" aria-label="Choose a date" aria-hidden={calendarClosing} inert={calendarClosing ? "" : undefined}
           style={{ position: "fixed", left: calendarPosition?.left ?? 8, top: calendarPosition?.top ?? 8, visibility: calendarPosition ? "visible" : "hidden" }}>
           <div className="custom-calendar-header">
             <button type="button" className="custom-calendar-nav" aria-label="Previous month" onClick={() => shiftMonth(-1)}><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m12 4-6 6 6 6" /></svg></button>

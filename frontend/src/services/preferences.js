@@ -61,6 +61,30 @@ export function useLandingTab(navItems, fallback) {
   return prefs.landing_page && keys.includes(prefs.landing_page) ? prefs.landing_page : fallback;
 }
 
+/* Keep the current dashboard page through a refresh in this browser tab. Each role/workspace
+   gets its own key, and stale pages are ignored if that workspace's navigation changes. */
+export function useDashboardTab(navItems, fallback, scope) {
+  const landing = useLandingTab(navItems, fallback);
+  const keys = (navItems || []).map((i) => i.key).filter(Boolean);
+  const keySignature = keys.join("|");
+  const storageKey = `ufast_dashboard_tab:${scope}`;
+  const [tab, setTab] = useState(() => {
+    try {
+      const saved = window.sessionStorage.getItem(storageKey);
+      return saved && keys.includes(saved) ? saved : landing;
+    } catch (e) {
+      return landing;
+    }
+  });
+
+  useEffect(() => {
+    if (!keySignature.split("|").includes(tab)) return;
+    try { window.sessionStorage.setItem(storageKey, tab); } catch (e) { /* session storage may be unavailable */ }
+  }, [storageKey, tab, keySignature]);
+
+  return [tab, setTab];
+}
+
 export function PreferencesProvider({ userId, children }) {
   const [data, setData] = useState(null);
   const [ready, setReady] = useState(!userId);
