@@ -1,4 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import ModalPortal from "./ModalPortal";
 import API from "../services/api";
 import { formatDateTime } from "../utils/formatDateTime";
 
@@ -81,10 +83,29 @@ export function useScheduleActions(reload) {
   const [removal, setRemoval] = useState(null);    // {plan, confirmShared}
   const [undo, setUndo] = useState(null);          // {token, until, text}
   const [hist, setHist] = useState(null);          // {label, events} | {error}
+  const historyCloseRef = useRef(null);
   const [error, setError] = useState("");
   const [now, setNow] = useState(Date.now());
+  const historyOpen = Boolean(hist);
   useEffect(() => { if (!undo) return undefined; const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, [undo]);
   useEffect(() => { if (undo && now > undo.until) setUndo(null); }, [now, undo]);
+  useEffect(() => {
+    if (!historyOpen) return undefined;
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    const previousRootOverflow = document.documentElement.style.overflow;
+    const onKeyDown = (event) => { if (event.key === "Escape") setHist(null); };
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    document.addEventListener("keydown", onKeyDown);
+    historyCloseRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.documentElement.style.overflow = previousRootOverflow;
+      document.removeEventListener("keydown", onKeyDown);
+      previousFocus?.focus?.();
+    };
+  }, [historyOpen]);
 
   const changeStatus = async (ids, to) => {
     if (!ids.length) return;
@@ -138,7 +159,7 @@ export function useScheduleActions(reload) {
         {error} <button onClick={() => setError("")} style={btnStyle("#ffffff", C.bad, "1px solid #fecaca")}>OK</button></div>}
 
       {result && (
-        <div role="dialog" aria-modal="true" aria-label="Result" style={overlay}>
+        <ModalPortal><div role="dialog" aria-modal="true" aria-label="Result" style={overlay}>
           <div style={panel}>
             {result.error ? <><h3 style={{ marginTop: 0, color: C.bad }}>Nothing was changed</h3><p style={{ fontSize: 14 }}>{result.error}</p></> : (
               <>
@@ -156,11 +177,11 @@ export function useScheduleActions(reload) {
             )}
             <div style={{ textAlign: "right" }}><button onClick={() => setResult(null)} style={btnStyle(C.navy)}>Close</button></div>
           </div>
-        </div>
+        </div></ModalPortal>
       )}
 
       {removal && (
-        <div role="dialog" aria-modal="true" aria-label="Remove classes" style={overlay}>
+        <ModalPortal><div role="dialog" aria-modal="true" aria-label="Remove classes" style={overlay}>
           <div style={{ ...panel, borderTop: "5px solid #b91c1c" }}>
             <h3 style={{ marginTop: 0, color: C.bad }}>Remove {removal.plan.periods} period{removal.plan.periods === 1 ? "" : "s"}?</h3>
             {removal.plan.remove.length > 0 ? <ClassList items={removal.plan.remove} /> : <p style={{ fontSize: 13 }}>None of the selected classes can be removed.</p>}
@@ -181,7 +202,7 @@ export function useScheduleActions(reload) {
                 {busy === "remove" ? "Removing…" : `Remove ${removal.plan.periods} period${removal.plan.periods === 1 ? "" : "s"}`}</button>
             </div>
           </div>
-        </div>
+        </div></ModalPortal>
       )}
 
       {undo && (
@@ -193,23 +214,26 @@ export function useScheduleActions(reload) {
         </div>
       )}
 
-      {hist && (
-        <div role="dialog" aria-modal="true" aria-label="Class history" style={overlay}>
-          <div style={panel}>
-            <h3 style={{ marginTop: 0, color: C.navy }}>History — {hist.label}</h3>
-            {hist.loading && <p>Loading…</p>}
-            {hist.error && <p style={{ color: C.bad }}>{hist.error}</p>}
-            {hist.events && (
-              <table style={{ width: "100%", fontSize: 13 }}>
+      {hist && createPortal(
+        <div role="dialog" aria-modal="true" aria-label={`Class history for ${hist.label}`} className="schedule-history-overlay">
+          <section className="schedule-history-dialog">
+            <header className="schedule-history-header">
+              <div><span>Schedule record</span><h2>History — {hist.label}</h2><p>Review every recorded change for this class.</p></div>
+              <button ref={historyCloseRef} type="button" onClick={() => setHist(null)} className="schedule-history-close" aria-label="Close class history">×</button>
+            </header>
+            <div className="schedule-history-content">
+              {hist.loading && <p className="schedule-history-message">Loading history…</p>}
+              {hist.error && <p role="alert" className="schedule-history-error">{hist.error}</p>}
+              {hist.events && (hist.events.length ? <table className="schedule-history-table">
                 <thead><tr><th>When</th><th>What</th><th>Who</th><th>Details</th></tr></thead>
                 <tbody>{hist.events.map((e, i) => (
-                  <tr key={i}><td style={{ whiteSpace: "nowrap" }}>{formatDateTime(e.when)}</td><td>{e.action}</td><td>{e.user || "—"}</td><td>{e.details}</td></tr>
+                  <tr key={i}><td className="schedule-history-date">{formatDateTime(e.when)}</td><td>{e.action}</td><td>{e.user || "—"}</td><td>{e.details}</td></tr>
                 ))}</tbody>
-              </table>
-            )}
-            <div style={{ textAlign: "right", marginTop: 10 }}><button onClick={() => setHist(null)} style={btnStyle(C.navy)}>Close</button></div>
-          </div>
-        </div>
+              </table> : <div className="schedule-history-empty"><strong>No history entries yet</strong><p>Changes to this class will appear here.</p></div>)}
+            </div>
+            <footer className="schedule-history-footer"><button type="button" onClick={() => setHist(null)}>Close history</button></footer>
+          </section>
+        </div>, document.body
       )}
     </>
   );

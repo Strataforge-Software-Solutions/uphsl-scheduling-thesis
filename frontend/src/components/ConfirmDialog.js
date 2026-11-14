@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import ModalPortal from "./ModalPortal";
 import "./DashboardTheme.css";
 
 const ConfirmContext = createContext(null);
@@ -34,7 +35,7 @@ export function ConfirmDialogProvider({ children }) {
     <ConfirmContext.Provider value={confirm}>
       {children}
       {request && (
-        <div className="confirm-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(false); }}>
+        <ModalPortal><div className="confirm-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) close(false); }}>
           <section className="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="confirm-modal-title" aria-describedby="confirm-modal-message">
             <h2 id="confirm-modal-title">{request.title}</h2>
             <p id="confirm-modal-message">{request.message}</p>
@@ -43,7 +44,7 @@ export function ConfirmDialogProvider({ children }) {
               <button type="button" className="confirm-modal-accept" onClick={() => close(true)}>{request.confirmLabel}</button>
             </div>
           </section>
-        </div>
+        </div></ModalPortal>
       )}
     </ConfirmContext.Provider>
   );

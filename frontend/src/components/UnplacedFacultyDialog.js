@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import ModalPortal from "./ModalPortal";
 import API from "../services/api";
 import TeacherPicker from "./TeacherPicker";
 import AssignAnywayDialog, { OverrideBadge } from "./AssignAnywayDialog";
@@ -61,7 +62,7 @@ export default function UnplacedFacultyDialog({ cls, onClose, onPlaced }) {
   const title = cls.title || String(cls.subject || "").split(" - ").slice(1).join(" - ");
 
   return (
-    <div role="dialog" aria-modal="true" aria-label={`Other available faculty for ${code}`}
+    <ModalPortal><div role="dialog" aria-modal="true" aria-label={`Other available faculty for ${code}`}
       style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.45)", zIndex: 1200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
       <div style={{ background: "white", borderRadius: 6, width: "min(620px, 100%)", maxHeight: "88vh", overflow: "auto", padding: "16px 20px", boxShadow: "var(--shadow-pop)" }}>
         <h3 style={{ margin: "0 0 4px", fontSize: 16, color: "#111827" }}>Faculty for {code} {title}</h3>
@@ -105,6 +106,6 @@ export default function UnplacedFacultyDialog({ cls, onClose, onPlaced }) {
         <AssignAnywayDialog person={ask.person} subjectCode={code} subjectTitle={title} onCancel={() => setAsk(null)}
           onConfirm={(reason) => { const ov = { reason }; setTeacher(String(ask.id)); setOverride(ov); setAsk(null); loadTimes(ask.id, ov); }} />
       )}
-    </div>
+    </div></ModalPortal>
   );
 }

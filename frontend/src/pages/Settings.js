@@ -503,8 +503,12 @@ function HelpSection({ user, headingRef }) {
           <section className="settings-help-card" aria-labelledby="more-help-heading">
             <div className="settings-help-card-heading"><SettingsIcon name="book" /><div><h3 id="more-help-heading">More help</h3><p>Detailed guides for specific tasks.</p></div></div>
             <details className="settings-help-details">
-              <summary><SettingsIcon name="book" /><span>How to use this tab</span><span className="settings-help-chevron">›</span></summary>
-              <p>Use the sections on the left to open profile, appearance, language, display, notification, and account options. Changes are saved only when you press Save.</p>
+              <summary><SettingsIcon name="book" /><span>How to use this tab (Simplified)</span><span className="settings-help-chevron">›</span></summary>
+              <div className="coverage-steps settings-help-steps">
+                <div><b>1</b><span>Choose a settings section from the left.</span></div><i aria-hidden="true">›</i>
+                <div><b>2</b><span>Update your profile, display, language, notifications, or account details.</span></div><i aria-hidden="true">›</i>
+                <div><b>3</b><span>Press Save to apply your changes.</span></div>
+              </div>
             </details>
           </section>
           <section className="settings-help-card" aria-labelledby="contact-support-heading">
